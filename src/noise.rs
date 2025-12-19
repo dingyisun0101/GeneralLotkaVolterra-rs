@@ -29,16 +29,12 @@ pub enum NoiseKind {
 
     /// Multiplicative (proportional) Gaussian noise on ν with an approximate mass-preserving
     /// projection (prior to sanitize):
-    ///
-    ///     ν_i <- ν_i [1 + σ(η_i - \bar{η}) sqrt(dt)]
-    ///
+    /// ν_i < ν_i [1 + σ(η_i - \bar{η}) sqrt(dt)]
     /// where η_i ~ N(0,1) and \bar{η} = Σ_j ν_j η_j.
     ProportionalGaussian { sigma: f64 },
 
     /// Demographic noise: additive Gaussian fluctuations proportional to sqrt(ν_i).
-    ///
-    ///     ν_i <- ν_i + σ sqrt(ν_i) (η_i - \bar{η}_{sqrt(ν)}) sqrt(dt)
-    ///
+    /// ν_i < ν_i + σ sqrt(ν_i) (η_i - \bar{η}_{sqrt(ν)}) sqrt(dt)
     /// where \bar{η}_{sqrt(ν)} = (Σ_j sqrt(ν_j) η_j) / (Σ_j sqrt(ν_j)).
     DemographicGaussian { sigma: f64 },
 }

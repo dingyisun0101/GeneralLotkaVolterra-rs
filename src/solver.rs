@@ -70,9 +70,7 @@ impl Rk4Scratch {
 }
 
 /// Compute the replicator RHS in-place:
-///
-///     out = rhs(ν) = ν ⊙ ( s + Vν - Υ ), where Υ = Σ_i ν_i (s_i + (Vν)_i)
-///
+/// out = rhs(ν) = ν ( s + Vν - Υ ), where Υ = Σ_i ν_i (s_i + (Vν)_i)
 /// This ODE conserves total mass analytically; numerical drift is corrected by `Simplex::sanitize()`.
 #[inline]
 fn rhs_inplace(
