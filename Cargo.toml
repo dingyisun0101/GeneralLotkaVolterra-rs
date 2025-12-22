@@ -3,6 +3,16 @@ name = "replicator-rs"
 version = "0.0.1"
 edition = "2024"
 
+description = "High-performance vectorized Lotka-Volterra & Replicator type dynamics solver."
+license = "MIT OR Apache-2.0"  
+
+readme = "README.md"
+repository = "https://github.com/dingyisun0101/Replicator-RS"
+homepage = "https://github.com/dingyisun0101/Replicator-RS"
+documentation = "https://github.com/dingyisun0101/Replicator-RS"
+keywords = ["physics", "ecology", "math", "scientific", "differential equation"]
+categories = ["science"]
+
 [dependencies]
 # Random number generation
 rand = { version = "0.9.2", features = ["std", "small_rng"] }
