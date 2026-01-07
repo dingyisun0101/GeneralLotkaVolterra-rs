@@ -1,6 +1,7 @@
 use std::io::Result;
 use std::path::Path;
 
+use indicatif::{ProgressBar, ProgressStyle};
 use ndarray::{Array1, Array2};
 
 use crate::state::Mode;
@@ -22,6 +23,7 @@ use crate::solvers::non_spatial::rk4::solve;
 pub fn run(
     interaction_matrix: &Array2<f64>,     // V
     growth_vector: Option<&Array1<f64>>,  // g override
+    cutoff: f64,                          // cutoff
     dt: f64,                              // step size
     epoch_len: usize,                     // steps per epoch
     num_epochs: usize,                    // number of epochs
@@ -34,11 +36,19 @@ pub fn run(
     }
 
     // Initial condition: well-mixed uniform simplex (ν_i = 1/d).
-    let mode = Mode::Frequency { cutoff: 0.0 };
+    let mode = Mode::Frequency { cutoff };
     let mut gs = create_well_mixed_gs(mode, d, None);
 
     // Sequential epochs: carry final state from epoch k into epoch k+1.
     for epoch in 1..=num_epochs {
+        let pb = ProgressBar::new(epoch_len as u64);
+        pb.set_style(
+            ProgressStyle::with_template("{msg} [{bar:40.cyan/blue}] {pos}/{len}")
+                .unwrap()
+                .progress_chars("=>-"),
+        );
+        pb.set_message(format!("epoch {epoch}/{num_epochs}"));
+
         gs = solve(
             epoch,               // current epoch
             gs,                  // initial state for this epoch
@@ -48,6 +58,7 @@ pub fn run(
             dt,                  // step size
             epoch_len,           // steps
             &output_path,  // output target for this epoch
+            Some(&pb),
         )?;
     }
 

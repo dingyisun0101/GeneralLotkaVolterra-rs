@@ -1,5 +1,5 @@
 [package]
-name = "replicator-rs"
+name = "general-lotka-volterra-rs"
 version = "0.0.1"
 edition = "2024"
 
@@ -7,9 +7,9 @@ description = "High-performance vectorized Lotka-Volterra & Replicator type dyna
 license = "MIT OR Apache-2.0"  
 
 readme = "README.md"
-repository = "https://github.com/dingyisun0101/Replicator-RS"
-homepage = "https://github.com/dingyisun0101/Replicator-RS"
-documentation = "https://github.com/dingyisun0101/Replicator-RS"
+repository = "https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/"
+homepage = "https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/"
+documentation = "https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/"
 keywords = ["physics", "ecology", "math", "scientific", "SDE"]
 categories = ["science"]
 
@@ -24,12 +24,12 @@ rayon = "1.11.0"
 crossbeam = "0.8.4"
 
 # Serialization
-serde = { version = "1.0", features = ["derive", "serde"] }
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.149"
 
 # Physics & Math
 num-traits = "0.2.19"
-ndarray = { version = "0.17", features = ["rayon"] }
+ndarray = { version = "0.17", features = ["rayon", "serde"] }
 ndarray-linalg = { version = "0.18", features = ["openblas-static"] } 
 
 # Utility libraries
@@ -42,5 +42,3 @@ anyhow = "1.0"
 opt-level = 3
 lto = true 
 codegen-units = 1
-
-

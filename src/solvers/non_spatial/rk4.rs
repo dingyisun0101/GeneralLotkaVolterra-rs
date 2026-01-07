@@ -1,6 +1,7 @@
 use std::io::Result;
 use std::path::Path;
 
+use indicatif::ProgressBar;
 use ndarray::{Array1, Array2};
 
 use rand::rngs::SmallRng;
@@ -195,6 +196,7 @@ pub fn solve(
     dt: f64,                                // step size
     num_steps: usize,                       // number of steps (produces num_steps+1 snapshots)
     output_path: &Path,                     // time-series output target
+    progress: Option<&ProgressBar>,         // optional progress bar for this epoch
 ) -> Result<GeneticState<f64>> {
     let d = interaction_matrix.nrows(); // assumed square by caller / upstream validation
 
@@ -216,7 +218,7 @@ pub fn solve(
     // Scratch / noise context / RNG for the whole run.
     let mut sc = Rk4Scratch::new(d);
     let mut noise_ctx = NoiseContext::new(d);
-    let mut rng = SmallRng::try_from_os_rng().unwrap();
+    let mut rng = SmallRng::from_os_rng();
 
     // Main loop: deterministic RK4 -> sanitize -> stochastic -> snapshot.
     for step in 1..=num_steps {
@@ -241,6 +243,10 @@ pub fn solve(
         let mut fresh = GeneticState::empty(gs_next.mode.clone(), step, d, None);
         std::mem::swap(&mut gs_next, &mut fresh);
         states.push(fresh);
+
+        if let Some(pb) = progress {
+            pb.inc(1);
+        }
     }
 
     // Persist time series (states remain the source of truth).
@@ -249,6 +255,10 @@ pub fn solve(
         ts.add(gs);
     }
     ts.save(output_path)?;
+
+    if let Some(pb) = progress {
+        pb.finish_and_clear();
+    }
 
     Ok(states.pop().expect("solve: missing final state"))
 }

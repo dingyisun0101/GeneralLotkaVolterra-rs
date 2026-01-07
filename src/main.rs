@@ -1,7 +1,3 @@
-
-
-
 fn main() {
-    println!("Hello, world!");
+    general_lotka_volterra_rs::examples::replicator_deterministic::run();
 }
-
