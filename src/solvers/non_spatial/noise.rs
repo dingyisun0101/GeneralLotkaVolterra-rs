@@ -4,20 +4,20 @@
 //! =============================================================================================
 //!
 //! This module defines *optional* stochasticity applied **after** the deterministic integrator
-//! step. Noise is applied to a `GeneticState<f64>` in frequency mode, and every noise update ends
+//! step. Noise is applied to a `SystemState<f64>` in frequency mode, and every noise update ends
 //! with `state.sanitize()` to restore feasibility.
 //!
 //! It provides:
 //!     - `NoiseKind` / `Noise`: public configuration
 //!     - `NoiseContext`: reusable buffer + Normal(0,1) distribution
-//!     - `apply_noise_inplace`: apply noise to `GeneticState` in-place, then sanitize
+//!     - `apply_noise_inplace`: apply noise to `SystemState` in-place, then sanitize
 //!
 //! =============================================================================================
 #![allow(dead_code)]
 
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
-use crate::state::GeneticState;
+use crate::state::SystemState;
 
 /// ==============================================================================================
 /// ===================================== Kinds of Noise =========================================
@@ -116,7 +116,7 @@ impl NoiseContext {
 ///     - After this returns, `state` is a valid simplex point (by virtue of `state.sanitize()`).
 #[inline]
 pub fn apply_noise_inplace(
-    state: &mut GeneticState<f64>,
+    state: &mut SystemState<f64>,
     noise: Noise,
     dt: f64,
     ctx: &mut NoiseContext,

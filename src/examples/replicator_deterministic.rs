@@ -9,10 +9,11 @@ pub fn run() {
     let interaction_matrix = Array2::from_shape_fn((D, D), |_| rng.random_range(-1.0..=1.0));
     let growth_vector = Array1::from_shape_fn(D, |_| rng.random_range(-0.1..=0.1));
 
-    let output_path = std::path::Path::new("examples/output/replicator_deterministic");
+    let output_path = std::path::Path::new("output/replicator_deterministic");
     let cutoff = 1e-5;
     let dt = 0.01;
     let epoch_len = 1000;
+    let save_interval = 10;
     let num_epochs = 10;
 
     if let Err(err) = crate::tasks::replicator_deterministic::run(
@@ -21,6 +22,7 @@ pub fn run() {
         cutoff,
         dt,
         epoch_len,
+        save_interval,
         num_epochs,
         output_path,
     ) {

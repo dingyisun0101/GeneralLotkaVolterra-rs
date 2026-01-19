@@ -24,7 +24,7 @@ pub enum Mode<T> {
 ///     - `space`: spatial field (shape arbitrary: [X, Y, Z, ...])
 
 #[derive(Clone, Serialize, Deserialize)]
-pub struct GeneticState<T> {
+pub struct SystemState<T> {
     pub mode: Mode<T>,
     pub time: usize,
     pub state: Array1<T>,
@@ -33,7 +33,7 @@ pub struct GeneticState<T> {
 }
 
 /// Constructors
-impl<T> GeneticState<T>
+impl<T> SystemState<T>
 where
     T: Float + Clone + Default + std::iter::Sum<T>,
 {
@@ -90,7 +90,7 @@ where
 /// ==============================================================================================
 /// =================================== State Sanitization =======================================
 /// ==============================================================================================
-impl<T> GeneticState<T>
+impl<T> SystemState<T>
 where
     T: Float + Send + Sync + std::iter::Sum<T>,
 {
@@ -190,15 +190,15 @@ use std::path::Path;
 /// Generic time series dataframe for genetic states.
 ///     Design notes:
 ///         - `epoch` is the index of the dataframe
-///         - per-sample time lives inside `GeneticState::time`
+///         - per-sample time lives inside `SystemState::time`
 
 #[derive(Clone, Serialize)]
-pub struct GeneticStateTimeSeries<'a, T> {
+pub struct SystemStateTimeSeries<'a, T> {
     pub epoch: usize,     // Epoch index
     pub states: Vec<&'a T>, // Ordered samples (borrowed)
 }
 
-impl<'a, T> GeneticStateTimeSeries<'a, T> {
+impl<'a, T> SystemStateTimeSeries<'a, T> {
     /// Empty time series (no samples yet).
     #[inline]
     pub fn empty(epoch: usize) -> Self {
@@ -215,11 +215,11 @@ impl<'a, T> GeneticStateTimeSeries<'a, T> {
     }
 }
 
-impl<'a, T> GeneticStateTimeSeries<'a, GeneticState<T>>
+impl<'a, T> SystemStateTimeSeries<'a, SystemState<T>>
 where
     T: Serialize,
 {
-    /// Write the list of `GeneticState` into `{output_path}/{epoch}.json` (pretty-printed).
+    /// Write the list of `SystemState` into `{output_path}/{epoch}.json` (pretty-printed).
     pub fn save(&self, output_path: &Path) -> Result<()> {
         create_dir_all(output_path).map_err(|e| {
             Error::new(

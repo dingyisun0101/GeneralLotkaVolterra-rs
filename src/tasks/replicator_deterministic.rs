@@ -18,14 +18,17 @@ use crate::solvers::non_spatial::rk4::solve;
 ///         - `interaction_matrix`: V (d×d)
 ///         - `growth_vector`: optional g (defaults to 0 inside solver)
 ///         - `epoch_len`: steps per epoch (each produces `epoch_len+1` snapshots)
+///         - `save_interval`: save every Nth step
 ///         - `num_epochs`: number of epochs to execute (epoch_1, ..., epoch_{num_epochs})
 ///         - `output_path`: root output directory
+
 pub fn run(
     interaction_matrix: &Array2<f64>,     // V
     growth_vector: Option<&Array1<f64>>,  // g override
     cutoff: f64,                          // cutoff
     dt: f64,                              // step size
     epoch_len: usize,                     // steps per epoch
+    save_interval: usize,                 // save every N steps
     num_epochs: usize,                    // number of epochs
     output_path: &Path,                   // root output dir
 ) -> Result<()> {
@@ -46,7 +49,7 @@ pub fn run(
             ProgressStyle::with_template("{msg} [{bar:40.cyan/blue}] {pos}/{len}")
                 .unwrap()
                 .progress_chars("=>-"),
-        );
+        );  
         pb.set_message(format!("epoch {epoch}/{num_epochs}"));
 
         gs = solve(
@@ -57,6 +60,7 @@ pub fn run(
             Noise::none(),       // deterministic run
             dt,                  // step size
             epoch_len,           // steps
+            save_interval,       // save every N steps
             &output_path,  // output target for this epoch
             Some(&pb),
         )?;

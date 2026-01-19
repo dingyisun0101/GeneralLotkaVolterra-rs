@@ -2,13 +2,13 @@
 use ndarray::Array1;
 use num_traits::Float;
 
-use crate::state::{GeneticState, Mode};
+use crate::state::{SystemState, Mode};
 
 /// ==============================================================================================
 /// ============================= Constructors / Initialization Helpers ===========================
 /// ==============================================================================================
 
-/// Create a well-mixed (spatially uniform / no-grid) `GeneticState<T>` at time 0.
+/// Create a well-mixed (spatially uniform / no-grid) `SystemState<T>` at time 0.
 ///     Behavior:
 ///         - `Mode::Frequency`: initialize uniform simplex (sum = 1)
 ///         - `Mode::Population`: initialize equal counts per taxon (sum = num_taxa * per_taxon)
@@ -19,7 +19,7 @@ pub fn create_well_mixed_gs<T>(
     mode: Mode<T>,             // representation convention (frequency vs population)
     num_taxa: usize,           // dimensionality d
     population_i: Option<T>,   // per-taxon population (only used for Population mode)
-) -> GeneticState<T>
+) -> SystemState<T>
 where
     T: Float + Clone + Default + std::iter::Sum<T>,
 {
@@ -42,5 +42,5 @@ where
     }
 
     // time = 0, space = None (well-mixed)
-    GeneticState::from_arrays(mode, 0, state, None)
+    SystemState::from_arrays(mode, 0, state, None)
 }
