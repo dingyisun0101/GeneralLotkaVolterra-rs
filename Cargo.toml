@@ -1,6 +1,6 @@
 [package]
 name = "general-lotka-volterra-rs"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 
 description = "High-performance vectorized Lotka-Volterra & Replicator type dynamics solver."
