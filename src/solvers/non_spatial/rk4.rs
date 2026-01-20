@@ -258,8 +258,7 @@ pub fn solve(
         }
     }
 
-    // Persist time series (states remain the source of truth).
-    let mut ts = SystemStateTimeSeries::empty(epoch);
+    let mut ts = SystemStateTimeSeries::empty(epoch, gs_curr.mode.clone());
     for gs in &states {
         ts.add(gs);
     }

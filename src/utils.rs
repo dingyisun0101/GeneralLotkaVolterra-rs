@@ -1,8 +1,6 @@
 // src/utils.rs
 use ndarray::Array1;
-use num_traits::Float;
-
-use crate::state::{SystemState, Mode};
+use crate::state::{SystemState, Mode, Scalar};
 
 /// ==============================================================================================
 /// ============================= Constructors / Initialization Helpers ===========================
@@ -21,7 +19,7 @@ pub fn create_well_mixed_gs<T>(
     population_i: Option<T>,   // per-taxon population (only used for Population mode)
 ) -> SystemState<T>
 where
-    T: Float + Clone + Default + std::iter::Sum<T>,
+    T: Scalar,
 {
     let zero = T::zero();
     let mut state = Array1::from_elem(num_taxa, zero);
