@@ -8,28 +8,28 @@ use std::fs::{create_dir_all, File};
 use std::io::{Error, ErrorKind, Result, Write};
 use std::path::Path;
 
-use super::{Mode, SystemState, Scalar};
+use super::{Mode, SystemState};
 
-/// Snapshot payload without repeated `mode` storage.
+/// Snapshot payload without repeated `mode` storage (owned data).
 #[derive(Clone, Serialize)]
-pub struct SystemStateRecord<'a, T> {
+pub struct SystemStateRecord<T> {
     pub time: usize,
-    pub state: &'a Array1<T>,
-    pub space: Option<&'a ArrayD<T>>,
+    pub state: Array1<T>,
+    pub space: Option<ArrayD<T>>,
     pub mass: T,
 }
 
-/// Time series with one shared `mode` and zero-copy sample references.
+/// Time series with one shared `mode` and owned sample data.
 #[derive(Clone, Serialize)]
-pub struct SystemStateTimeSeries<'a, T> {
+pub struct SystemStateTimeSeries<T> {
     pub epoch: usize,
     pub mode: Mode<T>,
-    pub samples: Vec<SystemStateRecord<'a, T>>,
+    pub samples: Vec<SystemStateRecord<T>>,
 }
 
-impl<'a, T> SystemStateTimeSeries<'a, T>
+impl<T> SystemStateTimeSeries<T>
 where
-    T: Scalar,
+    T: Clone,
 {
     /// Empty time series (no samples yet).
     #[inline]
@@ -41,21 +41,21 @@ where
         }
     }
 
-    /// Add a borrowed snapshot (no copies of state/space data).
+    /// Add a borrowed snapshot (no copies of state/space/mass data).
     #[inline]
-    pub fn add(&mut self, gs: &'a SystemState<T>) {
+    pub fn add(&mut self, gs: &SystemState<T>) {
         self.samples.push(SystemStateRecord {
             time: gs.time,
-            state: &gs.state,
-            space: gs.space.as_ref(),
-            mass: gs.mass,
+            state: gs.state.clone(),
+            space: gs.space.clone(),
+            mass: gs.mass.clone(),
         });
     }
 }
 
-impl<'a, T> SystemStateTimeSeries<'a, T>
+impl<T> SystemStateTimeSeries<T>
 where
-    T: Scalar,
+    T: Serialize,
 {
     /// Write the list of samples into `{output_path}/{epoch}.json` (pretty-printed).
     pub fn save(&self, output_path: &Path) -> Result<()> {

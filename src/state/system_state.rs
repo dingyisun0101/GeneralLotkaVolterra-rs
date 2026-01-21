@@ -21,11 +21,11 @@ impl<T> Scalar for T where
 ///     Two mutually exclusive conventions for what `state` means:
 ///         - `Frequency`: entries live on the simplex (mass = 1),
 ///         - `Population`: entries carry absolute counts (mass not necessarily 1)
-///     where 'cutoff' is an absorbing boundary.
+///     where 'cutoff' is an absorbing boundary (optional).
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Mode<T> {
-    Frequency { cutoff: T },
-    Population { cutoff: T, carrying_capacity: Option<T> },
+    Frequency { cutoff: Option<T> },
+    Population { cutoff: Option<T>, carrying_capacity: Option<T> },
 }
 
 /// Snapshot at an integer time index.
@@ -194,7 +194,7 @@ where
         match self.mode {
             Mode::Frequency { cutoff } => {
                 // Cutoff sanitize.
-                let cutoff = cutoff.max(zero);
+                let cutoff = cutoff.unwrap_or(zero).max(zero);
                 self.apply_cutoff(cutoff, zero);
 
                 // Renormalize onto simplex; fallback to uniform if all mass removed.
@@ -217,7 +217,7 @@ where
                 carrying_capacity,
             } => {
                 // Cutoff sanitize.
-                let cutoff = cutoff.max(zero);
+                let cutoff = cutoff.unwrap_or(zero).max(zero);
                 self.apply_cutoff(cutoff, zero);
 
                 let sum: T = self.state.par_iter().copied().sum();

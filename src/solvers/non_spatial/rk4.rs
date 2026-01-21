@@ -1,7 +1,7 @@
 use std::io::Result;
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use indicatif::ProgressBar;
 use ndarray::{Array1, Array2};
 
 use rand::rngs::SmallRng;
@@ -198,7 +198,7 @@ pub fn solve(
     num_steps: usize,                       // number of steps
     save_interval: usize,                   // save every N steps
     output_path: &Path,                     // time-series output target
-    progress: Option<&ProgressBar>,         // optional progress bar for this epoch
+    progress_counter: Option<&AtomicUsize>, // optional progress counter
 ) -> Result<SystemState<f64>> {
     let d = interaction_matrix.nrows(); // assumed square by caller / upstream validation
     if save_interval == 0 {
@@ -221,6 +221,10 @@ pub fn solve(
     let mut gs_curr = gs_i;
     states.push(gs_curr.clone()); // t=0 always saved
 
+    if let Some(counter) = progress_counter {
+        counter.store(0, Ordering::Relaxed);
+    }
+
     // Pre-allocate the next-state buffer with the same mode as t=0.
     let mode0 = gs_curr.mode.clone();
     let mut gs_next = SystemState::empty(mode0, 0, d, None);
@@ -231,6 +235,7 @@ pub fn solve(
     let mut rng = SmallRng::from_os_rng();
 
     // Main loop: deterministic RK4 -> sanitize -> stochastic -> snapshot.
+    let start_time = gs_curr.time;
     for step in 1..=num_steps {
         rk4_step_inplace_raw(
             &gs_curr.state,
@@ -245,7 +250,7 @@ pub fn solve(
 
         apply_noise_inplace(&mut gs_next, noise, dt, &mut noise_ctx, &mut rng);
 
-        gs_next.time = step;
+        gs_next.time = start_time + step;
 
         // Advance current state and optionally save a snapshot.
         std::mem::swap(&mut gs_curr, &mut gs_next);
@@ -253,8 +258,8 @@ pub fn solve(
             states.push(gs_curr.clone());
         }
 
-        if let Some(pb) = progress {
-            pb.inc(1);
+        if let Some(counter) = progress_counter {
+            counter.store(step, Ordering::Relaxed);
         }
     }
 
@@ -263,10 +268,6 @@ pub fn solve(
         ts.add(gs);
     }
     ts.save(output_path)?;
-
-    if let Some(pb) = progress {
-        pb.finish_and_clear();
-    }
 
     Ok(gs_curr)
 }

@@ -27,6 +27,7 @@ pub fn run() {
         save_interval,
         num_epochs,
         output_path,
+        None,
     ) {
         eprintln!("replicator_demographic failed: {err}");
         std::process::exit(1);

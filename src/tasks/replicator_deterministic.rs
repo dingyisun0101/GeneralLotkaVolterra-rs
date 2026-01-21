@@ -1,7 +1,7 @@
 use std::io::Result;
 use std::path::Path;
+use std::sync::atomic::AtomicUsize;
 
-use indicatif::{ProgressBar, ProgressStyle};
 use ndarray::{Array1, Array2};
 
 use crate::state::Mode;
@@ -21,6 +21,7 @@ use crate::solvers::non_spatial::rk4::solve;
 ///         - `save_interval`: save every Nth step
 ///         - `num_epochs`: number of epochs to execute (epoch_1, ..., epoch_{num_epochs})
 ///         - `output_path`: root output directory
+///         - `progress_counter`: optional shared counter updated each step
 
 pub fn run(
     interaction_matrix: &Array2<f64>,     // V
@@ -31,6 +32,7 @@ pub fn run(
     save_interval: usize,                 // save every N steps
     num_epochs: usize,                    // number of epochs
     output_path: &Path,                   // root output dir
+    progress_counter: Option<&AtomicUsize>, // optional progress counter
 ) -> Result<()> {
     let d = interaction_matrix.nrows();
     debug_assert_eq!(interaction_matrix.ncols(), d, "interaction_matrix must be square");
@@ -39,19 +41,11 @@ pub fn run(
     }
 
     // Initial condition: well-mixed uniform simplex (ν_i = 1/d).
-    let mode = Mode::Frequency { cutoff };
+    let mode = Mode::Frequency { cutoff: Some(cutoff) };
     let mut gs = create_well_mixed_gs(mode, d, None);
 
     // Sequential epochs: carry final state from epoch k into epoch k+1.
     for epoch in 1..=num_epochs {
-        let pb = ProgressBar::new(epoch_len as u64);
-        pb.set_style(
-            ProgressStyle::with_template("{msg} [{bar:40.cyan/blue}] {pos}/{len}")
-                .unwrap()
-                .progress_chars("=>-"),
-        );  
-        pb.set_message(format!("epoch {epoch}/{num_epochs}"));
-
         gs = solve(
             epoch,               // current epoch
             gs,                  // initial state for this epoch
@@ -62,7 +56,7 @@ pub fn run(
             epoch_len,           // steps
             save_interval,       // save every N steps
             &output_path,  // output target for this epoch
-            Some(&pb),
+            progress_counter,
         )?;
     }
 
