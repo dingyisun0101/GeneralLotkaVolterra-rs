@@ -1,10 +1,10 @@
 pub fn run() {
     use ndarray::{Array2};
     use rand::rngs::SmallRng;
-    use rand::{Rng, SeedableRng};
+    use rand::{RngExt, SeedableRng};
 
     const D: usize = 10;
-    let mut rng = SmallRng::from_os_rng();
+    let mut rng = SmallRng::from_rng(&mut rand::rng());
 
     let interaction_matrix = Array2::from_shape_fn((D, D), |_| rng.random_range(-0.5..=0.5));
     let growth_vector = None;

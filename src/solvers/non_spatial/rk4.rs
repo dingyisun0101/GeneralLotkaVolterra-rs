@@ -232,7 +232,7 @@ pub fn solve(
     // Scratch / noise context / RNG for the whole run.
     let mut sc = Rk4Scratch::new(d);
     let mut noise_ctx = NoiseContext::new(d);
-    let mut rng = SmallRng::from_os_rng();
+    let mut rng = SmallRng::from_rng(&mut rand::rng());
 
     // Main loop: deterministic RK4 -> sanitize -> stochastic -> snapshot.
     let start_time = gs_curr.time;
