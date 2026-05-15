@@ -1,32 +1,136 @@
-# Replicator Solver
+# General Lotka-Volterra
 
-A Rust implementation of a replicator-style dynamical system solver, designed for deterministic and stochastic (noise-driven) simulations with reproducible JSON outputs suitable for downstream analysis workflows.
+General Lotka-Volterra is a Rust crate for small ecological dynamical-system
+experiments. The current ready path is a well-mixed replicator solver with
+deterministic RK4 integration, optional post-step stochasticity, and JSON epoch
+outputs for downstream analysis.
 
-This crate targets models of the general form
-$$
-\frac{d\nu_i}{dt}=\nu_i\left(f_i(\nu,\ldots)-\sum_j \nu_j f_j(\nu,\ldots)\right),
-$$
-with optional noise processes and (optionally) spatial extensions, while preserving the simplex constraints $\nu_i \ge 0$ and $\sum_i \nu_i = 1$ via standardized sanitization and renormalization routines.
+The crate is organized from state storage to solver code to runnable task
+wrappers:
 
-## Highlights
+```text
+state -> solvers -> tasks -> examples
+```
 
-- Deterministic and noisy dynamics (configurable noise models via `Noise` / `NoiseKind`)
-- Simplex-safe state handling (sanitization, cutoff, renormalization)
-- Structured outputs written as JSON tables for analysis pipelines
-- Testable, reproducible simulations (fixed seeds where applicable)
-- Designed for both unit-test driven development and parameter sweeps
+- `state` defines `SystemState`, representation modes, and epoch time series.
+- `solvers` defines non-spatial integration and stochastic update machinery.
+- `tasks` wires solver calls into repeatable epoch-based experiments.
+- `examples` provides minimal executable configurations.
 
-## Repository layout
+## Examples
 
-Typical layout (adapt as needed):
+Run the crate with the selected example in `src/main.rs`:
 
-- `src/`
-  - `solver/` or `src/solver.rs`: core time-stepping logic (e.g., `ReplicatorSolver`)
-  - `noise/` or `src/noise.rs`: noise models and stochastic update rules
-  - `ecosystem/` (optional): tracking tables and IO utilities
-  - `tests/` (optional, internal module tests): Rust unit tests compiled with the crate
-- `tests/`
-  - Rust integration tests (recommended if you want `cargo test --test <name>`)
-- `examples/`
-  - Small runnable examples for common configurations
-- `Cargo.toml`
+```bash
+cargo run
+```
+
+The bundled examples write epoch JSON files under `output/`:
+
+- `examples::replicator_deterministic`: deterministic well-mixed replicator run.
+- `examples::replicator_demographic`: replicator run with demographic Gaussian
+  noise after each deterministic step.
+
+## Design Rules
+
+Core consistency rules used across the crate:
+
+- Runtime state lives in `SystemState<T>`. Solvers mutate this type and call
+  `sanitize` at mode boundaries instead of duplicating feasibility logic.
+- `Mode::Frequency` stores simplex states with mass one. `Mode::Population`
+  stores absolute counts and may apply a carrying-capacity cap.
+- Time series files keep one shared `mode` per epoch and store owned snapshot
+  records under `samples`.
+- Non-spatial solvers keep reusable scratch buffers outside hot loops where
+  practical.
+- GLV task entry points are present as API placeholders, but the implemented
+  solver stack is currently replicator-form.
+
+## State
+
+Purpose:
+
+`state` is the common data model used by task runners, solvers, and JSON IO.
+
+Core API:
+
+```rust
+SystemState::from_arrays(mode, time, state, space)
+SystemState::empty(mode, time, num_taxa, space_shape)
+SystemState::from_grid(mode, time, grid)
+state.get(i)
+state.set(i, value)
+state.increase(i)
+state.decrease(i)
+state.sanitize()
+SystemStateTimeSeries::empty(epoch, mode)
+time_series.add(&state)
+time_series.save(path)
+SystemStateTimeSeries::from(path)
+```
+
+Core types:
+
+- `Mode<T>`
+- `SystemState<T>`
+- `SystemStateRecord<T>`
+- `SystemStateTimeSeries<T>`
+- `Scalar`
+
+## Solvers
+
+Purpose:
+
+`solvers` owns numerical evolution. The active implementation is the non-spatial
+replicator solver:
+
+```text
+RK4 raw step -> sanitize -> optional noise -> snapshot
+```
+
+Core API:
+
+```rust
+solve(epoch, state, interaction_matrix, growth_vector, noise, dt, steps, save_interval, output_path, progress_counter)
+Noise::none()
+Noise::proportional_gaussian(sigma)
+Noise::demographic_gaussian(sigma)
+```
+
+Core types:
+
+- `Noise`
+- `NoiseKind`
+- `NoiseContext`
+
+## Tasks
+
+Purpose:
+
+`tasks` exposes experiment-level entry points that run one or more epochs and
+persist each epoch to disk.
+
+Ready task entry points:
+
+```rust
+tasks::replicator_deterministic::run(...)
+tasks::replicator_demographic::run(...)
+```
+
+Placeholder task entry points:
+
+```rust
+tasks::lv_deterministic::run()
+tasks::lv_demographic::run()
+```
+
+The GLV placeholders return `ErrorKind::Unsupported` until a dedicated GLV
+right-hand side and integrator are introduced.
+
+## Documentation
+
+Additional design notes live under `docs/`:
+
+- [State](docs/state.md)
+- [Solvers](docs/solvers.md)
+- [Tasks](docs/tasks.md)

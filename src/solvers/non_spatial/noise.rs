@@ -1,27 +1,21 @@
-// noise.rs
-//! =============================================================================================
-//! Noise: state-vector stochastic updates with reusable scratch workspace
-//! =============================================================================================
-//!
-//! This module defines *optional* stochasticity applied **after** the deterministic integrator
-//! step. Noise is applied to a `SystemState<f64>` in frequency mode, and every noise update ends
-//! with `state.sanitize()` to restore feasibility.
-//!
-//! It provides:
-//!     - `NoiseKind` / `Noise`: public configuration
-//!     - `NoiseContext`: reusable buffer + Normal(0,1) distribution
-//!     - `apply_noise_inplace`: apply noise to `SystemState` in-place, then sanitize
-//!
-//! =============================================================================================
+/*!
+Non-spatial stochastic updates.
+
+Purpose:
+    This module defines optional stochasticity applied after a deterministic
+    solver step. Noise mutates `SystemState<f64>` in place and finishes by
+    calling `SystemState::sanitize`.
+
+Runtime model:
+    `Noise` is the user-facing configuration. `NoiseContext` owns reusable
+    buffers and distribution objects so hot solver loops do not allocate random
+    scratch space every step.
+*/
 #![allow(dead_code)]
 
+use crate::state::SystemState;
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
-use crate::state::SystemState;
-
-/// ==============================================================================================
-/// ===================================== Kinds of Noise =========================================
-/// ==============================================================================================
 
 #[derive(Clone, Copy, Debug)]
 pub enum NoiseKind {
@@ -34,20 +28,13 @@ pub enum NoiseKind {
     ///     where η_i ~ N(0,1) and \bar{η} = Σ_j ν_j η_j.
     ProportionalGaussian { sigma: f64 },
 
-    /// Demographic noise: 
+    /// Demographic noise:
     ///     Gaussian fluctuations proportional to sqrt(ν_i).
     ///     ν_i < ν_i + σ sqrt(ν_i) (η_i - \bar{η}_{sqrt(ν)}) sqrt(dt)
     ///     where \bar{η}_{sqrt(ν)} = (Σ_j sqrt(ν_j) η_j) / (Σ_j sqrt(ν_j)).
     DemographicGaussian { sigma: f64 },
 }
 
-
-
-
-/// ==============================================================================================
-/// ======================================= Noise Struct =========================================
-/// ==============================================================================================
-/// 
 /// Noise configuration wrapper (public API).
 #[derive(Clone, Copy, Debug)]
 pub struct Noise {
@@ -57,25 +44,33 @@ pub struct Noise {
 impl Noise {
     #[inline]
     pub fn none() -> Self {
-        Self { kind: NoiseKind::None }
+        Self {
+            kind: NoiseKind::None,
+        }
     }
 
     #[inline]
     pub fn proportional_gaussian(sigma: f64) -> Self {
-        Self { kind: NoiseKind::ProportionalGaussian { sigma } }
+        Self {
+            kind: NoiseKind::ProportionalGaussian { sigma },
+        }
     }
 
     #[inline]
     pub fn demographic_gaussian(sigma: f64) -> Self {
-        Self { kind: NoiseKind::DemographicGaussian { sigma } }
+        Self {
+            kind: NoiseKind::DemographicGaussian { sigma },
+        }
     }
 }
 
 /// Reusable buffers and distribution objects for noise sampling.
-/// Motivation:
-///     - Sampling η_i ~ N(0,1) requires a buffer of length d.
-///     - Allocating that buffer every step is expensive for large systems.
-///     - We therefore own it here and reuse in-place.
+///
+/// Details:
+/// - Purpose: Owns the standard-normal draw buffer and distribution object
+///   reused across solver steps.
+/// - Parameters:
+///   - (none): Construct with `NoiseContext::new`.
 pub struct NoiseContext {
     /// Standard normal draws, length d.
     eta: Vec<f64>,
@@ -86,6 +81,11 @@ pub struct NoiseContext {
 
 impl NoiseContext {
     /// Create a new context for simplex dimension `d`.
+    ///
+    /// Details:
+    /// - Purpose: Allocates reusable noise scratch space.
+    /// - Parameters:
+    ///   - `d`: State dimension.
     #[inline]
     pub fn new(d: usize) -> Self {
         assert!(d > 0, "NoiseContext::new: d must be > 0");
@@ -96,6 +96,12 @@ impl NoiseContext {
     }
 
     /// Ensure the buffer matches a desired dimension (useful if d is dynamic).
+    ///
+    /// Details:
+    /// - Purpose: Keeps the context reusable if a caller changes state
+    ///   dimension between runs.
+    /// - Parameters:
+    ///   - `d`: Desired state dimension.
     #[inline]
     pub fn resize_if_needed(&mut self, d: usize) {
         if self.eta.len() != d {
@@ -104,16 +110,17 @@ impl NoiseContext {
     }
 }
 
-
-/// ==============================================================================================
-/// ============================== Core Function: Apply Noise ====================================
-/// ==============================================================================================
-
 /// Apply noise in-place to `state` and then restore feasibility via `state.sanitize()`.
 ///
-/// Contract:
-///     - Noise may temporarily violate simplex constraints.
-///     - After this returns, `state` is a valid simplex point (by virtue of `state.sanitize()`).
+/// Details:
+/// - Purpose: Applies the configured stochastic update after a deterministic
+///   integration step.
+/// - Parameters:
+///   - `state`: State to mutate.
+///   - `noise`: Stochastic update policy.
+///   - `dt`: Step size used for noise scaling.
+///   - `ctx`: Reusable noise scratch context.
+///   - `rng_local`: Random-number generator.
 #[inline]
 pub fn apply_noise_inplace(
     state: &mut SystemState<f64>,
@@ -161,7 +168,11 @@ pub fn apply_noise_inplace(
             let nu_mut = &mut state.state;
             for i in 0..d {
                 let val = nu_mut[i] * (1.0 + scale * (ctx.eta[i] - eta_bar));
-                nu_mut[i] = if val.is_finite() && val > 0.0 { val } else { 0.0 };
+                nu_mut[i] = if val.is_finite() && val > 0.0 {
+                    val
+                } else {
+                    0.0
+                };
             }
 
             // ----------------------------------------------------------------------------------
@@ -205,7 +216,11 @@ pub fn apply_noise_inplace(
                 let xi = if nu_mut[i] > 0.0 { nu_mut[i] } else { 0.0 };
                 let incr = scale * xi.sqrt() * (ctx.eta[i] - eta_bar_sqrt);
                 let val = xi + incr;
-                nu_mut[i] = if val.is_finite() && val > 0.0 { val } else { 0.0 };
+                nu_mut[i] = if val.is_finite() && val > 0.0 {
+                    val
+                } else {
+                    0.0
+                };
             }
 
             // ----------------------------------------------------------------------------------

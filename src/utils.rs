@@ -1,22 +1,27 @@
-// src/utils.rs
-use ndarray::Array1;
-use crate::state::{SystemState, Mode, Scalar};
+/*!
+General utility helpers.
 
-/// ==============================================================================================
-/// ============================= Constructors / Initialization Helpers ===========================
-/// ==============================================================================================
+Purpose:
+    Utility functions provide shared construction helpers that are not owned by
+    a specific task or solver module.
+*/
+
+use crate::state::{Mode, Scalar, SystemState};
+use ndarray::Array1;
 
 /// Create a well-mixed (spatially uniform / no-grid) `SystemState<T>` at time 0.
-///     Behavior:
-///         - `Mode::Frequency`: initialize uniform simplex (sum = 1)
-///         - `Mode::Population`: initialize equal counts per taxon (sum = num_taxa * per_taxon)
-/// Notes:
-///     - Does not allocate any spatial field (`space = None`)
-///     - Does not call `sanitize()`; caller may do so if invariants depend on cutoff/capacity
+///
+/// Details:
+/// - Purpose: Creates the common no-grid initial condition used by task
+///   runners.
+/// - Parameters:
+///   - `mode`: Frequency or population interpretation.
+///   - `num_taxa`: Number of taxa in the global state vector.
+///   - `population_i`: Optional per-taxon count for population mode.
 pub fn create_well_mixed_gs<T>(
-    mode: Mode<T>,             // representation convention (frequency vs population)
-    num_taxa: usize,           // dimensionality d
-    population_i: Option<T>,   // per-taxon population (only used for Population mode)
+    mode: Mode<T>,           // representation convention
+    num_taxa: usize,         // dimensionality d
+    population_i: Option<T>, // per-taxon population for Population mode
 ) -> SystemState<T>
 where
     T: Scalar,

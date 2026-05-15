@@ -1,5 +1,13 @@
+/*!
+Deterministic replicator example.
+
+Purpose:
+    Builds a random interaction matrix and runs the deterministic task into
+    `output/replicator_deterministic`.
+*/
+
 pub fn run() {
-    use ndarray::{Array2};
+    use ndarray::Array2;
     use rand::rngs::SmallRng;
     use rand::{RngExt, SeedableRng};
 

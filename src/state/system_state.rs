@@ -1,36 +1,43 @@
-/// ==============================================================================================
-/// =============================== Single Spatiotemporal State ==================================
-/// ==============================================================================================
+/*!
+Single spatiotemporal state.
 
-use serde::{Deserialize, Serialize};
-use num_traits::Float;
+Purpose:
+    `SystemState` stores one ecological snapshot: representation mode, integer
+    time, global taxon vector, optional spatial field, and cached mass.
+
+Representation modes:
+    - `Frequency`: entries live on the simplex and `mass` is normalized to one.
+    - `Population`: entries carry absolute counts and may be capped by carrying
+      capacity.
+
+Invariant boundary:
+    `sanitize` removes invalid entries, applies cutoff/capacity rules, and
+    refreshes cached mass. Solvers should call it after numerical updates that
+    may leave the valid state domain.
+*/
+
 use ndarray::parallel::prelude::*;
 use ndarray::{Array1, ArrayD, IxDyn};
+use num_traits::Float;
+use serde::{Deserialize, Serialize};
 
-pub trait Scalar:
-    Float + Copy + Default + Send + Sync + Serialize + std::iter::Sum<Self>
-{
-}
+pub trait Scalar: Float + Copy + Default + Send + Sync + Serialize + std::iter::Sum<Self> {}
 
-impl<T> Scalar for T where
-    T: Float + Copy + Default + Send + Sync + Serialize + std::iter::Sum<T>
-{
-}
+impl<T> Scalar for T where T: Float + Copy + Default + Send + Sync + Serialize + std::iter::Sum<T> {}
 
-/// Representation mode:
-///     Two mutually exclusive conventions for what `state` means:
-///         - `Frequency`: entries live on the simplex (mass = 1),
-///         - `Population`: entries carry absolute counts (mass not necessarily 1)
-///     where 'cutoff' is an absorbing boundary (optional).
+/// Representation convention for the global state vector.
 #[derive(Clone, Serialize, Deserialize)]
 pub enum Mode<T> {
-    Frequency { cutoff: Option<T> },
-    Population { cutoff: Option<T>, carrying_capacity: Option<T> },
+    Frequency {
+        cutoff: Option<T>,
+    },
+    Population {
+        cutoff: Option<T>,
+        carrying_capacity: Option<T>,
+    },
 }
 
-/// Snapshot at an integer time index.
-///     - `state`: well-mixed / global vector (d)
-///     - `space`: spatial field (shape arbitrary: [X, Y, Z, ...])
+/// Snapshot at one integer time index.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SystemState<T> {
     pub mode: Mode<T>,
@@ -40,11 +47,20 @@ pub struct SystemState<T> {
     pub mass: T,
 }
 
-/// Constructors and accessors.
 impl<T> SystemState<T>
 where
     T: Scalar,
 {
+    /// Construct a state from owned vector and optional spatial arrays.
+    ///
+    /// Details:
+    /// - Purpose: Creates the canonical state representation while enforcing
+    ///   the initial mode convention.
+    /// - Parameters:
+    ///   - `mode`: Frequency or population interpretation.
+    ///   - `time`: Integer simulation time.
+    ///   - `state`: Global taxon vector.
+    ///   - `space`: Optional spatial field.
     #[inline]
     pub fn from_arrays(
         mode: Mode<T>,
@@ -83,6 +99,15 @@ where
         }
     }
 
+    /// Construct an empty state with optional spatial storage.
+    ///
+    /// Details:
+    /// - Purpose: Allocates zero/default state storage for a known size.
+    /// - Parameters:
+    ///   - `mode`: Frequency or population interpretation.
+    ///   - `time`: Integer simulation time.
+    ///   - `num_taxa`: Global vector length.
+    ///   - `space_shape`: Optional shape for `ArrayD` spatial storage.
     #[inline]
     pub fn empty(
         mode: Mode<T>,
@@ -99,7 +124,15 @@ where
         Self::from_arrays(mode, time, state, space)
     }
 
-    /// Build a SystemState from a discrete species-ID grid (0 = vacant, 1 = species 1, ...).
+    /// Build a state from a discrete species-id grid.
+    ///
+    /// Details:
+    /// - Purpose: Counts positive grid ids into the global vector and stores a
+    ///   typed copy of the grid as spatial state.
+    /// - Parameters:
+    ///   - `mode`: Frequency or population interpretation.
+    ///   - `time`: Integer simulation time.
+    ///   - `grid`: Discrete grid where `0` is vacant and `1..` are species ids.
     pub fn from_grid(mode: Mode<T>, time: usize, grid: &ArrayD<usize>) -> Self {
         let num_taxa = grid.iter().copied().max().unwrap_or(0);
         let zero = T::zero();
@@ -172,9 +205,7 @@ where
         }
     }
 
-    // Hard-threshold invalid / nonpositive / below-cutoff entries to `zero`.
-    //     - `cutoff` is assumed nonnegative by the caller
-    //     - `zero` is carried to avoid repeated `T::zero()` calls
+    // Hard-threshold invalid, nonpositive, and below-cutoff entries to zero.
     #[inline]
     fn apply_cutoff(&mut self, cutoff: T, zero: T) {
         self.state.par_iter_mut().for_each(|x| {
@@ -184,9 +215,13 @@ where
         });
     }
 
-    // Enforce mode-specific invariants and update `mass`.
-    //     - `Frequency`: project onto simplex (sum = 1), set `mass = 1`
-    //     - `Population`: apply cutoff, optionally cap at `carrying_capacity`, set `mass ≈ round(sum)`
+    /// Enforce mode-specific invariants and update cached mass.
+    ///
+    /// Details:
+    /// - Purpose: Restores validity after numerical updates, noise, or direct
+    ///   mutation.
+    /// - Parameters:
+    ///   - (none): Uses this state's mode and storage.
     #[inline]
     pub fn sanitize(&mut self) {
         let zero = T::zero();

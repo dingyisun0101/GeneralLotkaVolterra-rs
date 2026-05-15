@@ -1,11 +1,19 @@
-/// ==============================================================================================
-/// ================================= Time Series Container ======================================
-/// ==============================================================================================
+/*!
+Epoch time-series container.
 
-use serde::{Serialize, Deserialize};
-use serde::de::DeserializeOwned;
+Purpose:
+    `SystemStateTimeSeries` stores the snapshots for one epoch and owns the
+    JSON save/load path used by task runners.
+
+Storage model:
+    The epoch stores one shared `mode`. Each sample stores owned state, optional
+    spatial data, integer time, and cached mass without repeating mode data.
+*/
+
 use ndarray::{Array1, ArrayD};
-use std::fs::{create_dir_all, read_dir, read_to_string, File};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use std::fs::{File, create_dir_all, read_dir, read_to_string};
 use std::io::{Error, ErrorKind, Result, Write};
 use std::path::{Path, PathBuf};
 
@@ -32,7 +40,13 @@ impl<T> SystemStateTimeSeries<T>
 where
     T: Clone,
 {
-    /// Empty time series (no samples yet).
+    /// Construct an empty epoch time series.
+    ///
+    /// Details:
+    /// - Purpose: Creates the save/load container before snapshots are added.
+    /// - Parameters:
+    ///   - `epoch`: Epoch index used by output naming.
+    ///   - `mode`: Shared mode for every sample in the epoch.
     #[inline]
     pub fn empty(epoch: usize, mode: Mode<T>) -> Self {
         Self {
@@ -42,7 +56,12 @@ where
         }
     }
 
-    /// Add a borrowed snapshot (no copies of state/space/mass data).
+    /// Add a snapshot by cloning its owned arrays into the epoch buffer.
+    ///
+    /// Details:
+    /// - Purpose: Decouples persisted epoch samples from later solver mutation.
+    /// - Parameters:
+    ///   - `gs`: Snapshot to append.
     #[inline]
     pub fn add(&mut self, gs: &SystemState<T>) {
         self.samples.push(SystemStateRecord {
@@ -58,7 +77,12 @@ impl<T> SystemStateTimeSeries<T>
 where
     T: Serialize,
 {
-    /// Write the list of samples into `{output_path}/{epoch}.json` (pretty-printed).
+    /// Write this epoch to `{output_path}/{epoch}.json`.
+    ///
+    /// Details:
+    /// - Purpose: Persists samples as pretty-printed JSON for analysis tools.
+    /// - Parameters:
+    ///   - `output_path`: Directory that receives the epoch file.
     pub fn save(&self, output_path: &Path) -> Result<()> {
         create_dir_all(output_path).map_err(|e| {
             Error::new(
@@ -97,9 +121,13 @@ impl<T> SystemStateTimeSeries<T>
 where
     T: DeserializeOwned,
 {
-    /// Load from:
-    /// - `{output_path}/{latest_epoch}.json` if `output_path` is a directory, or
-    /// - `output_path` directly if it points to a `.json` file.
+    /// Load a time series from a JSON file or latest epoch in a directory.
+    ///
+    /// Details:
+    /// - Purpose: Resumes from a direct epoch file or the newest numeric epoch
+    ///   file under an output directory.
+    /// - Parameters:
+    ///   - `output_path`: JSON file or directory containing epoch JSON files.
     pub fn from(output_path: &Path) -> Result<Self> {
         let file_path = if output_path.extension().and_then(|s| s.to_str()) == Some("json") {
             output_path.to_path_buf()

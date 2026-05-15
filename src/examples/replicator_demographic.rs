@@ -1,5 +1,13 @@
+/*!
+Demographic-noise replicator example.
+
+Purpose:
+    Builds a random interaction matrix and runs the demographic-noise task into
+    `output/replicator_demographic`.
+*/
+
 pub fn run() {
-    use ndarray::{Array2};
+    use ndarray::Array2;
     use rand::rngs::SmallRng;
     use rand::{RngExt, SeedableRng};
 

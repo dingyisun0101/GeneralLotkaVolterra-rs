@@ -1,25 +1,35 @@
+/*!
+Well-mixed replicator RK4 solver.
+
+Purpose:
+    This module implements the active trajectory solver. It computes the
+    replicator right-hand side, advances the state with RK4, restores state
+    invariants, applies optional noise, and persists epoch snapshots.
+
+Evolution contract:
+    One solver step follows this sequence: RK4 raw step,
+    `SystemState::sanitize`, optional noise, then snapshot check.
+*/
+
 use std::io::Result;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use ndarray::{Array1, Array2};
 
-use rand::rngs::SmallRng;
 use rand::SeedableRng;
+use rand::rngs::SmallRng;
 
+use super::noise::{Noise, NoiseContext, apply_noise_inplace};
 use crate::state::{SystemState, SystemStateTimeSeries};
-use super::noise::{apply_noise_inplace, Noise, NoiseContext};
-
-/// ==============================================================================================
-/// =================================== RK4 Scratch Buffers ======================================
-/// ==============================================================================================
 
 /// Scratch buffers for RK4 (avoid repeated allocations).
-///     Layout:
-///         - k1..k4: RK4 stage derivatives
-///         - tmp:   intermediate state
-///         - w:     scratch for matrix-vector product (Vν)
-///         - drift: scratch for drift term (g + Vν - Υ)
+///
+/// Details:
+/// - Purpose: Owns stage derivatives and matrix-vector scratch storage for the
+///   hot integration loop.
+/// - Parameters:
+///   - (none): Construct with `Rk4Scratch::new`.
 struct Rk4Scratch {
     k1: Array1<f64>,    // stage 1 derivative
     k2: Array1<f64>,    // stage 2 derivative
@@ -45,25 +55,27 @@ impl Rk4Scratch {
     }
 }
 
-
-/// ==============================================================================================
-/// =============================== Replicator RHS + RK4 Integrator ===============================
-/// ==============================================================================================
-
 /// Compute the RHS in-place:
 ///     out = rhs(ν) = ν ⊙ ( g + Vν - Υ ),
 ///     where Υ = Σ_i ν_i ( g_i + (Vν)_i ).
-/// Notes:
-///     - Conserves total mass analytically (replicator form).
-///     - Numerical drift is corrected by `SystemState::sanitize()`.
+///
+/// Details:
+/// - Purpose: Evaluates the replicator vector field without allocating.
+/// - Parameters:
+///   - `nu`: Current state.
+///   - `growth_vector`: Growth vector `g`.
+///   - `interaction_matrix`: Interaction matrix `V`.
+///   - `w`: Scratch for `V nu`.
+///   - `drift`: Scratch for centered drift.
+///   - `out`: Destination derivative.
 #[inline]
 fn rhs_inplace(
-    nu: &Array1<f64>,                   // current state ν (len d)
-    growth_vector: &Array1<f64>,        // g (len d)
-    interaction_matrix: &Array2<f64>,   // V (d×d)
-    w: &mut Array1<f64>,                // scratch: w = Vν
-    drift: &mut Array1<f64>,            // scratch: drift = g + w - Υ
-    out: &mut Array1<f64>,              // output: rhs(ν)
+    nu: &Array1<f64>,                 // current state ν (len d)
+    growth_vector: &Array1<f64>,      // g (len d)
+    interaction_matrix: &Array2<f64>, // V (d×d)
+    w: &mut Array1<f64>,              // scratch: w = Vν
+    drift: &mut Array1<f64>,          // scratch: drift = g + w - Υ
+    out: &mut Array1<f64>,            // output: rhs(ν)
 ) {
     let d = nu.len();
 
@@ -94,10 +106,17 @@ fn rhs_inplace(
 }
 
 /// One explicit RK4 step (deterministic) writing into `out`.
-/// Notes:
-///     - Does NOT enforce simplex / capacity constraints.
-///     - Clamps non-finite / nonpositive outputs to 0 to prevent NaN propagation.
-///     - Caller must call `SystemState::sanitize()` immediately afterward.
+///
+/// Details:
+/// - Purpose: Advances one raw deterministic step without enforcing
+///   mode-specific state invariants.
+/// - Parameters:
+///   - `nu`: Current state.
+///   - `growth_vector`: Growth vector `g`.
+///   - `interaction_matrix`: Interaction matrix `V`.
+///   - `dt`: Step size.
+///   - `sc`: Reusable RK4 scratch storage.
+///   - `out`: Raw next-state destination.
 #[inline]
 fn rk4_step_inplace_raw(
     nu: &Array1<f64>,                 // current ν
@@ -174,23 +193,24 @@ fn rk4_step_inplace_raw(
     }
 }
 
-/// ==============================================================================================
-/// ===================================== Top-Level Solve ========================================
-/// ==============================================================================================
-
 /// Integrate a single trajectory and persist a `SystemStateTimeSeries`.
-///     Pipeline per step:
-///         RK4 (raw) -> sanitize -> noise -> record snapshot.
-/// Inputs:
-///     - `gs_i`: initial state (will be sanitized in-place before t=0 is recorded)
-///     - `interaction_matrix`: V (d×d)
-///     - `growth_vector`: optional g (defaults to 0)
-///     - `noise`: stochastic model applied after sanitize
-///     - `save_interval`: save every Nth step (t=0 always saved)
-
+///
+/// Details:
+/// - Purpose: Runs one epoch and writes its snapshots to disk.
+/// - Parameters:
+///   - `epoch`: Epoch index for output naming.
+///   - `gs_i`: Initial state consumed by the solver.
+///   - `interaction_matrix`: Square interaction matrix `V`.
+///   - `growth_vector`: Optional growth vector `g`; defaults to zero.
+///   - `noise`: Optional post-step stochastic update.
+///   - `dt`: Step size.
+///   - `num_steps`: Number of integration steps.
+///   - `save_interval`: Save every Nth step; `t = 0` is always saved.
+///   - `output_path`: Directory for epoch JSON output.
+///   - `progress_counter`: Optional shared progress counter.
 pub fn solve(
     epoch: usize,                           // epoch index
-    mut gs_i: SystemState<f64>,            // initial state (consumed)
+    mut gs_i: SystemState<f64>,             // initial state (consumed)
     interaction_matrix: &Array2<f64>,       // V
     growth_vector: Option<&Array1<f64>>,    // g override
     noise: Noise,                           // noise model
@@ -216,8 +236,7 @@ pub fn solve(
     // Enforce invariants at t=0.
     gs_i.sanitize();
 
-    let mut states: Vec<SystemState<f64>> =
-        Vec::with_capacity(num_steps / save_interval + 1);
+    let mut states: Vec<SystemState<f64>> = Vec::with_capacity(num_steps / save_interval + 1);
     let mut gs_curr = gs_i;
     states.push(gs_curr.clone()); // t=0 always saved
 
