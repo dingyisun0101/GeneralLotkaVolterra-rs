@@ -20,6 +20,10 @@ Each task run:
 - `replicator_deterministic::run`: RK4 replicator dynamics without noise.
 - `replicator_demographic::run`: RK4 replicator dynamics with demographic
   Gaussian noise.
+- `replicator_diffusive_deterministic::run`: spatial local-simplex replicator
+  reaction-diffusion without noise.
+- `lv_diffusive_deterministic::run`: spatial GLV population
+  reaction-diffusion without noise.
 
 ## Placeholder Tasks
 
@@ -27,4 +31,4 @@ Each task run:
 - `lv_demographic::run`
 
 These return `ErrorKind::Unsupported` because the implemented solver stack is
-replicator-form only.
+replicator-form only for non-spatial tasks.

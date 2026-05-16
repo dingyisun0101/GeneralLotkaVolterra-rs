@@ -30,7 +30,6 @@ serde_json = "1.0.149"
 # Physics & Math
 num-traits = "0.2.19"
 ndarray = { version = "0.17.2", features = ["rayon", "serde"] }
-ndarray-linalg = { version = "0.18.1", features = ["openblas-static"] } 
 
 # Utility libraries
 indicatif = "0.18.4"

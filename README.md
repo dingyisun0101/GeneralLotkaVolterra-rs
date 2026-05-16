@@ -13,23 +13,31 @@ state -> solvers -> tasks -> examples
 ```
 
 - `state` defines `SystemState`, representation modes, and epoch time series.
-- `solvers` defines non-spatial integration and stochastic update machinery.
+- `solvers` defines non-spatial integration, spatial reaction-diffusion
+  integration, and stochastic update machinery.
 - `tasks` wires solver calls into repeatable epoch-based experiments.
 - `examples` provides minimal executable configurations.
 
 ## Examples
 
-Run the crate with the selected example in `src/main.rs`:
+Run examples through Cargo:
 
 ```bash
-cargo run
+cargo run --example replicator_deterministic
+cargo run --example replicator_demographic
+cargo run --example replicator_diffusive_deterministic
+cargo run --example lv_diffusive_deterministic
 ```
 
 The bundled examples write epoch JSON files under `output/`:
 
-- `examples::replicator_deterministic`: deterministic well-mixed replicator run.
-- `examples::replicator_demographic`: replicator run with demographic Gaussian
+- `replicator_deterministic`: deterministic well-mixed replicator run.
+- `replicator_demographic`: replicator run with demographic Gaussian
   noise after each deterministic step.
+- `replicator_diffusive_deterministic`: deterministic spatial
+  local-simplex replicator reaction-diffusion run.
+- `lv_diffusive_deterministic`: deterministic spatial GLV
+  reaction-diffusion run.
 
 ## Design Rules
 
@@ -81,7 +89,7 @@ Core types:
 
 Purpose:
 
-`solvers` owns numerical evolution. The active implementation is the non-spatial
+`solvers` owns numerical evolution. The non-spatial implementation is the
 replicator solver:
 
 ```text
@@ -103,6 +111,22 @@ Core types:
 - `NoiseKind`
 - `NoiseContext`
 
+The spatial solver evolves `Mode::Population` fields with species stored on the
+last axis:
+
+```text
+space[x0, x1, ..., x{k-1}, species]
+```
+
+Spatial core API:
+
+```rust
+solvers::spatial::rk4::solve(...)
+solvers::spatial::rk4::Diffusion::unit_spacing(...)
+solvers::spatial::rk4::Boundary::Periodic
+solvers::spatial::rk4::Boundary::Neumann
+```
+
 ## Tasks
 
 Purpose:
@@ -115,6 +139,8 @@ Ready task entry points:
 ```rust
 tasks::replicator_deterministic::run(...)
 tasks::replicator_demographic::run(...)
+tasks::replicator_diffusive_deterministic::run(...)
+tasks::lv_diffusive_deterministic::run(...)
 ```
 
 Placeholder task entry points:
