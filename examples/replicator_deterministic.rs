@@ -6,6 +6,8 @@ Purpose:
     trajectory into `output/replicator_deterministic`.
 */
 
+mod common;
+
 fn main() {
     use ndarray::Array2;
     use rand::rngs::SmallRng;
@@ -23,6 +25,8 @@ fn main() {
     let epoch_len = 50_000;
     let save_interval = 500;
     let num_epochs = 4;
+    let progress =
+        common::ExampleProgress::start("replicator_deterministic", epoch_len, num_epochs);
 
     if let Err(err) = general_lotka_volterra_rs::tasks::replicator_deterministic::run(
         &interaction_matrix,
@@ -33,9 +37,11 @@ fn main() {
         save_interval,
         num_epochs,
         output_path,
-        None,
+        Some(progress.counter.as_ref()),
     ) {
         eprintln!("replicator_deterministic failed: {err}");
         std::process::exit(1);
     }
+
+    progress.finish();
 }

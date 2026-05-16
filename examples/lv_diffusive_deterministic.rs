@@ -7,6 +7,8 @@ Purpose:
     `output/lv_diffusive_deterministic`.
 */
 
+mod common;
+
 fn main() {
     use general_lotka_volterra_rs::solvers::spatial::rk4::{Boundary, Diffusion};
     use ndarray::{Array1, Array2};
@@ -37,6 +39,8 @@ fn main() {
     let epoch_len = 5_000;
     let save_interval = 100;
     let num_epochs = 4;
+    let progress =
+        common::ExampleProgress::start("lv_diffusive_deterministic", epoch_len, num_epochs);
 
     if let Err(err) = general_lotka_volterra_rs::tasks::lv_diffusive_deterministic::run(
         &interaction_matrix,
@@ -51,9 +55,11 @@ fn main() {
         save_interval,
         num_epochs,
         output_path,
-        None,
+        Some(progress.counter.as_ref()),
     ) {
         eprintln!("lv_diffusive_deterministic failed: {err}");
         std::process::exit(1);
     }
+
+    progress.finish();
 }
