@@ -1,9 +1,10 @@
 # General Lotka-Volterra
 
 General Lotka-Volterra is a Rust crate for small ecological dynamical-system
-experiments. The current ready path is a well-mixed replicator solver with
-deterministic RK4 integration, optional post-step stochasticity, and JSON epoch
-outputs for downstream analysis.
+experiments. The ready paths include well-mixed replicator dynamics,
+deterministic spatial replicator reaction-diffusion, deterministic spatial GLV
+reaction-diffusion, optional post-step stochasticity for well-mixed replicator
+runs, and JSON epoch outputs for downstream analysis.
 
 The crate is organized from state storage to solver code to runnable task
 wrappers:
@@ -29,7 +30,8 @@ cargo run --example replicator_diffusive_deterministic
 cargo run --example lv_diffusive_deterministic
 ```
 
-The bundled examples write epoch JSON files under `output/`:
+The bundled examples take their settings from `examples/common/constants.rs`
+and write epoch JSON files under `output/`:
 
 - `replicator_deterministic`: deterministic well-mixed replicator run.
 - `replicator_demographic`: replicator run with demographic Gaussian
@@ -39,7 +41,7 @@ The bundled examples write epoch JSON files under `output/`:
 - `lv_diffusive_deterministic`: deterministic spatial GLV
   reaction-diffusion run.
 
-Each example renders the latest epoch as its final output at
+Each example renders the full saved simulation history as its final output at
 `output/<example>/plot/plot.png`. Activate a Python environment with `numpy`
 and `matplotlib` available before running the examples, because Cargo invokes
 the bundled Python renderer after the Rust simulation completes.
@@ -53,11 +55,12 @@ Core consistency rules used across the crate:
 - `Mode::Frequency` stores simplex states with mass one. `Mode::Population`
   stores absolute counts and may apply a carrying-capacity cap.
 - Time series files keep one shared `mode` per epoch and store owned snapshot
-  records under `samples`.
+  records under `samples`. Spatial runs may save aggregate state more often
+  than full spatial fields; signal-only spatial records have `space: null`.
 - Non-spatial solvers keep reusable scratch buffers outside hot loops where
   practical.
-- GLV task entry points are present as API placeholders, but the implemented
-  solver stack is currently replicator-form.
+- Non-spatial GLV task entry points are API placeholders until a dedicated
+  non-spatial GLV right-hand side and integrator are introduced.
 
 ## State
 
@@ -126,7 +129,8 @@ space[x0, x1, ..., x{k-1}, species]
 Spatial core API:
 
 ```rust
-solvers::spatial::rk4::solve(...)
+solvers::spatial::rk4::solve(..., save_signal_interval, save_space_interval, ...)
+solvers::spatial::rk4::solve_replicator(..., save_signal_interval, save_space_interval, ...)
 solvers::spatial::rk4::Diffusion::unit_spacing(...)
 solvers::spatial::rk4::Boundary::Periodic
 solvers::spatial::rk4::Boundary::Neumann
@@ -156,7 +160,7 @@ tasks::lv_demographic::run()
 ```
 
 The GLV placeholders return `ErrorKind::Unsupported` until a dedicated GLV
-right-hand side and integrator are introduced.
+right-hand side and integrator are introduced for non-spatial tasks.
 
 ## Documentation
 

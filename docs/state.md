@@ -12,6 +12,8 @@ field, a mode, integer time, and cached mass.
 - `Mode::Population` treats `state` as absolute counts and keeps `mass` close
   to the rounded sum after cutoff and optional capacity enforcement.
 - `SystemStateRecord` stores owned snapshot data without repeating the mode.
+  Spatial signal-only records may omit `space` while retaining aggregate
+  `state`.
 - `SystemStateTimeSeries` stores one shared mode plus an ordered sample list for
   one epoch.
 

@@ -2,9 +2,11 @@
 
 ## Purpose
 
-The solver layer owns numerical evolution. The current implemented solver is a
-well-mixed replicator integrator with optional stochastic updates, plus an
-arbitrary-dimensional spatial GLV reaction-diffusion integrator.
+The solver layer owns numerical evolution. The implemented solvers are a
+well-mixed replicator integrator with optional stochastic updates, an
+arbitrary-dimensional spatial GLV reaction-diffusion integrator, and an
+arbitrary-dimensional spatial local-simplex replicator reaction-diffusion
+integrator.
 
 ## Replicator Step
 
@@ -51,6 +53,15 @@ replicator right-hand side and normalizes each spatial cell onto the simplex
 after every raw RK4 step. The global `SystemState.state` vector is refreshed
 from spatial totals or cell averages after each step.
 
+Spatial solves have two save cadences:
+
+- `save_signal_interval` stores the aggregate `SystemState.state` signal.
+- `save_space_interval` includes the full `SystemState.space` field.
+
+The initial sample at `t = 0` always includes both signal and space. Later
+signal-only samples keep `space = None` to avoid writing full fields at every
+signal step.
+
 ## File Layout
 
 - `src/solvers/mod.rs`: solver module surface.
@@ -59,4 +70,5 @@ from spatial totals or cell averages after each step.
   trajectory solve.
 - `src/solvers/non_spatial/noise.rs`: noise configuration and application.
 - `src/solvers/spatial/mod.rs`: spatial module surface.
-- `src/solvers/spatial/rk4.rs`: arbitrary-dimensional spatial GLV RK4 solver.
+- `src/solvers/spatial/rk4.rs`: arbitrary-dimensional spatial GLV and
+  local-replicator RK4 solvers.

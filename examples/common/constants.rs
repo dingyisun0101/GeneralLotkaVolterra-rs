@@ -57,7 +57,7 @@ pub const SPATIAL_SHAPE: [usize; 2] = [128, 128];
 pub const SPATIAL_CUTOFF: f64 = 1e-9;
 
 /// Integration step size for diffusive spatial examples.
-pub const SPATIAL_DT: f64 = 0.01;
+pub const SPATIAL_DT: f64 = 0.003;
 
 /// Save one aggregate state sample every N solver steps for spatial examples.
 pub const SPATIAL_SAVE_SIGNAL_INTERVAL: usize = 100;

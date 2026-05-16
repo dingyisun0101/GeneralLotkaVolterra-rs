@@ -71,7 +71,7 @@ impl ExampleProgress {
     }
 }
 
-pub fn render_latest_epoch_plot(output_path: &Path, title: &str) -> Result<PathBuf> {
+pub fn render_output_plot(output_path: &Path, title: &str) -> Result<PathBuf> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
     let output_path = output_path.canonicalize()?;
     let outdir = output_path.join("plot");
@@ -120,7 +120,7 @@ pub fn run_and_render<F>(
 
     progress.finish();
 
-    match render_latest_epoch_plot(output_path, label) {
+    match render_output_plot(output_path, label) {
         Ok(plot_path) => println!("plot: {}", plot_path.display()),
         Err(err) => {
             eprintln!("{label} plot rendering failed: {err}");

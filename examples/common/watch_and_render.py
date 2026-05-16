@@ -1,7 +1,7 @@
 """Watch a directory for example JSON outputs and render plots automatically.
 
 This script polls the target directory (recursively) for new or modified `.json` files
-and calls `render_from_output.render_from_path` to produce `plot/plot.png` next to each JSON.
+and calls `render_from_output.render_from_path` to produce `plot/plot.png`.
 
 Usage:
     python -m examples.common.watch_and_render GLV/output
