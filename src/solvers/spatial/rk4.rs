@@ -566,7 +566,8 @@ fn validate_inputs(
     growth_vector: Option<&Array1<f64>>,
     diffusion: &Diffusion,
     dt: f64,
-    save_interval: usize,
+    save_signal_interval: usize,
+    save_space_interval: usize,
 ) -> Result<()> {
     let d = layout.num_species;
 
@@ -622,10 +623,16 @@ fn validate_inputs(
             "dt must be finite and nonnegative",
         ));
     }
-    if save_interval == 0 {
+    if save_signal_interval == 0 {
         return Err(Error::new(
             ErrorKind::InvalidInput,
-            "save_interval must be >= 1",
+            "save_signal_interval must be >= 1",
+        ));
+    }
+    if save_space_interval == 0 {
+        return Err(Error::new(
+            ErrorKind::InvalidInput,
+            "save_space_interval must be >= 1",
         ));
     }
 
@@ -650,6 +657,14 @@ fn validate_inputs(
     Ok(())
 }
 
+fn saved_snapshot(gs: &SystemState<f64>, include_space: bool) -> SystemState<f64> {
+    let mut snapshot = gs.clone();
+    if !include_space {
+        snapshot.space = None;
+    }
+    snapshot
+}
+
 /// Integrate a single spatial trajectory and persist a `SystemStateTimeSeries`.
 ///
 /// Details:
@@ -663,7 +678,10 @@ fn validate_inputs(
 ///   - `diffusion`: Per-species diffusion coefficients and grid metadata.
 ///   - `dt`: Step size.
 ///   - `num_steps`: Number of integration steps.
-///   - `save_interval`: Save every Nth step; `t = 0` is always saved.
+///   - `save_signal_interval`: Save aggregate state every Nth step; `t = 0`
+///     is always saved.
+///   - `save_space_interval`: Include full spatial field every Nth step;
+///     `t = 0` is always saved.
 ///   - `output_path`: Directory for epoch JSON output.
 ///   - `progress_counter`: Optional shared progress counter.
 fn solve_impl(
@@ -674,7 +692,8 @@ fn solve_impl(
     diffusion: &Diffusion,
     dt: f64,
     num_steps: usize,
-    save_interval: usize,
+    save_signal_interval: usize,
+    save_space_interval: usize,
     output_path: &Path,
     progress_counter: Option<&AtomicUsize>,
     dynamics: Dynamics,
@@ -694,7 +713,8 @@ fn solve_impl(
         growth_vector,
         diffusion,
         dt,
-        save_interval,
+        save_signal_interval,
+        save_space_interval,
     )?;
 
     let d = layout.num_species;
@@ -713,9 +733,10 @@ fn solve_impl(
         }
     }
 
+    let save_interval = save_signal_interval.min(save_space_interval);
     let mut states: Vec<SystemState<f64>> = Vec::with_capacity(num_steps / save_interval + 1);
     let mut gs_curr = gs_i;
-    states.push(gs_curr.clone());
+    states.push(saved_snapshot(&gs_curr, true));
 
     if let Some(counter) = progress_counter {
         counter.store(0, Ordering::Relaxed);
@@ -759,8 +780,10 @@ fn solve_impl(
         std::mem::swap(&mut gs_curr, &mut gs_next);
         next_space = gs_next.space.take().expect("space buffer retained");
 
-        if step % save_interval == 0 {
-            states.push(gs_curr.clone());
+        let save_signal = step % save_signal_interval == 0;
+        let save_space = step % save_space_interval == 0;
+        if save_signal || save_space {
+            states.push(saved_snapshot(&gs_curr, save_space));
         }
 
         if let Some(counter) = progress_counter {
@@ -790,7 +813,10 @@ fn solve_impl(
 ///   - `diffusion`: Per-species diffusion coefficients and grid metadata.
 ///   - `dt`: Step size.
 ///   - `num_steps`: Number of integration steps.
-///   - `save_interval`: Save every Nth step; `t = 0` is always saved.
+///   - `save_signal_interval`: Save aggregate state every Nth step; `t = 0`
+///     is always saved.
+///   - `save_space_interval`: Include full spatial field every Nth step;
+///     `t = 0` is always saved.
 ///   - `output_path`: Directory for epoch JSON output.
 ///   - `progress_counter`: Optional shared progress counter.
 pub fn solve(
@@ -801,7 +827,8 @@ pub fn solve(
     diffusion: &Diffusion,
     dt: f64,
     num_steps: usize,
-    save_interval: usize,
+    save_signal_interval: usize,
+    save_space_interval: usize,
     output_path: &Path,
     progress_counter: Option<&AtomicUsize>,
 ) -> Result<SystemState<f64>> {
@@ -813,7 +840,8 @@ pub fn solve(
         diffusion,
         dt,
         num_steps,
-        save_interval,
+        save_signal_interval,
+        save_space_interval,
         output_path,
         progress_counter,
         Dynamics::GlvPopulation,
@@ -833,7 +861,10 @@ pub fn solve(
 ///   - `diffusion`: Per-species diffusion coefficients and grid metadata.
 ///   - `dt`: Step size.
 ///   - `num_steps`: Number of integration steps.
-///   - `save_interval`: Save every Nth step; `t = 0` is always saved.
+///   - `save_signal_interval`: Save aggregate state every Nth step; `t = 0`
+///     is always saved.
+///   - `save_space_interval`: Include full spatial field every Nth step;
+///     `t = 0` is always saved.
 ///   - `output_path`: Directory for epoch JSON output.
 ///   - `progress_counter`: Optional shared progress counter.
 pub fn solve_replicator(
@@ -844,7 +875,8 @@ pub fn solve_replicator(
     diffusion: &Diffusion,
     dt: f64,
     num_steps: usize,
-    save_interval: usize,
+    save_signal_interval: usize,
+    save_space_interval: usize,
     output_path: &Path,
     progress_counter: Option<&AtomicUsize>,
 ) -> Result<SystemState<f64>> {
@@ -856,7 +888,8 @@ pub fn solve_replicator(
         diffusion,
         dt,
         num_steps,
-        save_interval,
+        save_signal_interval,
+        save_space_interval,
         output_path,
         progress_counter,
         Dynamics::LocalReplicatorFrequency,
@@ -909,6 +942,7 @@ mod tests {
             0.1,
             3,
             1,
+            1,
             &output_path,
             None,
         )
@@ -952,6 +986,7 @@ mod tests {
             0.01,
             5,
             5,
+            5,
             &output_path,
             None,
         )
@@ -986,6 +1021,7 @@ mod tests {
             Some(&growth_vector),
             &diffusion,
             0.01,
+            3,
             3,
             3,
             &output_path,

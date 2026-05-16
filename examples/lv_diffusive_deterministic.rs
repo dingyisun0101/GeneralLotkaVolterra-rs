@@ -2,64 +2,21 @@
 Deterministic diffusive GLV Cargo example.
 
 Purpose:
-    Builds a fixed GLV system on a larger two-dimensional grid and runs a
+    Builds a fixed ten-strain GLV system on a larger two-dimensional grid and runs a
     longer diffusive deterministic GLV task into
     `output/lv_diffusive_deterministic`.
 */
 
 mod common;
+#[path = "common/constants.rs"]
+mod constants;
 
 fn main() {
-    use general_lotka_volterra_rs::solvers::spatial::rk4::{Boundary, Diffusion};
-    use ndarray::{Array1, Array2};
-
-    let interaction_matrix = Array2::from_shape_vec(
-        (3, 3),
-        vec![
-            -0.70, -0.20, 0.10, //
-            0.05, -0.60, -0.15, //
-            -0.10, 0.10, -0.50,
-        ],
-    )
-    .expect("valid interaction matrix");
-    let growth_vector = Array1::from_vec(vec![0.35, 0.25, 0.20]);
-
-    let spatial_shape = [128, 128];
-    let diffusion = Diffusion::unit_spacing(
-        Array1::from_vec(vec![0.025, 0.015, 0.010]),
-        spatial_shape.len(),
-        Boundary::Neumann,
+    common::run_and_render(
+        constants::LV_DIFFUSIVE_DETERMINISTIC_LABEL,
+        constants::EPOCH_LEN,
+        constants::NUM_EPOCHS,
+        constants::lv_diffusive_deterministic_output_path(),
+        constants::run_lv_diffusive_deterministic,
     );
-
-    let output_path = std::path::Path::new("output/lv_diffusive_deterministic");
-    let cutoff = 1e-9;
-    let carrying_capacity = Some(40_000.0);
-    let initial_population = 0.25;
-    let dt = 0.02;
-    let epoch_len = 5_000;
-    let save_interval = 100;
-    let num_epochs = 4;
-    let progress =
-        common::ExampleProgress::start("lv_diffusive_deterministic", epoch_len, num_epochs);
-
-    if let Err(err) = general_lotka_volterra_rs::tasks::lv_diffusive_deterministic::run(
-        &interaction_matrix,
-        Some(&growth_vector),
-        cutoff,
-        carrying_capacity,
-        &spatial_shape,
-        initial_population,
-        &diffusion,
-        dt,
-        epoch_len,
-        save_interval,
-        num_epochs,
-        output_path,
-        Some(progress.counter.as_ref()),
-    ) {
-        eprintln!("lv_diffusive_deterministic failed: {err}");
-        std::process::exit(1);
-    }
-
-    progress.finish();
 }

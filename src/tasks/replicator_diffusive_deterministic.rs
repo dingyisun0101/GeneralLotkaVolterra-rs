@@ -29,7 +29,8 @@ use crate::state::{Mode, SystemState};
 ///   - `diffusion`: Per-species diffusion coefficients and grid metadata.
 ///   - `dt`: Step size.
 ///   - `epoch_len`: Steps per epoch.
-///   - `save_interval`: Save every Nth step.
+///   - `save_signal_interval`: Save aggregate state every Nth step.
+///   - `save_space_interval`: Include full spatial field every Nth step.
 ///   - `num_epochs`: Number of epochs to execute.
 ///   - `output_path`: Root output directory.
 ///   - `progress_counter`: Optional shared progress counter.
@@ -41,7 +42,8 @@ pub fn run(
     diffusion: &Diffusion,                  // diffusion configuration
     dt: f64,                                // step size
     epoch_len: usize,                       // steps per epoch
-    save_interval: usize,                   // save every N steps
+    save_signal_interval: usize,            // save aggregate state every N steps
+    save_space_interval: usize,             // include full spatial field every N steps
     num_epochs: usize,                      // number of epochs
     output_path: &Path,                     // root output dir
     progress_counter: Option<&AtomicUsize>, // optional progress counter
@@ -78,15 +80,16 @@ pub fn run(
     // Sequential epochs: carry final state from epoch k into epoch k+1.
     for epoch in 1..=num_epochs {
         gs = solve_replicator(
-            epoch,              // current epoch
-            gs,                 // initial state for this epoch
-            interaction_matrix, // V
-            growth_vector,      // g
-            diffusion,          // diffusion configuration
-            dt,                 // step size
-            epoch_len,          // steps
-            save_interval,      // save every N steps
-            output_path,        // output target for this epoch
+            epoch,                // current epoch
+            gs,                   // initial state for this epoch
+            interaction_matrix,   // V
+            growth_vector,        // g
+            diffusion,            // diffusion configuration
+            dt,                   // step size
+            epoch_len,            // steps
+            save_signal_interval, // save aggregate state every N steps
+            save_space_interval,  // include full spatial field every N steps
+            output_path,          // output target for this epoch
             progress_counter,
         )?;
     }

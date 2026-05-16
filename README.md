@@ -39,6 +39,11 @@ The bundled examples write epoch JSON files under `output/`:
 - `lv_diffusive_deterministic`: deterministic spatial GLV
   reaction-diffusion run.
 
+Each example renders the latest epoch as its final output at
+`output/<example>/plot/plot.png`. Activate a Python environment with `numpy`
+and `matplotlib` available before running the examples, because Cargo invokes
+the bundled Python renderer after the Rust simulation completes.
+
 ## Design Rules
 
 Core consistency rules used across the crate:

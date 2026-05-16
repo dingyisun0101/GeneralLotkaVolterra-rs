@@ -1,3 +1,6 @@
+use std::io::{Error, Result};
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
@@ -65,5 +68,63 @@ impl ExampleProgress {
             let _ = handle.join();
         }
         self.bar.finish();
+    }
+}
+
+pub fn render_latest_epoch_plot(output_path: &Path, title: &str) -> Result<PathBuf> {
+    let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let output_path = output_path.canonicalize()?;
+    let outdir = output_path.join("plot");
+    let status = Command::new("python")
+        .current_dir(manifest_dir)
+        .args([
+            "-m",
+            "examples.common.render_from_output",
+            output_path
+                .to_str()
+                .ok_or_else(|| Error::other("output path is not valid UTF-8"))?,
+            "--outdir",
+            outdir
+                .to_str()
+                .ok_or_else(|| Error::other("plot output path is not valid UTF-8"))?,
+            "--title",
+            title,
+        ])
+        .status()?;
+
+    if !status.success() {
+        return Err(Error::other(format!(
+            "plot renderer failed with status {status}; activate a Python environment with numpy and matplotlib"
+        )));
+    }
+
+    Ok(outdir.join("plot.png"))
+}
+
+pub fn run_and_render<F>(
+    label: &'static str,
+    epoch_len: usize,
+    num_epochs: usize,
+    output_path: &Path,
+    run: F,
+) where
+    F: FnOnce(Option<&AtomicUsize>) -> Result<()>,
+{
+    let progress = ExampleProgress::start(label, epoch_len, num_epochs);
+
+    if let Err(err) = run(Some(progress.counter.as_ref())) {
+        progress.finish();
+        eprintln!("{label} failed: {err}");
+        std::process::exit(1);
+    }
+
+    progress.finish();
+
+    match render_latest_epoch_plot(output_path, label) {
+        Ok(plot_path) => println!("plot: {}", plot_path.display()),
+        Err(err) => {
+            eprintln!("{label} plot rendering failed: {err}");
+            std::process::exit(1);
+        }
     }
 }
