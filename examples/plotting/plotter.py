@@ -1,11 +1,11 @@
 """Lightweight plotter for frequency evolution and sampled state heatmap.
 
 Usage from other Python code:
-    from examples.common.plotter import plot_frequency_and_heatmap
+    from examples.plotting.plotter import plot_frequency_and_heatmap
     plot_frequency_and_heatmap(t, nu, outdir="output/example/plot", title="My Run")
 
 Or CLI for an already prepared in-memory export:
-    python -m examples.common.plotter --input data.npz --outdir output/example/plot
+    python -m examples.plotting.plotter --input data.npz --outdir output/example/plot
 
 The script expects `t` (1D) and `nu` (2D: T x K) arrays. If `nu` is K x T it will be transposed.
 """

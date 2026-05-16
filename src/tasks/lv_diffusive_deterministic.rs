@@ -11,10 +11,10 @@ use std::io::Result;
 use std::path::Path;
 use std::sync::atomic::AtomicUsize;
 
-use ndarray::{Array1, Array2, ArrayD, IxDyn};
+use ndarray::{Array1, Array2};
 
 use crate::solvers::spatial::rk4::{Diffusion, solve};
-use crate::state::{Mode, SystemState};
+use crate::utils::create_uniform_spatial_population_gs;
 
 /// Run `num_epochs` spatial GLV trajectories back-to-back.
 ///
@@ -71,14 +71,13 @@ pub fn run(
         "diffusion spacing must match spatial_shape"
     );
 
-    let mode = Mode::Population {
-        cutoff: Some(cutoff),
+    let mut gs = create_uniform_spatial_population_gs(
+        Some(cutoff),
         carrying_capacity,
-    };
-    let mut shape = spatial_shape.to_vec();
-    shape.push(d);
-    let space = ArrayD::from_elem(IxDyn(&shape), initial_population);
-    let mut gs = SystemState::from_arrays(mode, 0, Array1::zeros(d), Some(space));
+        spatial_shape,
+        d,
+        initial_population,
+    );
 
     // Sequential epochs: carry final state from epoch k into epoch k+1.
     for epoch in 1..=num_epochs {

@@ -79,7 +79,7 @@ pub fn render_output_plot(output_path: &Path, title: &str) -> Result<PathBuf> {
         .current_dir(manifest_dir)
         .args([
             "-m",
-            "examples.common.render_from_output",
+            "examples.plotting.render_from_output",
             output_path
                 .to_str()
                 .ok_or_else(|| Error::other("output path is not valid UTF-8"))?,

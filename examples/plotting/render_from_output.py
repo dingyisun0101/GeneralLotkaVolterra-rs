@@ -4,8 +4,11 @@ This script accepts a path to an output directory or a single JSON file produced
 When given a directory, it loads every numeric epoch JSON in order, concatenates the full
 simulation in memory, and calls the plotter to produce `plot.png` under `<outdir>/plot`.
 
-It attempts to read `samples` entries and extract the non-spatial `state.data` if present,
-otherwise falls back to a spatial `space.data` aggregated across space.
+For each sample, `state.data` is the preferred plotting source. This is
+intentional: spatial examples may save dense aggregate signal records with
+`space: null` and only include full spatial fields at a coarser cadence. If
+`state.data` is absent, the renderer falls back to aggregating `space.data`
+across spatial axes.
 """
 from __future__ import annotations
 import json
@@ -33,19 +36,15 @@ def load_json_samples(json_path: Path) -> Tuple[np.ndarray, np.ndarray]:
         st = s.get("state")
         if st and "data" in st:
             data = st["data"]
-            # flatten maybe nested lists
             states.append(np.asarray(data, dtype=float).ravel())
             continue
-        # fallback: spatial aggregated
+
         sp = s.get("space")
         if sp and "data" in sp:
             data = np.asarray(sp["data"], dtype=float)
-            # space.dim might be [X, Y, K] -> reshape and sum over spatial dims
             dim = sp.get("dim")
             if dim and len(dim) >= 2:
-                # assume last dim is strains
                 K = dim[-1]
-                # reshape to (-1, K) and sum over spatial
                 data = data.reshape(-1, K).sum(axis=0)
             states.append(data.ravel())
             continue

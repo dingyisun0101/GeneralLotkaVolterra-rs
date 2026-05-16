@@ -4,7 +4,7 @@ This script polls the target directory (recursively) for new or modified `.json`
 and calls `render_from_output.render_from_path` to produce `plot/plot.png`.
 
 Usage:
-    python -m examples.common.watch_and_render GLV/output
+    python -m examples.plotting.watch_and_render GLV/output
 """
 from __future__ import annotations
 import time

@@ -658,11 +658,17 @@ fn validate_inputs(
 }
 
 fn saved_snapshot(gs: &SystemState<f64>, include_space: bool) -> SystemState<f64> {
-    let mut snapshot = gs.clone();
-    if !include_space {
-        snapshot.space = None;
+    SystemState {
+        mode: gs.mode.clone(),
+        time: gs.time,
+        state: gs.state.clone(),
+        space: if include_space {
+            gs.space.clone()
+        } else {
+            None
+        },
+        mass: gs.mass,
     }
-    snapshot
 }
 
 /// Integrate a single spatial trajectory and persist a `SystemStateTimeSeries`.
@@ -1037,6 +1043,53 @@ mod tests {
         }
         assert!((out.state.sum() - 1.0).abs() < 1e-12);
         assert_eq!(out.mass, 1.0);
+        let _ = fs::remove_dir_all(output_path);
+    }
+
+    #[test]
+    fn spatial_save_intervals_can_store_signal_without_space() {
+        let shape = vec![2, 2, 1];
+        let space = ArrayD::from_elem(IxDyn(&shape), 1.0);
+        let gs = SystemState::from_arrays(
+            Mode::Population {
+                cutoff: None,
+                carrying_capacity: None,
+            },
+            0,
+            Array1::zeros(1),
+            Some(space),
+        );
+        let interaction_matrix = Array2::zeros((1, 1));
+        let growth_vector = Array1::zeros(1);
+        let diffusion = Diffusion::unit_spacing(Array1::zeros(1), 2, Boundary::Neumann);
+        let output_path = temp_output_dir("split_save");
+
+        solve(
+            1,
+            gs,
+            &interaction_matrix,
+            Some(&growth_vector),
+            &diffusion,
+            0.01,
+            5,
+            2,
+            5,
+            &output_path,
+            None,
+        )
+        .expect("solve succeeds");
+
+        let ts = SystemStateTimeSeries::<f64>::from(&output_path.join("1.json"))
+            .expect("time series loads");
+        let times: Vec<usize> = ts.samples.iter().map(|sample| sample.time).collect();
+        let has_space: Vec<bool> = ts
+            .samples
+            .iter()
+            .map(|sample| sample.space.is_some())
+            .collect();
+
+        assert_eq!(times, vec![0, 2, 4, 5]);
+        assert_eq!(has_space, vec![true, false, false, true]);
         let _ = fs::remove_dir_all(output_path);
     }
 }

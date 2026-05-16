@@ -11,10 +11,10 @@ use std::io::Result;
 use std::path::Path;
 use std::sync::atomic::AtomicUsize;
 
-use ndarray::{Array1, Array2, ArrayD, IxDyn};
+use ndarray::{Array1, Array2};
 
 use crate::solvers::spatial::rk4::{Diffusion, solve_replicator};
-use crate::state::{Mode, SystemState};
+use crate::utils::create_uniform_spatial_frequency_gs;
 
 /// Run `num_epochs` spatial replicator trajectories back-to-back.
 ///
@@ -68,14 +68,7 @@ pub fn run(
         "diffusion spacing must match spatial_shape"
     );
 
-    let mode = Mode::Frequency {
-        cutoff: Some(cutoff),
-    };
-    let mut shape = spatial_shape.to_vec();
-    shape.push(d);
-    let initial_frequency = if d > 0 { 1.0 / d as f64 } else { 0.0 };
-    let space = ArrayD::from_elem(IxDyn(&shape), initial_frequency);
-    let mut gs = SystemState::from_arrays(mode, 0, Array1::zeros(d), Some(space));
+    let mut gs = create_uniform_spatial_frequency_gs(Some(cutoff), spatial_shape, d);
 
     // Sequential epochs: carry final state from epoch k into epoch k+1.
     for epoch in 1..=num_epochs {

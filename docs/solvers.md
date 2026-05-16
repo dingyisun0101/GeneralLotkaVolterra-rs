@@ -8,6 +8,11 @@ arbitrary-dimensional spatial GLV reaction-diffusion integrator, and an
 arbitrary-dimensional spatial local-simplex replicator reaction-diffusion
 integrator.
 
+For application code, prefer the task runners in `src/tasks` as the stable
+entrypoints. The lower-level solver functions are public so advanced users can
+assemble custom workflows, but they expose more implementation detail, including
+state ownership and save-cadence parameters.
+
 ## Replicator Step
 
 The deterministic right-hand side is:
