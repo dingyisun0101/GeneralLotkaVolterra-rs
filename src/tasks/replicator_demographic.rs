@@ -17,6 +17,7 @@ use crate::Mode;
 use crate::solvers::non_spatial::noise::Noise;
 use crate::solvers::non_spatial::rk4::solve_with_termination;
 use crate::solvers::termination::TerminationConfig;
+use crate::tasks::metadata::{TaskOutcome, output_label, prepare_output_dir, save_metadata};
 use crate::utils::create_well_mixed_gs;
 
 /// Run one trajectory and let the signal writer chunk output files by size.
@@ -45,7 +46,7 @@ pub fn run(
     output_path: &Path,                     // root output dir
     progress_counter: Option<&AtomicUsize>, // optional progress counter
     termination: TerminationConfig,         // explicit termination behavior
-) -> Result<()> {
+) -> Result<TaskOutcome> {
     let d = interaction_matrix.nrows();
     debug_assert_eq!(
         interaction_matrix.ncols(),
@@ -61,8 +62,9 @@ pub fn run(
         cutoff: Some(cutoff),
     };
     let gs = create_well_mixed_gs(mode, d, None);
+    prepare_output_dir(output_path)?;
 
-    solve_with_termination(
+    let outcome = solve_with_termination(
         gs,                                 // initial state
         interaction_matrix,                 // V
         growth_vector,                      // g
@@ -75,5 +77,21 @@ pub fn run(
         termination,
     )?;
 
-    Ok(())
+    let task_outcome = TaskOutcome::non_spatial(
+        "replicator_demographic",
+        "well_mixed_replicator",
+        &output_label(output_path),
+        total_steps,
+        dt,
+        save_interval,
+        outcome.steps_run,
+        outcome.reason,
+        outcome.signal_stats,
+        d,
+        Some(cutoff),
+        termination.survivor_tolerance,
+    );
+    save_metadata(output_path, &task_outcome)?;
+
+    Ok(task_outcome)
 }

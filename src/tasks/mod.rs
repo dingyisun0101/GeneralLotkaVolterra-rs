@@ -7,6 +7,7 @@ Purpose:
     space output streams are automatically chunked.
 */
 
+pub mod metadata;
 pub mod replicator_demographic;
 pub mod replicator_deterministic;
 pub mod replicator_diffusive_deterministic;

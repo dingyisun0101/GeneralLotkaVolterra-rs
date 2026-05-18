@@ -810,13 +810,15 @@ fn solve_impl(
         }
     }
 
-    signal_writer.finish()?;
-    space_writer.finish()?;
+    let signal_stats = signal_writer.finish()?;
+    let space_stats = space_writer.finish()?;
 
     Ok(SolveOutcome {
         final_state: gs_curr,
         steps_run,
         reason: termination_reason,
+        signal_stats,
+        space_stats: Some(space_stats),
     })
 }
 

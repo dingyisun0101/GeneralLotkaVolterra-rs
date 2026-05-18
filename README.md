@@ -63,6 +63,9 @@ Core consistency rules used across the crate:
 - Signal and space output streams chunk independently using the crate-level
   `SIGNAL_OUTPUT_FILE_SIZE` and `SPACE_OUTPUT_FILE_SIZE` budgets. A single
   oversized space sample is written alone.
+- Each task writes `metadata.json` with requested steps, actual steps run,
+  termination reason, save cadence, model dimensions, output budgets, and
+  signal/space writer stats.
 - Spatial task runners use one save interval for signal and space. Lower-level
   spatial solvers still support separate aggregate and full-field save cadences
   for custom workflows.
@@ -163,7 +166,8 @@ Purpose:
 `tasks` exposes experiment-level entry points. Callers provide `total_steps` and
 `save_interval`; IO writers automatically split signal and space streams using
 the crate-level `SIGNAL_OUTPUT_FILE_SIZE` and `SPACE_OUTPUT_FILE_SIZE` budgets,
-which both default to 128 MiB.
+which default to 128 MiB and 1 GiB respectively. Users do not configure chunking
+behavior.
 
 Task-level APIs also require an explicit `TerminationConfig`. Use
 `TerminationConfig::disabled()` to run exactly to `total_steps`, or
@@ -178,6 +182,11 @@ tasks::replicator_demographic::run(...)
 tasks::replicator_diffusive_deterministic::run(...)
 tasks::lv_diffusive_deterministic::run(...)
 ```
+
+Ready task runners return `TaskOutcome` and persist the same run summary to
+`metadata.json`. Before each task run, stale `signal/`, `space/`, and
+`metadata.json` outputs under the target directory are removed so the directory
+matches the latest run.
 
 Placeholder task entry points:
 

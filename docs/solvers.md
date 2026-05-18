@@ -29,7 +29,7 @@ The non-spatial solver exposes two entry points:
 
 - `solve`: compatibility wrapper with termination disabled.
 - `solve_with_termination`: returns `SolveOutcome` with the final state,
-  steps run, and `TerminationReason`.
+  steps run, `TerminationReason`, and signal/space writer stats.
 
 ## Noise Model
 

@@ -71,7 +71,7 @@ def load_json_series(json_paths: Iterable[Path]) -> Tuple[np.ndarray, np.ndarray
     return np.concatenate(times), np.vstack(states)
 
 
-def epoch_number(path: Path) -> int:
+def chunk_number(path: Path) -> int:
     try:
         return int(path.stem)
     except ValueError:
@@ -87,8 +87,8 @@ def render_from_path(path: str, *, out_plot_dir: str = None, title: str = None):
             p = signal_dir
 
         json_files = sorted(
-            (json_file for json_file in p.glob("*.json") if epoch_number(json_file) >= 0),
-            key=epoch_number,
+            (json_file for json_file in p.glob("*.json") if chunk_number(json_file) >= 0),
+            key=chunk_number,
         )
         if not json_files:
             raise SystemExit(f"No JSON files found in {p}")

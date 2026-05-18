@@ -8,6 +8,8 @@ use std::time::Duration;
 
 use indicatif::{ProgressBar, ProgressStyle};
 
+use general_lotka_volterra_rs::tasks::metadata::TaskOutcome;
+
 pub struct ExampleProgress {
     pub counter: Arc<AtomicUsize>,
     done: Arc<AtomicBool>,
@@ -66,6 +68,15 @@ impl ExampleProgress {
         }
         self.bar.finish();
     }
+
+    pub fn finish_at(mut self, position: usize) {
+        self.done.store(true, Ordering::Relaxed);
+        if let Some(handle) = self.handle.take() {
+            let _ = handle.join();
+        }
+        self.bar.set_position(position as u64);
+        self.bar.finish();
+    }
 }
 
 pub fn render_output_plot(output_path: &Path, title: &str) -> Result<PathBuf> {
@@ -100,17 +111,29 @@ pub fn render_output_plot(output_path: &Path, title: &str) -> Result<PathBuf> {
 
 pub fn run_and_render<F>(label: &'static str, total_steps: usize, output_path: &Path, run: F)
 where
-    F: FnOnce(Option<&AtomicUsize>) -> Result<()>,
+    F: FnOnce(Option<&AtomicUsize>) -> Result<TaskOutcome>,
 {
     let progress = ExampleProgress::start(label, total_steps);
 
-    if let Err(err) = run(Some(progress.counter.as_ref())) {
-        progress.finish();
-        eprintln!("{label} failed: {err}");
-        std::process::exit(1);
-    }
+    let outcome = match run(Some(progress.counter.as_ref())) {
+        Ok(outcome) => outcome,
+        Err(err) => {
+            progress.finish();
+            eprintln!("{label} failed: {err}");
+            std::process::exit(1);
+        }
+    };
 
-    progress.finish();
+    progress.finish_at(outcome.steps_run);
+    println!(
+        "steps: {} / {}; reason: {:?}; signal files: {}; space files: {}; metadata: {}",
+        outcome.steps_run,
+        outcome.requested_steps,
+        outcome.termination_reason,
+        outcome.signal.files,
+        outcome.space.map(|space| space.files).unwrap_or(0),
+        output_path.join("metadata.json").display()
+    );
 
     match render_output_plot(output_path, label) {
         Ok(plot_path) => println!("plot: {}", plot_path.display()),

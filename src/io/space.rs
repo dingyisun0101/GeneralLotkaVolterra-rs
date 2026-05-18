@@ -7,13 +7,14 @@ Purpose:
     A single oversized spatial sample is written alone rather than dropped.
 */
 
-use std::fs::{File, create_dir_all};
+use std::fs::{File, create_dir_all, read_to_string};
 use std::io::{BufWriter, Error, ErrorKind, Result};
 use std::path::{Path, PathBuf};
 
 use ndarray::{Array1, ArrayD};
 use serde::{Deserialize, Serialize};
 
+use super::WriterStats;
 use crate::{Mode, SystemState};
 
 const ESTIMATED_JSON_FLOAT_BYTES: usize = 24;
@@ -40,6 +41,7 @@ pub struct SpaceWriter {
     mode: Mode<f64>,
     max_bytes: usize,
     file_index: usize,
+    stats: WriterStats,
     estimated_bytes: usize,
     samples: Vec<SpaceRecord<f64>>,
 }
@@ -59,6 +61,7 @@ impl SpaceWriter {
             mode,
             max_bytes: max_bytes.max(ESTIMATED_FILE_OVERHEAD_BYTES),
             file_index: 1,
+            stats: WriterStats::default(),
             estimated_bytes: ESTIMATED_FILE_OVERHEAD_BYTES,
             samples: Vec::new(),
         })
@@ -82,12 +85,14 @@ impl SpaceWriter {
             space: space.clone(),
             mass: gs.mass,
         });
+        self.stats.samples += 1;
         self.estimated_bytes = self.estimated_bytes.saturating_add(sample_bytes);
         Ok(())
     }
 
-    pub fn finish(&mut self) -> Result<()> {
-        self.flush()
+    pub fn finish(&mut self) -> Result<WriterStats> {
+        self.flush()?;
+        Ok(self.stats)
     }
 
     fn flush(&mut self) -> Result<()> {
@@ -117,9 +122,30 @@ impl SpaceWriter {
         })?;
 
         self.file_index += 1;
+        self.stats.files += 1;
+        self.stats.estimated_bytes = self
+            .stats
+            .estimated_bytes
+            .saturating_add(self.estimated_bytes);
         self.estimated_bytes = ESTIMATED_FILE_OVERHEAD_BYTES;
         Ok(())
     }
+}
+
+pub fn load_space_series(path: &Path) -> Result<SpaceSeries<f64>> {
+    let raw = read_to_string(path).map_err(|e| {
+        Error::new(
+            e.kind(),
+            format!("load_space_series: read {}: {e}", path.display()),
+        )
+    })?;
+
+    serde_json::from_str(&raw).map_err(|e| {
+        Error::new(
+            ErrorKind::InvalidData,
+            format!("load_space_series: deserialize {}: {e}", path.display()),
+        )
+    })
 }
 
 #[inline]
@@ -129,4 +155,43 @@ fn estimate_space_sample(state_len: usize, space_len: usize) -> usize {
         .saturating_add(1)
         .saturating_mul(ESTIMATED_JSON_FLOAT_BYTES)
         .saturating_add(ESTIMATED_SAMPLE_OVERHEAD_BYTES)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ndarray::{Array1, ArrayD, IxDyn};
+    use std::fs;
+
+    #[test]
+    fn oversized_space_samples_are_written_one_per_chunk() {
+        let path =
+            std::env::temp_dir().join(format!("glv_space_writer_oversized_{}", std::process::id()));
+        let _ = fs::remove_dir_all(&path);
+
+        let mode = Mode::Population {
+            cutoff: None,
+            carrying_capacity: None,
+        };
+        let mut writer =
+            SpaceWriter::new(&path, mode.clone(), ESTIMATED_FILE_OVERHEAD_BYTES).expect("writer");
+
+        for time in 0..2 {
+            let gs = SystemState::from_arrays(
+                mode.clone(),
+                time,
+                Array1::from_vec(vec![1.0]),
+                Some(ArrayD::from_elem(IxDyn(&[4, 4, 1]), 1.0)),
+            );
+            writer.push(&gs).expect("push");
+        }
+
+        let stats = writer.finish().expect("finish");
+        assert_eq!(stats.files, 2);
+        assert_eq!(stats.samples, 2);
+        assert!(path.join("space/1.json").is_file());
+        assert!(path.join("space/2.json").is_file());
+
+        let _ = fs::remove_dir_all(path);
+    }
 }

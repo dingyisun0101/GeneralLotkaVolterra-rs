@@ -328,11 +328,13 @@ pub fn solve_with_termination(
         }
     }
 
-    signal_writer.finish()?;
+    let signal_stats = signal_writer.finish()?;
 
     Ok(SolveOutcome {
         final_state: gs_curr,
         steps_run,
         reason: termination_reason,
+        signal_stats,
+        space_stats: None,
     })
 }

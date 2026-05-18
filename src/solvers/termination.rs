@@ -11,18 +11,20 @@ Purpose:
 use std::collections::VecDeque;
 
 use ndarray::{Array1, ArrayD};
+use serde::{Deserialize, Serialize};
 
+use crate::io::WriterStats;
 use crate::{Mode, SystemState};
 
 /// Which part of a state is compared by steady-state checks.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum TerminationObservable {
     GlobalState,
     SpatialField,
 }
 
 /// Adaptive fixed-point detection over recent checked samples.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct AdaptiveFixedPointConfig {
     pub tolerance: f64,
     pub min_steps: usize,
@@ -32,7 +34,7 @@ pub struct AdaptiveFixedPointConfig {
 }
 
 /// Adaptive oscillatory steady-state detection over recent checked samples.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct AdaptiveOscillationConfig {
     pub tolerance: f64,
     pub min_steps: usize,
@@ -42,7 +44,7 @@ pub struct AdaptiveOscillationConfig {
 }
 
 /// Optional steady-state detection.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub enum SteadyStateConfig {
     Off,
     Adaptive {
@@ -52,7 +54,7 @@ pub enum SteadyStateConfig {
 }
 
 /// Termination behavior selected before launching a solver run.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub struct TerminationConfig {
     pub monoculture: bool,
     pub survivor_tolerance: Option<f64>,
@@ -91,7 +93,7 @@ impl TerminationConfig {
 }
 
 /// Why a solve call stopped.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum TerminationReason {
     MaxSteps,
     Monoculture {
@@ -123,6 +125,8 @@ pub struct SolveOutcome {
     pub final_state: SystemState<f64>,
     pub steps_run: usize,
     pub reason: TerminationReason,
+    pub signal_stats: WriterStats,
+    pub space_stats: Option<WriterStats>,
 }
 
 /// Stateful bounded-history termination checker.

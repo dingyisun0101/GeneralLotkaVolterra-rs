@@ -7,13 +7,14 @@ Purpose:
     JSON byte budget.
 */
 
-use std::fs::{File, create_dir_all};
+use std::fs::{File, create_dir_all, read_to_string};
 use std::io::{BufWriter, Error, ErrorKind, Result};
 use std::path::{Path, PathBuf};
 
 use ndarray::Array1;
 use serde::{Deserialize, Serialize};
 
+use super::WriterStats;
 use crate::{Mode, SystemState};
 
 const ESTIMATED_JSON_FLOAT_BYTES: usize = 24;
@@ -39,6 +40,7 @@ pub struct SignalWriter {
     mode: Mode<f64>,
     max_bytes: usize,
     file_index: usize,
+    stats: WriterStats,
     estimated_bytes: usize,
     samples: Vec<SignalRecord<f64>>,
 }
@@ -58,6 +60,7 @@ impl SignalWriter {
             mode,
             max_bytes: max_bytes.max(ESTIMATED_FILE_OVERHEAD_BYTES),
             file_index: 1,
+            stats: WriterStats::default(),
             estimated_bytes: ESTIMATED_FILE_OVERHEAD_BYTES,
             samples: Vec::new(),
         })
@@ -76,12 +79,14 @@ impl SignalWriter {
             state: gs.state.clone(),
             mass: gs.mass,
         });
+        self.stats.samples += 1;
         self.estimated_bytes = self.estimated_bytes.saturating_add(sample_bytes);
         Ok(())
     }
 
-    pub fn finish(&mut self) -> Result<()> {
-        self.flush()
+    pub fn finish(&mut self) -> Result<WriterStats> {
+        self.flush()?;
+        Ok(self.stats)
     }
 
     fn flush(&mut self) -> Result<()> {
@@ -114,9 +119,30 @@ impl SignalWriter {
         })?;
 
         self.file_index += 1;
+        self.stats.files += 1;
+        self.stats.estimated_bytes = self
+            .stats
+            .estimated_bytes
+            .saturating_add(self.estimated_bytes);
         self.estimated_bytes = ESTIMATED_FILE_OVERHEAD_BYTES;
         Ok(())
     }
+}
+
+pub fn load_signal_series(path: &Path) -> Result<SignalSeries<f64>> {
+    let raw = read_to_string(path).map_err(|e| {
+        Error::new(
+            e.kind(),
+            format!("load_signal_series: read {}: {e}", path.display()),
+        )
+    })?;
+
+    serde_json::from_str(&raw).map_err(|e| {
+        Error::new(
+            ErrorKind::InvalidData,
+            format!("load_signal_series: deserialize {}: {e}", path.display()),
+        )
+    })
 }
 
 #[inline]

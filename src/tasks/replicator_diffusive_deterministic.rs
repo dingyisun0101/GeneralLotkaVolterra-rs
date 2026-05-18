@@ -15,6 +15,7 @@ use ndarray::{Array1, Array2};
 
 use crate::solvers::spatial::rk4::{Diffusion, solve_replicator_with_termination};
 use crate::solvers::termination::TerminationConfig;
+use crate::tasks::metadata::{TaskOutcome, output_label, prepare_output_dir, save_metadata};
 use crate::utils::create_uniform_spatial_frequency_gs;
 
 /// Run one spatial replicator trajectory and let signal/space writers chunk output files.
@@ -46,7 +47,7 @@ pub fn run(
     output_path: &Path,                     // root output dir
     progress_counter: Option<&AtomicUsize>, // optional progress counter
     termination: TerminationConfig,         // explicit termination behavior
-) -> Result<()> {
+) -> Result<TaskOutcome> {
     let d = interaction_matrix.nrows();
     debug_assert_eq!(
         interaction_matrix.ncols(),
@@ -68,8 +69,9 @@ pub fn run(
     );
 
     let gs = create_uniform_spatial_frequency_gs(Some(cutoff), spatial_shape, d);
+    prepare_output_dir(output_path)?;
 
-    solve_replicator_with_termination(
+    let outcome = solve_replicator_with_termination(
         gs,                 // initial state
         interaction_matrix, // V
         growth_vector,      // g
@@ -83,5 +85,24 @@ pub fn run(
         termination,
     )?;
 
-    Ok(())
+    let task_outcome = TaskOutcome::spatial(
+        "replicator_diffusive_deterministic",
+        "spatial_replicator",
+        &output_label(output_path),
+        total_steps,
+        dt,
+        save_interval,
+        outcome.steps_run,
+        outcome.reason,
+        outcome.signal_stats,
+        outcome.space_stats.unwrap_or_default(),
+        d,
+        spatial_shape,
+        Some(cutoff),
+        None,
+        termination.survivor_tolerance,
+    );
+    save_metadata(output_path, &task_outcome)?;
+
+    Ok(task_outcome)
 }

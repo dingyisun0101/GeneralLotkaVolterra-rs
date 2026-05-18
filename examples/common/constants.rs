@@ -11,6 +11,7 @@ use std::sync::atomic::AtomicUsize;
 
 use general_lotka_volterra_rs::solvers::spatial::rk4::{Boundary, Diffusion};
 use general_lotka_volterra_rs::solvers::termination::TerminationConfig;
+use general_lotka_volterra_rs::tasks::metadata::TaskOutcome;
 use ndarray::{Array1, Array2};
 use rand::rngs::SmallRng;
 use rand::{RngExt, SeedableRng};
@@ -167,7 +168,7 @@ pub fn spatial_termination() -> TerminationConfig {
     TerminationConfig::monoculture_only(SPATIAL_SAVE_INTERVAL)
 }
 
-pub fn run_replicator_deterministic(progress_counter: Option<&AtomicUsize>) -> Result<()> {
+pub fn run_replicator_deterministic(progress_counter: Option<&AtomicUsize>) -> Result<TaskOutcome> {
     general_lotka_volterra_rs::tasks::replicator_deterministic::run(
         &well_mixed_interaction_matrix(),
         None,
@@ -181,7 +182,7 @@ pub fn run_replicator_deterministic(progress_counter: Option<&AtomicUsize>) -> R
     )
 }
 
-pub fn run_replicator_demographic(progress_counter: Option<&AtomicUsize>) -> Result<()> {
+pub fn run_replicator_demographic(progress_counter: Option<&AtomicUsize>) -> Result<TaskOutcome> {
     general_lotka_volterra_rs::tasks::replicator_demographic::run(
         &well_mixed_interaction_matrix(),
         None,
@@ -198,7 +199,7 @@ pub fn run_replicator_demographic(progress_counter: Option<&AtomicUsize>) -> Res
 
 pub fn run_replicator_diffusive_deterministic(
     progress_counter: Option<&AtomicUsize>,
-) -> Result<()> {
+) -> Result<TaskOutcome> {
     general_lotka_volterra_rs::tasks::replicator_diffusive_deterministic::run(
         &replicator_diffusive_interaction_matrix(),
         Some(&replicator_diffusive_growth_vector()),
@@ -214,7 +215,9 @@ pub fn run_replicator_diffusive_deterministic(
     )
 }
 
-pub fn run_lv_diffusive_deterministic(progress_counter: Option<&AtomicUsize>) -> Result<()> {
+pub fn run_lv_diffusive_deterministic(
+    progress_counter: Option<&AtomicUsize>,
+) -> Result<TaskOutcome> {
     general_lotka_volterra_rs::tasks::lv_diffusive_deterministic::run(
         &lv_diffusive_interaction_matrix(),
         Some(&lv_diffusive_growth_vector()),
