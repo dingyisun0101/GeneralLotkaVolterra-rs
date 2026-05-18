@@ -10,7 +10,16 @@ Current implementation boundary:
     placeholders until a dedicated GLV right-hand side and integrator are added.
 */
 
+/// Target maximum JSON chunk size used by aggregate signal output writers.
+pub const SIGNAL_OUTPUT_FILE_SIZE: usize = 128 * 1024 * 1024;
+
+/// Target maximum JSON chunk size used by full spatial snapshot output writers.
+pub const SPACE_OUTPUT_FILE_SIZE: usize = 128 * 1024 * 1024;
+
+pub mod io;
 pub mod solvers;
-pub mod state;
+pub mod system_state;
 pub mod tasks;
 pub mod utils;
+
+pub use system_state::{Mode, Scalar, SystemState};

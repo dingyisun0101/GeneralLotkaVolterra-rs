@@ -25,6 +25,12 @@ upsilon = sum_j nu_j * (g_j + (V nu)_j)
 One integration step uses RK4 scratch buffers, writes a raw next state, and then
 calls `SystemState::sanitize` before optional noise is applied.
 
+The non-spatial solver exposes two entry points:
+
+- `solve`: compatibility wrapper with termination disabled.
+- `solve_with_termination`: returns `SolveOutcome` with the final state,
+  steps run, and `TerminationReason`.
+
 ## Noise Model
 
 Noise is an optional post-step update:
@@ -63,9 +69,41 @@ Spatial solves have two save cadences:
 - `save_signal_interval` stores the aggregate `SystemState.state` signal.
 - `save_space_interval` includes the full `SystemState.space` field.
 
-The initial sample at `t = 0` always includes both signal and space. Later
-signal-only samples keep `space = None` to avoid writing full fields at every
-signal step.
+The initial sample at `t = 0` is written to both streams. Signal samples are
+stored under `signal/`; full spatial snapshots are stored independently under
+`space/`. The two streams flush JSON chunks independently against
+`SIGNAL_OUTPUT_FILE_SIZE` and `SPACE_OUTPUT_FILE_SIZE`.
+
+Spatial solver wrappers mirror the non-spatial termination split:
+
+- `solve` and `solve_replicator`: compatibility wrappers with termination
+  disabled.
+- `solve_with_termination` and `solve_replicator_with_termination`: return
+  `SolveOutcome`.
+
+Task-level spatial runners use one save interval and pass it as both lower-level
+spatial save cadences.
+
+## Termination
+
+Termination logic lives in `src/solvers/termination.rs` and is shared by
+non-spatial and spatial solvers.
+
+The main types are:
+
+- `TerminationConfig`: user-selected checks, observable, tolerance, and
+  `check_interval`.
+- `TerminationReason`: `MaxSteps`, `Monoculture`, `FixedPoint`, or
+  `OscillatorySteadyState`.
+- `SolveOutcome`: final state plus stop metadata.
+- `TerminationObservable`: `GlobalState` or `SpatialField`.
+- `SteadyStateConfig`: off or adaptive fixed/oscillatory checks.
+
+When termination is disabled, the solver pays only the construction-time check
+and no per-step history cost. When enabled, checks run only on
+`check_interval`. Monoculture uses `SystemState.state` and stops scanning once
+two survivors are found. Steady-state detection stores a bounded history of the
+configured observable and uses L-infinity distance.
 
 ## File Layout
 
@@ -77,3 +115,7 @@ signal step.
 - `src/solvers/spatial/mod.rs`: spatial module surface.
 - `src/solvers/spatial/rk4.rs`: arbitrary-dimensional spatial GLV and
   local-replicator RK4 solvers.
+- `src/solvers/termination.rs`: shared early-termination configuration and
+  checker.
+- `src/io/signal.rs`: aggregate signal output writer.
+- `src/io/space.rs`: full spatial snapshot output writer.

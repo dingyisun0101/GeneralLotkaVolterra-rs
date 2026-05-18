@@ -13,7 +13,7 @@ Runtime model:
 */
 #![allow(dead_code)]
 
-use crate::state::SystemState;
+use crate::SystemState;
 use rand::Rng;
 use rand_distr::{Distribution, Normal};
 

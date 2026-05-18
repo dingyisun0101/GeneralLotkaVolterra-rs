@@ -15,21 +15,19 @@ except ImportError:
 
 class RenderFromOutputTests(unittest.TestCase):
     @unittest.skipIf(np is None, "numpy is required for plotting tests")
-    def test_state_data_takes_precedence_and_space_can_be_null(self):
+    def test_signal_state_data_loads(self):
         payload = {
-            "epoch": 1,
+            "file": 1,
             "mode": {"Frequency": {"cutoff": None}},
             "samples": [
                 {
                     "time": 0,
                     "state": {"data": [1.0, 3.0]},
-                    "space": None,
                     "mass": 1.0,
                 },
                 {
                     "time": 1,
                     "state": {"data": [2.0, 2.0]},
-                    "space": {"dim": [1, 2], "data": [100.0, 0.0]},
                     "mass": 1.0,
                 },
             ],

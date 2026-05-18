@@ -4,19 +4,21 @@ General Lotka-Volterra is a Rust crate for small ecological dynamical-system
 experiments. The ready paths include well-mixed replicator dynamics,
 deterministic spatial replicator reaction-diffusion, deterministic spatial GLV
 reaction-diffusion, optional post-step stochasticity for well-mixed replicator
-runs, and JSON epoch outputs for downstream analysis.
+runs, automatic JSON output chunking, and early termination checks for
+downstream analysis.
 
-The crate is organized from state storage to solver code to runnable task
+The crate is organized from live state to solver code to IO and runnable task
 wrappers:
 
 ```text
-state -> solvers -> tasks -> examples
+system_state -> solvers -> io -> tasks -> examples
 ```
 
-- `state` defines `SystemState`, representation modes, and epoch time series.
+- `system_state` defines `SystemState`, representation modes, and invariants.
 - `solvers` defines non-spatial integration, spatial reaction-diffusion
   integration, and stochastic update machinery.
-- `tasks` wires solver calls into repeatable epoch-based experiments.
+- `io` defines dedicated signal and space JSON streams with automatic chunking.
+- `tasks` wires solver calls into total-step experiments.
 - `examples` provides minimal executable configurations.
 
 ## Examples
@@ -30,8 +32,10 @@ cargo run --example replicator_diffusive_deterministic
 cargo run --example lv_diffusive_deterministic
 ```
 
-The bundled examples take their settings from `examples/common/constants.rs`
-and write epoch JSON files under `output/`:
+The bundled examples take their settings from `examples/common/constants.rs`.
+Users choose `TOTAL_STEPS` and a save interval; writers split output into
+numbered JSON files under `output/<example>/signal/` and, for spatial runs,
+`output/<example>/space/`:
 
 - `replicator_deterministic`: deterministic well-mixed replicator run.
 - `replicator_demographic`: replicator run with demographic Gaussian
@@ -54,9 +58,16 @@ Core consistency rules used across the crate:
   `sanitize` at mode boundaries instead of duplicating feasibility logic.
 - `Mode::Frequency` stores simplex states with mass one. `Mode::Population`
   stores absolute counts and may apply a carrying-capacity cap.
-- Time series files keep one shared `mode` per epoch and store owned snapshot
-  records under `samples`. Spatial runs may save aggregate state more often
-  than full spatial fields; signal-only spatial records have `space: null`.
+- Signal files store `time`, aggregate `state`, and `mass`. Space files store
+  `time`, aggregate `state`, full `space`, and `mass`.
+- Signal and space output streams chunk independently using the crate-level
+  `SIGNAL_OUTPUT_FILE_SIZE` and `SPACE_OUTPUT_FILE_SIZE` budgets. A single
+  oversized space sample is written alone.
+- Spatial task runners use one save interval for signal and space. Lower-level
+  spatial solvers still support separate aggregate and full-field save cadences
+  for custom workflows.
+- Termination checks are explicit. Tasks receive a `TerminationConfig`; the
+  examples enable monoculture termination and leave steady-state checks off.
 - Non-spatial solvers keep reusable scratch buffers outside hot loops where
   practical.
 - Non-spatial GLV task entry points are API placeholders until a dedicated
@@ -66,7 +77,8 @@ Core consistency rules used across the crate:
 
 Purpose:
 
-`state` is the common data model used by task runners, solvers, and JSON IO.
+`SystemState` is the live simulation state used by task runners and solvers.
+JSON output lives under `io::signal` and `io::space`.
 
 Core API:
 
@@ -79,19 +91,19 @@ state.set(i, value)
 state.increase(i)
 state.decrease(i)
 state.sanitize()
-SystemStateTimeSeries::empty(epoch, mode)
-time_series.add(&state)
-time_series.save(path)
-SystemStateTimeSeries::from(path)
+SignalWriter::new(path, mode, SIGNAL_OUTPUT_FILE_SIZE)
+SpaceWriter::new(path, mode, SPACE_OUTPUT_FILE_SIZE)
 ```
 
 Core types:
 
 - `Mode<T>`
 - `SystemState<T>`
-- `SystemStateRecord<T>`
-- `SystemStateTimeSeries<T>`
 - `Scalar`
+- `SignalRecord<T>`
+- `SignalSeries<T>`
+- `SpaceRecord<T>`
+- `SpaceSeries<T>`
 
 ## Solvers
 
@@ -107,7 +119,8 @@ RK4 raw step -> sanitize -> optional noise -> snapshot
 Core API:
 
 ```rust
-solve(epoch, state, interaction_matrix, growth_vector, noise, dt, steps, save_interval, output_path, progress_counter)
+solve(state, interaction_matrix, growth_vector, noise, dt, steps, save_interval, output_path, progress_counter)
+solve_with_termination(..., termination)
 Noise::none()
 Noise::proportional_gaussian(sigma)
 Noise::demographic_gaussian(sigma)
@@ -118,6 +131,11 @@ Core types:
 - `Noise`
 - `NoiseKind`
 - `NoiseContext`
+- `TerminationConfig`
+- `TerminationReason`
+- `SteadyStateConfig`
+- `TerminationObservable`
+- `SolveOutcome`
 
 The spatial solver evolves `Mode::Population` fields with species stored on the
 last axis:
@@ -130,7 +148,9 @@ Spatial core API:
 
 ```rust
 solvers::spatial::rk4::solve(..., save_signal_interval, save_space_interval, ...)
+solvers::spatial::rk4::solve_with_termination(..., termination)
 solvers::spatial::rk4::solve_replicator(..., save_signal_interval, save_space_interval, ...)
+solvers::spatial::rk4::solve_replicator_with_termination(..., termination)
 solvers::spatial::rk4::Diffusion::unit_spacing(...)
 solvers::spatial::rk4::Boundary::Periodic
 solvers::spatial::rk4::Boundary::Neumann
@@ -140,8 +160,15 @@ solvers::spatial::rk4::Boundary::Neumann
 
 Purpose:
 
-`tasks` exposes experiment-level entry points that run one or more epochs and
-persist each epoch to disk.
+`tasks` exposes experiment-level entry points. Callers provide `total_steps` and
+`save_interval`; IO writers automatically split signal and space streams using
+the crate-level `SIGNAL_OUTPUT_FILE_SIZE` and `SPACE_OUTPUT_FILE_SIZE` budgets,
+which both default to 128 MiB.
+
+Task-level APIs also require an explicit `TerminationConfig`. Use
+`TerminationConfig::disabled()` to run exactly to `total_steps`, or
+`TerminationConfig::monoculture_only(save_interval)` for the cheap built-in
+monoculture stop used by the examples.
 
 Ready task entry points:
 

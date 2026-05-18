@@ -14,8 +14,7 @@ mod constants;
 fn main() {
     common::run_and_render(
         constants::LV_DIFFUSIVE_DETERMINISTIC_LABEL,
-        constants::EPOCH_LEN,
-        constants::NUM_EPOCHS,
+        constants::TOTAL_STEPS,
         constants::lv_diffusive_deterministic_output_path(),
         constants::run_lv_diffusive_deterministic,
     );

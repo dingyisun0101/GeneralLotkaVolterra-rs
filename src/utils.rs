@@ -6,7 +6,7 @@ Purpose:
     a specific task or solver module.
 */
 
-use crate::state::{Mode, Scalar, SystemState};
+use crate::{Mode, Scalar, SystemState};
 use ndarray::{Array1, ArrayD, IxDyn};
 
 /// Create a well-mixed (spatially uniform / no-grid) `SystemState<T>` at time 0.

@@ -1,14 +1,9 @@
-"""Render plots from example JSON outputs produced by the Rust examples.
+"""Render plots from signal JSON outputs produced by the Rust examples.
 
-This script accepts a path to an output directory or a single JSON file produced by the examples.
-When given a directory, it loads every numeric epoch JSON in order, concatenates the full
-simulation in memory, and calls the plotter to produce `plot.png` under `<outdir>/plot`.
-
-For each sample, `state.data` is the preferred plotting source. This is
-intentional: spatial examples may save dense aggregate signal records with
-`space: null` and only include full spatial fields at a coarser cadence. If
-`state.data` is absent, the renderer falls back to aggregating `space.data`
-across spatial axes.
+This script accepts an output directory, a signal directory, or a single signal
+JSON file. When given an output directory with a `signal/` child, it loads every
+numeric signal JSON in order, concatenates the full simulation in memory, and
+calls the plotter to produce `plot.png`.
 """
 from __future__ import annotations
 import json
@@ -27,7 +22,7 @@ def load_json_samples(json_path: Path) -> Tuple[np.ndarray, np.ndarray]:
 
     samples = j.get("samples")
     if not samples:
-        raise ValueError("No 'samples' key found in JSON")
+        raise ValueError("No 'samples' key found in signal JSON")
 
     times = []
     states = []
@@ -39,16 +34,7 @@ def load_json_samples(json_path: Path) -> Tuple[np.ndarray, np.ndarray]:
             states.append(np.asarray(data, dtype=float).ravel())
             continue
 
-        sp = s.get("space")
-        if sp and "data" in sp:
-            data = np.asarray(sp["data"], dtype=float)
-            dim = sp.get("dim")
-            if dim and len(dim) >= 2:
-                K = dim[-1]
-                data = data.reshape(-1, K).sum(axis=0)
-            states.append(data.ravel())
-            continue
-        raise ValueError("Could not find state or space data in sample entry")
+        raise ValueError("Could not find state data in signal sample entry")
 
     t = np.array(times)
     nu = np.vstack(states)
@@ -95,6 +81,11 @@ def epoch_number(path: Path) -> int:
 def render_from_path(path: str, *, out_plot_dir: str = None, title: str = None):
     p = Path(path)
     if p.is_dir():
+        data_dir = p
+        signal_dir = p / "signal"
+        if signal_dir.is_dir():
+            p = signal_dir
+
         json_files = sorted(
             (json_file for json_file in p.glob("*.json") if epoch_number(json_file) >= 0),
             key=epoch_number,
@@ -102,8 +93,7 @@ def render_from_path(path: str, *, out_plot_dir: str = None, title: str = None):
         if not json_files:
             raise SystemExit(f"No JSON files found in {p}")
         t, nu = load_json_series(json_files)
-        data_dir = p
-        default_title = p.name
+        default_title = data_dir.name
     else:
         t, nu = load_json_samples(p)
         data_dir = p.parent

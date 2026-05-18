@@ -17,7 +17,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use ndarray::{Array1, Array2, ArrayD};
 
-use crate::state::{Mode, SystemState, SystemStateTimeSeries};
+use crate::io::signal::SignalWriter;
+use crate::io::space::SpaceWriter;
+use crate::solvers::termination::{
+    SolveOutcome, TerminationChecker, TerminationConfig, TerminationReason,
+};
+use crate::{Mode, SIGNAL_OUTPUT_FILE_SIZE, SPACE_OUTPUT_FILE_SIZE, SystemState};
 
 /// Boundary policy for finite-difference diffusion.
 #[derive(Clone, Copy, Debug)]
@@ -657,27 +662,12 @@ fn validate_inputs(
     Ok(())
 }
 
-fn saved_snapshot(gs: &SystemState<f64>, include_space: bool) -> SystemState<f64> {
-    SystemState {
-        mode: gs.mode.clone(),
-        time: gs.time,
-        state: gs.state.clone(),
-        space: if include_space {
-            gs.space.clone()
-        } else {
-            None
-        },
-        mass: gs.mass,
-    }
-}
-
-/// Integrate a single spatial trajectory and persist a `SystemStateTimeSeries`.
+/// Integrate a single spatial trajectory and persist split signal/space output.
 ///
 /// Details:
-/// - Purpose: Runs one epoch of arbitrary-dimensional spatial GLV
-///   reaction-diffusion and writes its snapshots to disk.
+/// - Purpose: Runs one spatial trajectory and writes aggregate signal and full
+///   spatial snapshots to independent output streams.
 /// - Parameters:
-///   - `epoch`: Epoch index for output naming.
 ///   - `gs_i`: Initial spatial population state consumed by the solver.
 ///   - `interaction_matrix`: Square interaction matrix `V`.
 ///   - `growth_vector`: Optional growth vector `g`; defaults to zero.
@@ -688,10 +678,9 @@ fn saved_snapshot(gs: &SystemState<f64>, include_space: bool) -> SystemState<f64
 ///     is always saved.
 ///   - `save_space_interval`: Include full spatial field every Nth step;
 ///     `t = 0` is always saved.
-///   - `output_path`: Directory for epoch JSON output.
+///   - `output_path`: Directory for split signal/space JSON output.
 ///   - `progress_counter`: Optional shared progress counter.
 fn solve_impl(
-    epoch: usize,
     mut gs_i: SystemState<f64>,
     interaction_matrix: &Array2<f64>,
     growth_vector: Option<&Array1<f64>>,
@@ -703,7 +692,8 @@ fn solve_impl(
     output_path: &Path,
     progress_counter: Option<&AtomicUsize>,
     dynamics: Dynamics,
-) -> Result<SystemState<f64>> {
+    termination: TerminationConfig,
+) -> Result<SolveOutcome> {
     let Some(space) = gs_i.space.take() else {
         return Err(Error::new(
             ErrorKind::InvalidInput,
@@ -739,10 +729,13 @@ fn solve_impl(
         }
     }
 
-    let save_interval = save_signal_interval.min(save_space_interval);
-    let mut states: Vec<SystemState<f64>> = Vec::with_capacity(num_steps / save_interval + 1);
     let mut gs_curr = gs_i;
-    states.push(saved_snapshot(&gs_curr, true));
+    let mut signal_writer =
+        SignalWriter::new(output_path, gs_curr.mode.clone(), SIGNAL_OUTPUT_FILE_SIZE)?;
+    let mut space_writer =
+        SpaceWriter::new(output_path, gs_curr.mode.clone(), SPACE_OUTPUT_FILE_SIZE)?;
+    signal_writer.push(&gs_curr)?;
+    space_writer.push(&gs_curr)?;
 
     if let Some(counter) = progress_counter {
         counter.store(0, Ordering::Relaxed);
@@ -758,8 +751,11 @@ fn solve_impl(
     );
     let mut sc = SpatialRk4Scratch::new(&shape);
     let mut next_space = ArrayD::zeros(shape);
+    let mut termination_checker = TerminationChecker::new(termination)?;
 
     let start_time = gs_curr.time;
+    let mut steps_run = 0usize;
+    let mut termination_reason = TerminationReason::MaxSteps;
     for step in 1..=num_steps {
         let curr_space = gs_curr.space.as_ref().expect("space initialized");
         rk4_step_inplace_raw(
@@ -785,34 +781,51 @@ fn solve_impl(
 
         std::mem::swap(&mut gs_curr, &mut gs_next);
         next_space = gs_next.space.take().expect("space buffer retained");
+        steps_run = step;
 
         let save_signal = step % save_signal_interval == 0;
         let save_space = step % save_space_interval == 0;
-        if save_signal || save_space {
-            states.push(saved_snapshot(&gs_curr, save_space));
+        if save_signal {
+            signal_writer.push(&gs_curr)?;
+        }
+        if save_space {
+            space_writer.push(&gs_curr)?;
         }
 
         if let Some(counter) = progress_counter {
             counter.store(step, Ordering::Relaxed);
         }
+
+        if let Some(checker) = termination_checker.as_mut() {
+            if let Some(reason) = checker.check(&gs_curr, step) {
+                termination_reason = reason;
+                if !save_signal {
+                    signal_writer.push(&gs_curr)?;
+                }
+                if !save_space {
+                    space_writer.push(&gs_curr)?;
+                }
+                break;
+            }
+        }
     }
 
-    let mut ts = SystemStateTimeSeries::empty(epoch, gs_curr.mode.clone());
-    for gs in &states {
-        ts.add(gs);
-    }
-    ts.save(output_path)?;
+    signal_writer.finish()?;
+    space_writer.finish()?;
 
-    Ok(gs_curr)
+    Ok(SolveOutcome {
+        final_state: gs_curr,
+        steps_run,
+        reason: termination_reason,
+    })
 }
 
-/// Integrate a single spatial GLV trajectory and persist a `SystemStateTimeSeries`.
+/// Integrate a single spatial GLV trajectory and persist split signal/space output.
 ///
 /// Details:
-/// - Purpose: Runs one epoch of arbitrary-dimensional spatial GLV
+/// - Purpose: Runs one trajectory of arbitrary-dimensional spatial GLV
 ///   reaction-diffusion over `Mode::Population` fields.
 /// - Parameters:
-///   - `epoch`: Epoch index for output naming.
 ///   - `gs_i`: Initial spatial population state consumed by the solver.
 ///   - `interaction_matrix`: Square interaction matrix `V`.
 ///   - `growth_vector`: Optional growth vector `g`; defaults to zero.
@@ -823,10 +836,9 @@ fn solve_impl(
 ///     is always saved.
 ///   - `save_space_interval`: Include full spatial field every Nth step;
 ///     `t = 0` is always saved.
-///   - `output_path`: Directory for epoch JSON output.
+///   - `output_path`: Directory for split signal/space JSON output.
 ///   - `progress_counter`: Optional shared progress counter.
 pub fn solve(
-    epoch: usize,
     gs_i: SystemState<f64>,
     interaction_matrix: &Array2<f64>,
     growth_vector: Option<&Array1<f64>>,
@@ -838,8 +850,37 @@ pub fn solve(
     output_path: &Path,
     progress_counter: Option<&AtomicUsize>,
 ) -> Result<SystemState<f64>> {
+    Ok(solve_with_termination(
+        gs_i,
+        interaction_matrix,
+        growth_vector,
+        diffusion,
+        dt,
+        num_steps,
+        save_signal_interval,
+        save_space_interval,
+        output_path,
+        progress_counter,
+        TerminationConfig::disabled(),
+    )?
+    .final_state)
+}
+
+/// Integrate a single spatial GLV trajectory with explicit termination.
+pub fn solve_with_termination(
+    gs_i: SystemState<f64>,
+    interaction_matrix: &Array2<f64>,
+    growth_vector: Option<&Array1<f64>>,
+    diffusion: &Diffusion,
+    dt: f64,
+    num_steps: usize,
+    save_signal_interval: usize,
+    save_space_interval: usize,
+    output_path: &Path,
+    progress_counter: Option<&AtomicUsize>,
+    termination: TerminationConfig,
+) -> Result<SolveOutcome> {
     solve_impl(
-        epoch,
         gs_i,
         interaction_matrix,
         growth_vector,
@@ -851,16 +892,16 @@ pub fn solve(
         output_path,
         progress_counter,
         Dynamics::GlvPopulation,
+        termination,
     )
 }
 
-/// Integrate a single spatial replicator trajectory and persist a time series.
+/// Integrate a single spatial replicator trajectory and persist split signal/space output.
 ///
 /// Details:
-/// - Purpose: Runs one epoch of arbitrary-dimensional local-simplex
+/// - Purpose: Runs one trajectory of arbitrary-dimensional local-simplex
 ///   reaction-diffusion over `Mode::Frequency` fields.
 /// - Parameters:
-///   - `epoch`: Epoch index for output naming.
 ///   - `gs_i`: Initial spatial frequency state consumed by the solver.
 ///   - `interaction_matrix`: Square interaction matrix `V`.
 ///   - `growth_vector`: Optional growth vector `g`; defaults to zero.
@@ -871,10 +912,9 @@ pub fn solve(
 ///     is always saved.
 ///   - `save_space_interval`: Include full spatial field every Nth step;
 ///     `t = 0` is always saved.
-///   - `output_path`: Directory for epoch JSON output.
+///   - `output_path`: Directory for split signal/space JSON output.
 ///   - `progress_counter`: Optional shared progress counter.
 pub fn solve_replicator(
-    epoch: usize,
     gs_i: SystemState<f64>,
     interaction_matrix: &Array2<f64>,
     growth_vector: Option<&Array1<f64>>,
@@ -886,8 +926,37 @@ pub fn solve_replicator(
     output_path: &Path,
     progress_counter: Option<&AtomicUsize>,
 ) -> Result<SystemState<f64>> {
+    Ok(solve_replicator_with_termination(
+        gs_i,
+        interaction_matrix,
+        growth_vector,
+        diffusion,
+        dt,
+        num_steps,
+        save_signal_interval,
+        save_space_interval,
+        output_path,
+        progress_counter,
+        TerminationConfig::disabled(),
+    )?
+    .final_state)
+}
+
+/// Integrate a single spatial replicator trajectory with explicit termination.
+pub fn solve_replicator_with_termination(
+    gs_i: SystemState<f64>,
+    interaction_matrix: &Array2<f64>,
+    growth_vector: Option<&Array1<f64>>,
+    diffusion: &Diffusion,
+    dt: f64,
+    num_steps: usize,
+    save_signal_interval: usize,
+    save_space_interval: usize,
+    output_path: &Path,
+    progress_counter: Option<&AtomicUsize>,
+    termination: TerminationConfig,
+) -> Result<SolveOutcome> {
     solve_impl(
-        epoch,
         gs_i,
         interaction_matrix,
         growth_vector,
@@ -899,6 +968,7 @@ pub fn solve_replicator(
         output_path,
         progress_counter,
         Dynamics::LocalReplicatorFrequency,
+        termination,
     )
 }
 
@@ -940,7 +1010,6 @@ mod tests {
         let output_path = temp_output_dir("preserve");
 
         let out = solve(
-            1,
             gs,
             &interaction_matrix,
             Some(&growth_vector),
@@ -984,7 +1053,6 @@ mod tests {
         let output_path = temp_output_dir("mass");
 
         let out = solve(
-            1,
             gs,
             &interaction_matrix,
             Some(&growth_vector),
@@ -1021,7 +1089,6 @@ mod tests {
         let output_path = temp_output_dir("replicator_simplex");
 
         let out = solve_replicator(
-            1,
             gs,
             &interaction_matrix,
             Some(&growth_vector),
@@ -1047,7 +1114,7 @@ mod tests {
     }
 
     #[test]
-    fn spatial_save_intervals_can_store_signal_without_space() {
+    fn spatial_save_intervals_split_signal_and_space_outputs() {
         let shape = vec![2, 2, 1];
         let space = ArrayD::from_elem(IxDyn(&shape), 1.0);
         let gs = SystemState::from_arrays(
@@ -1065,7 +1132,6 @@ mod tests {
         let output_path = temp_output_dir("split_save");
 
         solve(
-            1,
             gs,
             &interaction_matrix,
             Some(&growth_vector),
@@ -1079,17 +1145,30 @@ mod tests {
         )
         .expect("solve succeeds");
 
-        let ts = SystemStateTimeSeries::<f64>::from(&output_path.join("1.json"))
-            .expect("time series loads");
-        let times: Vec<usize> = ts.samples.iter().map(|sample| sample.time).collect();
-        let has_space: Vec<bool> = ts
-            .samples
+        let signal_raw =
+            fs::read_to_string(output_path.join("signal/1.json")).expect("signal json exists");
+        let space_raw =
+            fs::read_to_string(output_path.join("space/1.json")).expect("space json exists");
+        let signal_json: serde_json::Value =
+            serde_json::from_str(&signal_raw).expect("signal json parses");
+        let space_json: serde_json::Value =
+            serde_json::from_str(&space_raw).expect("space json parses");
+
+        let signal_times: Vec<usize> = signal_json["samples"]
+            .as_array()
+            .expect("signal samples")
             .iter()
-            .map(|sample| sample.space.is_some())
+            .map(|sample| sample["time"].as_u64().expect("time") as usize)
+            .collect();
+        let space_times: Vec<usize> = space_json["samples"]
+            .as_array()
+            .expect("space samples")
+            .iter()
+            .map(|sample| sample["time"].as_u64().expect("time") as usize)
             .collect();
 
-        assert_eq!(times, vec![0, 2, 4, 5]);
-        assert_eq!(has_space, vec![true, false, false, true]);
+        assert_eq!(signal_times, vec![0, 2, 4]);
+        assert_eq!(space_times, vec![0, 5]);
         let _ = fs::remove_dir_all(output_path);
     }
 }

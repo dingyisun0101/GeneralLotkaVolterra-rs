@@ -13,8 +13,7 @@ mod constants;
 fn main() {
     common::run_and_render(
         constants::REPLICATOR_DEMOGRAPHIC_LABEL,
-        constants::EPOCH_LEN,
-        constants::NUM_EPOCHS,
+        constants::TOTAL_STEPS,
         constants::replicator_demographic_output_path(),
         constants::run_replicator_demographic,
     );

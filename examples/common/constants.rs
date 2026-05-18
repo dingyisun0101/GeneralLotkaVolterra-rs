@@ -10,6 +10,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicUsize;
 
 use general_lotka_volterra_rs::solvers::spatial::rk4::{Boundary, Diffusion};
+use general_lotka_volterra_rs::solvers::termination::TerminationConfig;
 use ndarray::{Array1, Array2};
 use rand::rngs::SmallRng;
 use rand::{RngExt, SeedableRng};
@@ -21,11 +22,8 @@ use rand::{RngExt, SeedableRng};
 /// Number of strains/species used by both well-mixed and spatial examples.
 pub const NUM_STRAINS: usize = 10;
 
-/// Number of solver steps per epoch for every example.
-pub const EPOCH_LEN: usize = 1_000;
-
-/// Number of sequential epochs for every example.
-pub const NUM_EPOCHS: usize = 10;
+/// Total solver steps for every example. Output files are chunked automatically.
+pub const TOTAL_STEPS: usize = 10_000;
 
 // ---------------------------------------------------------------------------
 // Shared Non-spatial settings
@@ -43,8 +41,8 @@ pub const WELL_MIXED_CUTOFF: f64 = 1e-5;
 /// Integration step size for well-mixed examples.
 pub const WELL_MIXED_DT: f64 = 0.005;
 
-/// Save one aggregate state sample every N solver steps for non-spatial examples.
-pub const NON_SPATIAL_SAVE_SIGNAL_INTERVAL: usize = 500;
+/// Save one state sample every N solver steps for non-spatial examples.
+pub const NON_SPATIAL_SAVE_INTERVAL: usize = 500;
 
 // ---------------------------------------------------------------------------
 // Shared Spatial settings
@@ -59,11 +57,8 @@ pub const SPATIAL_CUTOFF: f64 = 1e-9;
 /// Integration step size for diffusive spatial examples.
 pub const SPATIAL_DT: f64 = 0.003;
 
-/// Save one aggregate state sample every N solver steps for spatial examples.
-pub const SPATIAL_SAVE_SIGNAL_INTERVAL: usize = 100;
-
-/// Include the full spatial field every N solver steps for spatial examples.
-pub const SPATIAL_SAVE_SPACE_INTERVAL: usize = 500;
+/// Save one state and full spatial field sample every N solver steps.
+pub const SPATIAL_SAVE_INTERVAL: usize = 500;
 
 // ---------------------------------------------------------------------------
 // replicator_deterministic
@@ -164,17 +159,25 @@ pub fn lv_diffusive_deterministic_output_path() -> &'static Path {
     Path::new(LV_DIFFUSIVE_DETERMINISTIC_OUTPUT)
 }
 
+pub fn non_spatial_termination() -> TerminationConfig {
+    TerminationConfig::monoculture_only(NON_SPATIAL_SAVE_INTERVAL)
+}
+
+pub fn spatial_termination() -> TerminationConfig {
+    TerminationConfig::monoculture_only(SPATIAL_SAVE_INTERVAL)
+}
+
 pub fn run_replicator_deterministic(progress_counter: Option<&AtomicUsize>) -> Result<()> {
     general_lotka_volterra_rs::tasks::replicator_deterministic::run(
         &well_mixed_interaction_matrix(),
         None,
         WELL_MIXED_CUTOFF,
         WELL_MIXED_DT,
-        EPOCH_LEN,
-        NON_SPATIAL_SAVE_SIGNAL_INTERVAL,
-        NUM_EPOCHS,
+        TOTAL_STEPS,
+        NON_SPATIAL_SAVE_INTERVAL,
         replicator_deterministic_output_path(),
         progress_counter,
+        non_spatial_termination(),
     )
 }
 
@@ -185,11 +188,11 @@ pub fn run_replicator_demographic(progress_counter: Option<&AtomicUsize>) -> Res
         WELL_MIXED_CUTOFF,
         REPLICATOR_DEMOGRAPHIC_SIGMA,
         WELL_MIXED_DT,
-        EPOCH_LEN,
-        NON_SPATIAL_SAVE_SIGNAL_INTERVAL,
-        NUM_EPOCHS,
+        TOTAL_STEPS,
+        NON_SPATIAL_SAVE_INTERVAL,
         replicator_demographic_output_path(),
         progress_counter,
+        non_spatial_termination(),
     )
 }
 
@@ -203,12 +206,11 @@ pub fn run_replicator_diffusive_deterministic(
         &SPATIAL_SHAPE,
         &replicator_diffusive_diffusion(),
         SPATIAL_DT,
-        EPOCH_LEN,
-        SPATIAL_SAVE_SIGNAL_INTERVAL,
-        SPATIAL_SAVE_SPACE_INTERVAL,
-        NUM_EPOCHS,
+        TOTAL_STEPS,
+        SPATIAL_SAVE_INTERVAL,
         replicator_diffusive_deterministic_output_path(),
         progress_counter,
+        spatial_termination(),
     )
 }
 
@@ -222,12 +224,11 @@ pub fn run_lv_diffusive_deterministic(progress_counter: Option<&AtomicUsize>) ->
         LV_DIFFUSIVE_INITIAL_POPULATION,
         &lv_diffusive_diffusion(),
         SPATIAL_DT,
-        EPOCH_LEN,
-        SPATIAL_SAVE_SIGNAL_INTERVAL,
-        SPATIAL_SAVE_SPACE_INTERVAL,
-        NUM_EPOCHS,
+        TOTAL_STEPS,
+        SPATIAL_SAVE_INTERVAL,
         lv_diffusive_deterministic_output_path(),
         progress_counter,
+        spatial_termination(),
     )
 }
 

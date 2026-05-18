@@ -2,20 +2,17 @@
 
 ## Purpose
 
-The state layer owns the in-memory and persisted representation shared by
-solvers and task runners. It stores one global taxon vector, an optional spatial
-field, a mode, integer time, and cached mass.
+The system-state layer owns the live in-memory representation shared by solvers
+and task runners. It stores one global taxon vector, an optional spatial field,
+a mode, integer time, and cached mass.
 
 ## Data Model
 
 - `Mode::Frequency` treats `state` as a simplex vector and keeps `mass = 1`.
 - `Mode::Population` treats `state` as absolute counts and keeps `mass` close
   to the rounded sum after cutoff and optional capacity enforcement.
-- `SystemStateRecord` stores owned snapshot data without repeating the mode.
-  Spatial signal-only records may omit `space` while retaining aggregate
-  `state`.
-- `SystemStateTimeSeries` stores one shared mode plus an ordered sample list for
-  one epoch.
+Persisted JSON records are owned by `src/io/signal.rs` and `src/io/space.rs`,
+not by `SystemState`.
 
 ## Validation Contract
 
@@ -29,7 +26,7 @@ field, a mode, integer time, and cached mass.
 
 ## File Layout
 
-- `src/state/system_state.rs`: one state snapshot and mode-specific invariant
+- `src/system_state.rs`: one live state snapshot and mode-specific invariant
   handling.
-- `src/state/time_series.rs`: epoch-level save/load container.
-- `src/state/mod.rs`: public state module surface.
+- `src/io/signal.rs`: aggregate signal JSON output.
+- `src/io/space.rs`: full spatial snapshot JSON output.

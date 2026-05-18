@@ -3,8 +3,8 @@ Deterministic diffusive replicator task.
 
 Purpose:
     This task wires an arbitrary-dimensional local-frequency field into the
-    spatial RK4 replicator reaction-diffusion solver and writes one JSON time
-    series per epoch.
+    spatial RK4 replicator reaction-diffusion solver and writes automatically
+    sized JSON time-series chunks.
 */
 
 use std::io::Result;
@@ -13,14 +13,15 @@ use std::sync::atomic::AtomicUsize;
 
 use ndarray::{Array1, Array2};
 
-use crate::solvers::spatial::rk4::{Diffusion, solve_replicator};
+use crate::solvers::spatial::rk4::{Diffusion, solve_replicator_with_termination};
+use crate::solvers::termination::TerminationConfig;
 use crate::utils::create_uniform_spatial_frequency_gs;
 
-/// Run `num_epochs` spatial replicator trajectories back-to-back.
+/// Run one spatial replicator trajectory and let signal/space writers chunk output files.
 ///
 /// Details:
 /// - Purpose: Runs deterministic local-simplex replicator reaction-diffusion
-///   over sequential epochs.
+///   for `total_steps`.
 /// - Parameters:
 ///   - `interaction_matrix`: Square interaction matrix `V`.
 ///   - `growth_vector`: Optional growth vector `g`; defaults to zero.
@@ -28,12 +29,11 @@ use crate::utils::create_uniform_spatial_frequency_gs;
 ///   - `spatial_shape`: Arbitrary-dimensional grid shape, excluding species.
 ///   - `diffusion`: Per-species diffusion coefficients and grid metadata.
 ///   - `dt`: Step size.
-///   - `epoch_len`: Steps per epoch.
-///   - `save_signal_interval`: Save aggregate state every Nth step.
-///   - `save_space_interval`: Include full spatial field every Nth step.
-///   - `num_epochs`: Number of epochs to execute.
+///   - `total_steps`: Total solver steps to execute.
+///   - `save_interval`: Save state and full spatial field every Nth step.
 ///   - `output_path`: Root output directory.
 ///   - `progress_counter`: Optional shared progress counter.
+///   - `termination`: Explicit early-termination behavior.
 pub fn run(
     interaction_matrix: &Array2<f64>,       // V
     growth_vector: Option<&Array1<f64>>,    // g override
@@ -41,12 +41,11 @@ pub fn run(
     spatial_shape: &[usize],                // grid shape without species axis
     diffusion: &Diffusion,                  // diffusion configuration
     dt: f64,                                // step size
-    epoch_len: usize,                       // steps per epoch
-    save_signal_interval: usize,            // save aggregate state every N steps
-    save_space_interval: usize,             // include full spatial field every N steps
-    num_epochs: usize,                      // number of epochs
+    total_steps: usize,                     // total solver steps
+    save_interval: usize,                   // save state and space every N steps
     output_path: &Path,                     // root output dir
     progress_counter: Option<&AtomicUsize>, // optional progress counter
+    termination: TerminationConfig,         // explicit termination behavior
 ) -> Result<()> {
     let d = interaction_matrix.nrows();
     debug_assert_eq!(
@@ -68,24 +67,21 @@ pub fn run(
         "diffusion spacing must match spatial_shape"
     );
 
-    let mut gs = create_uniform_spatial_frequency_gs(Some(cutoff), spatial_shape, d);
+    let gs = create_uniform_spatial_frequency_gs(Some(cutoff), spatial_shape, d);
 
-    // Sequential epochs: carry final state from epoch k into epoch k+1.
-    for epoch in 1..=num_epochs {
-        gs = solve_replicator(
-            epoch,                // current epoch
-            gs,                   // initial state for this epoch
-            interaction_matrix,   // V
-            growth_vector,        // g
-            diffusion,            // diffusion configuration
-            dt,                   // step size
-            epoch_len,            // steps
-            save_signal_interval, // save aggregate state every N steps
-            save_space_interval,  // include full spatial field every N steps
-            output_path,          // output target for this epoch
-            progress_counter,
-        )?;
-    }
+    solve_replicator_with_termination(
+        gs,                 // initial state
+        interaction_matrix, // V
+        growth_vector,      // g
+        diffusion,          // diffusion configuration
+        dt,                 // step size
+        total_steps,        // steps
+        save_interval,      // save aggregate state every N steps
+        save_interval,      // include full spatial field every N steps
+        output_path,        // output target
+        progress_counter,
+        termination,
+    )?;
 
     Ok(())
 }

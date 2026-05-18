@@ -15,8 +15,7 @@ mod constants;
 fn main() {
     common::run_and_render(
         constants::REPLICATOR_DIFFUSIVE_DETERMINISTIC_LABEL,
-        constants::EPOCH_LEN,
-        constants::NUM_EPOCHS,
+        constants::TOTAL_STEPS,
         constants::replicator_diffusive_deterministic_output_path(),
         constants::run_replicator_diffusive_deterministic,
     );

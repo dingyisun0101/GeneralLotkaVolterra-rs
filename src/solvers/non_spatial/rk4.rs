@@ -4,7 +4,7 @@ Well-mixed replicator RK4 solver.
 Purpose:
     This module implements the active trajectory solver. It computes the
     replicator right-hand side, advances the state with RK4, restores state
-    invariants, applies optional noise, and persists epoch snapshots.
+    invariants, applies optional noise, and persists aggregate signal snapshots.
 
 Evolution contract:
     One solver step follows this sequence: RK4 raw step,
@@ -21,7 +21,11 @@ use rand::SeedableRng;
 use rand::rngs::SmallRng;
 
 use super::noise::{Noise, NoiseContext, apply_noise_inplace};
-use crate::state::{SystemState, SystemStateTimeSeries};
+use crate::io::signal::SignalWriter;
+use crate::solvers::termination::{
+    SolveOutcome, TerminationChecker, TerminationConfig, TerminationReason,
+};
+use crate::{SIGNAL_OUTPUT_FILE_SIZE, SystemState};
 
 /// Scratch buffers for RK4 (avoid repeated allocations).
 ///
@@ -193,12 +197,11 @@ fn rk4_step_inplace_raw(
     }
 }
 
-/// Integrate a single trajectory and persist a `SystemStateTimeSeries`.
+/// Integrate a single trajectory and persist aggregate signal output.
 ///
 /// Details:
-/// - Purpose: Runs one epoch and writes its snapshots to disk.
+/// - Purpose: Runs one trajectory and writes signal snapshots to disk.
 /// - Parameters:
-///   - `epoch`: Epoch index for output naming.
 ///   - `gs_i`: Initial state consumed by the solver.
 ///   - `interaction_matrix`: Square interaction matrix `V`.
 ///   - `growth_vector`: Optional growth vector `g`; defaults to zero.
@@ -206,10 +209,36 @@ fn rk4_step_inplace_raw(
 ///   - `dt`: Step size.
 ///   - `num_steps`: Number of integration steps.
 ///   - `save_interval`: Save every Nth step; `t = 0` is always saved.
-///   - `output_path`: Directory for epoch JSON output.
+///   - `output_path`: Directory for signal JSON output.
 ///   - `progress_counter`: Optional shared progress counter.
 pub fn solve(
-    epoch: usize,                           // epoch index
+    gs_i: SystemState<f64>,                 // initial state (consumed)
+    interaction_matrix: &Array2<f64>,       // V
+    growth_vector: Option<&Array1<f64>>,    // g override
+    noise: Noise,                           // noise model
+    dt: f64,                                // step size
+    num_steps: usize,                       // number of steps
+    save_interval: usize,                   // save every N steps
+    output_path: &Path,                     // signal output target
+    progress_counter: Option<&AtomicUsize>, // optional progress counter
+) -> Result<SystemState<f64>> {
+    Ok(solve_with_termination(
+        gs_i,
+        interaction_matrix,
+        growth_vector,
+        noise,
+        dt,
+        num_steps,
+        save_interval,
+        output_path,
+        progress_counter,
+        TerminationConfig::disabled(),
+    )?
+    .final_state)
+}
+
+/// Integrate a single trajectory with explicit termination configuration.
+pub fn solve_with_termination(
     mut gs_i: SystemState<f64>,             // initial state (consumed)
     interaction_matrix: &Array2<f64>,       // V
     growth_vector: Option<&Array1<f64>>,    // g override
@@ -217,9 +246,10 @@ pub fn solve(
     dt: f64,                                // step size
     num_steps: usize,                       // number of steps
     save_interval: usize,                   // save every N steps
-    output_path: &Path,                     // time-series output target
+    output_path: &Path,                     // signal output target
     progress_counter: Option<&AtomicUsize>, // optional progress counter
-) -> Result<SystemState<f64>> {
+    termination: TerminationConfig,         // explicit termination behavior
+) -> Result<SolveOutcome> {
     let d = interaction_matrix.nrows(); // assumed square by caller / upstream validation
     if save_interval == 0 {
         return Err(std::io::Error::new(
@@ -236,9 +266,10 @@ pub fn solve(
     // Enforce invariants at t=0.
     gs_i.sanitize();
 
-    let mut states: Vec<SystemState<f64>> = Vec::with_capacity(num_steps / save_interval + 1);
     let mut gs_curr = gs_i;
-    states.push(gs_curr.clone()); // t=0 always saved
+    let mut signal_writer =
+        SignalWriter::new(output_path, gs_curr.mode.clone(), SIGNAL_OUTPUT_FILE_SIZE)?;
+    signal_writer.push(&gs_curr)?; // t=0 always saved
 
     if let Some(counter) = progress_counter {
         counter.store(0, Ordering::Relaxed);
@@ -252,9 +283,12 @@ pub fn solve(
     let mut sc = Rk4Scratch::new(d);
     let mut noise_ctx = NoiseContext::new(d);
     let mut rng = SmallRng::from_rng(&mut rand::rng());
+    let mut termination_checker = TerminationChecker::new(termination)?;
 
     // Main loop: deterministic RK4 -> sanitize -> stochastic -> snapshot.
     let start_time = gs_curr.time;
+    let mut steps_run = 0usize;
+    let mut termination_reason = TerminationReason::MaxSteps;
     for step in 1..=num_steps {
         rk4_step_inplace_raw(
             &gs_curr.state,
@@ -273,20 +307,32 @@ pub fn solve(
 
         // Advance current state and optionally save a snapshot.
         std::mem::swap(&mut gs_curr, &mut gs_next);
+        steps_run = step;
+
         if step % save_interval == 0 {
-            states.push(gs_curr.clone());
+            signal_writer.push(&gs_curr)?;
         }
 
         if let Some(counter) = progress_counter {
             counter.store(step, Ordering::Relaxed);
         }
+
+        if let Some(checker) = termination_checker.as_mut() {
+            if let Some(reason) = checker.check(&gs_curr, step) {
+                termination_reason = reason;
+                if step % save_interval != 0 {
+                    signal_writer.push(&gs_curr)?;
+                }
+                break;
+            }
+        }
     }
 
-    let mut ts = SystemStateTimeSeries::empty(epoch, gs_curr.mode.clone());
-    for gs in &states {
-        ts.add(gs);
-    }
-    ts.save(output_path)?;
+    signal_writer.finish()?;
 
-    Ok(gs_curr)
+    Ok(SolveOutcome {
+        final_state: gs_curr,
+        steps_run,
+        reason: termination_reason,
+    })
 }

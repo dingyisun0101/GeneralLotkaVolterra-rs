@@ -13,8 +13,7 @@ mod constants;
 fn main() {
     common::run_and_render(
         constants::REPLICATOR_DETERMINISTIC_LABEL,
-        constants::EPOCH_LEN,
-        constants::NUM_EPOCHS,
+        constants::TOTAL_STEPS,
         constants::replicator_deterministic_output_path(),
         constants::run_replicator_deterministic,
     );

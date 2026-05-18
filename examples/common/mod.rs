@@ -16,8 +16,8 @@ pub struct ExampleProgress {
 }
 
 impl ExampleProgress {
-    pub fn start(label: &'static str, epoch_len: usize, num_epochs: usize) -> Self {
-        let total = (epoch_len * num_epochs) as u64;
+    pub fn start(label: &'static str, total_steps: usize) -> Self {
+        let total = total_steps as u64;
         let bar = ProgressBar::new(total);
         bar.set_style(
             ProgressStyle::with_template(
@@ -35,20 +35,17 @@ impl ExampleProgress {
         let thread_bar = bar.clone();
 
         let handle = thread::spawn(move || {
-            let mut completed_epochs = 0usize;
+            let mut completed_steps = 0usize;
             let mut previous_step = 0usize;
 
             while !thread_done.load(Ordering::Relaxed) {
                 let step = thread_counter.load(Ordering::Relaxed);
                 if step < previous_step {
-                    completed_epochs += 1;
+                    completed_steps = completed_steps.saturating_add(previous_step);
                 }
                 previous_step = step;
 
-                let position = completed_epochs
-                    .saturating_mul(epoch_len)
-                    .saturating_add(step)
-                    .min(epoch_len * num_epochs);
+                let position = completed_steps.saturating_add(step).min(total_steps);
                 thread_bar.set_position(position as u64);
                 thread::sleep(Duration::from_millis(100));
             }
@@ -101,16 +98,11 @@ pub fn render_output_plot(output_path: &Path, title: &str) -> Result<PathBuf> {
     Ok(outdir.join("plot.png"))
 }
 
-pub fn run_and_render<F>(
-    label: &'static str,
-    epoch_len: usize,
-    num_epochs: usize,
-    output_path: &Path,
-    run: F,
-) where
+pub fn run_and_render<F>(label: &'static str, total_steps: usize, output_path: &Path, run: F)
+where
     F: FnOnce(Option<&AtomicUsize>) -> Result<()>,
 {
-    let progress = ExampleProgress::start(label, epoch_len, num_epochs);
+    let progress = ExampleProgress::start(label, total_steps);
 
     if let Err(err) = run(Some(progress.counter.as_ref())) {
         progress.finish();
