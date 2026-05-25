@@ -61,7 +61,8 @@ Core consistency rules used across the crate:
 - Signal files store `time`, aggregate `state`, and `mass`. Space files store
   `time`, aggregate `state`, full `space`, and `mass`.
 - Signal and space output streams chunk independently using the crate-level
-  `SIGNAL_OUTPUT_FILE_SIZE` and `SPACE_OUTPUT_FILE_SIZE` budgets. A single
+  `SIGNAL_OUTPUT_FILE_SIZE` and `SPACE_OUTPUT_FILE_SIZE` budgets. Each stream
+  computes a fixed samples-per-chunk count before stepping starts. A single
   oversized space sample is written alone.
 - Each task writes `metadata.json` with requested steps, actual steps run,
   termination reason, save cadence, model dimensions, output budgets, and
@@ -166,8 +167,9 @@ Purpose:
 `tasks` exposes experiment-level entry points. Callers provide `total_steps` and
 `save_interval`; IO writers automatically split signal and space streams using
 the crate-level `SIGNAL_OUTPUT_FILE_SIZE` and `SPACE_OUTPUT_FILE_SIZE` budgets,
-which default to 128 MiB and 1 GiB respectively. Users do not configure chunking
-behavior.
+which default to 128 MiB and 1 GiB respectively. Users do not configure
+chunking behavior; writers compute fixed chunk sample counts before the solver
+loop starts.
 
 Task-level APIs also require an explicit `TerminationConfig`. Use
 `TerminationConfig::disabled()` to run exactly to `total_steps`, or

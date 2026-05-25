@@ -71,8 +71,9 @@ Spatial solves have two save cadences:
 
 The initial sample at `t = 0` is written to both streams. Signal samples are
 stored under `signal/`; full spatial snapshots are stored independently under
-`space/`. The two streams flush JSON chunks independently against
-`SIGNAL_OUTPUT_FILE_SIZE` and `SPACE_OUTPUT_FILE_SIZE`.
+`space/`. The two streams compute fixed samples-per-chunk counts before the
+solver loop starts, using `SIGNAL_OUTPUT_FILE_SIZE` and
+`SPACE_OUTPUT_FILE_SIZE`, and then flush chunks independently.
 
 Spatial solver wrappers mirror the non-spatial termination split:
 

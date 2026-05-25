@@ -17,8 +17,9 @@ Each task run:
 5. Writes `metadata.json` beside those output folders.
 
 Callers do not choose `epoch_len` or `num_epochs`. Output writers estimate JSON
-sample size and flush numbered files when a stream approaches its crate-level
-file-size budget. Signal and space streams are chunked independently.
+sample size once before stepping starts and derive a fixed samples-per-chunk
+count from the crate-level file-size budget. That count remains fixed for the
+task. Signal and space streams are chunked independently.
 
 The default file-size budgets are:
 

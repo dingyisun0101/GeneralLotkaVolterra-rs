@@ -4,7 +4,9 @@ Spatial snapshot output.
 Purpose:
     `SpaceWriter` persists full spatial samples under
     `{output_path}/space/{n}.json`, independently from aggregate signal output.
-    A single oversized spatial sample is written alone rather than dropped.
+    The samples-per-chunk count is fixed at construction from the configured
+    byte budget, state length, and spatial grid size. A single oversized
+    spatial sample is written alone rather than dropped.
 */
 
 use std::fs::{File, create_dir_all, read_to_string};
@@ -39,15 +41,21 @@ pub struct SpaceSeries<T> {
 pub struct SpaceWriter {
     dir: PathBuf,
     mode: Mode<f64>,
-    max_bytes: usize,
+    sample_bytes: usize,
+    samples_per_chunk: usize,
     file_index: usize,
     stats: WriterStats,
-    estimated_bytes: usize,
     samples: Vec<SpaceRecord<f64>>,
 }
 
 impl SpaceWriter {
-    pub fn new(output_path: &Path, mode: Mode<f64>, max_bytes: usize) -> Result<Self> {
+    pub fn new(
+        output_path: &Path,
+        mode: Mode<f64>,
+        max_bytes: usize,
+        state_len: usize,
+        space_len: usize,
+    ) -> Result<Self> {
         let dir = output_path.join("space");
         create_dir_all(&dir).map_err(|e| {
             Error::new(
@@ -55,15 +63,17 @@ impl SpaceWriter {
                 format!("SpaceWriter::new: create dir {}: {e}", dir.display()),
             )
         })?;
+        let sample_bytes = estimate_space_sample(state_len, space_len);
+        let chunk_samples = samples_per_chunk(max_bytes, sample_bytes);
 
         Ok(Self {
             dir,
             mode,
-            max_bytes: max_bytes.max(ESTIMATED_FILE_OVERHEAD_BYTES),
+            sample_bytes,
+            samples_per_chunk: chunk_samples,
             file_index: 1,
             stats: WriterStats::default(),
-            estimated_bytes: ESTIMATED_FILE_OVERHEAD_BYTES,
-            samples: Vec::new(),
+            samples: Vec::with_capacity(chunk_samples),
         })
     }
 
@@ -72,10 +82,7 @@ impl SpaceWriter {
             return Ok(());
         };
 
-        let sample_bytes = estimate_space_sample(gs.state.len(), space.len());
-        if !self.samples.is_empty()
-            && self.estimated_bytes.saturating_add(sample_bytes) > self.max_bytes
-        {
+        if self.samples.len() >= self.samples_per_chunk {
             self.flush()?;
         }
 
@@ -86,7 +93,6 @@ impl SpaceWriter {
             mass: gs.mass,
         });
         self.stats.samples += 1;
-        self.estimated_bytes = self.estimated_bytes.saturating_add(sample_bytes);
         Ok(())
     }
 
@@ -108,6 +114,7 @@ impl SpaceWriter {
             )
         })?;
         let writer = BufWriter::new(file);
+        let series_sample_len = self.samples.len();
         let series = SpaceSeries {
             file: self.file_index,
             mode: self.mode.clone(),
@@ -126,8 +133,7 @@ impl SpaceWriter {
         self.stats.estimated_bytes = self
             .stats
             .estimated_bytes
-            .saturating_add(self.estimated_bytes);
-        self.estimated_bytes = ESTIMATED_FILE_OVERHEAD_BYTES;
+            .saturating_add(estimate_file_bytes(self.sample_bytes, series_sample_len));
         Ok(())
     }
 }
@@ -146,6 +152,18 @@ pub fn load_space_series(path: &Path) -> Result<SpaceSeries<f64>> {
             format!("load_space_series: deserialize {}: {e}", path.display()),
         )
     })
+}
+
+fn samples_per_chunk(max_bytes: usize, sample_bytes: usize) -> usize {
+    max_bytes
+        .saturating_sub(ESTIMATED_FILE_OVERHEAD_BYTES)
+        .checked_div(sample_bytes.max(1))
+        .unwrap_or(0)
+        .max(1)
+}
+
+fn estimate_file_bytes(sample_bytes: usize, samples: usize) -> usize {
+    ESTIMATED_FILE_OVERHEAD_BYTES.saturating_add(sample_bytes.saturating_mul(samples))
 }
 
 #[inline]
@@ -174,7 +192,8 @@ mod tests {
             carrying_capacity: None,
         };
         let mut writer =
-            SpaceWriter::new(&path, mode.clone(), ESTIMATED_FILE_OVERHEAD_BYTES).expect("writer");
+            SpaceWriter::new(&path, mode.clone(), ESTIMATED_FILE_OVERHEAD_BYTES, 1, 16)
+                .expect("writer");
 
         for time in 0..2 {
             let gs = SystemState::from_arrays(

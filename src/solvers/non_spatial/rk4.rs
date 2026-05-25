@@ -267,8 +267,12 @@ pub fn solve_with_termination(
     gs_i.sanitize();
 
     let mut gs_curr = gs_i;
-    let mut signal_writer =
-        SignalWriter::new(output_path, gs_curr.mode.clone(), SIGNAL_OUTPUT_FILE_SIZE)?;
+    let mut signal_writer = SignalWriter::new(
+        output_path,
+        gs_curr.mode.clone(),
+        SIGNAL_OUTPUT_FILE_SIZE,
+        gs_curr.state.len(),
+    )?;
     signal_writer.push(&gs_curr)?; // t=0 always saved
 
     if let Some(counter) = progress_counter {
