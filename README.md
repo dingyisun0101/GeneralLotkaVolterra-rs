@@ -62,8 +62,9 @@ Core consistency rules used across the crate:
   `time`, aggregate `state`, full `space`, and `mass`.
 - Signal and space output streams chunk independently using the crate-level
   `SIGNAL_OUTPUT_FILE_SIZE` and `SPACE_OUTPUT_FILE_SIZE` budgets. Each stream
-  computes a fixed samples-per-chunk count before stepping starts. A single
-  oversized space sample is written alone.
+  computes a fixed samples-per-chunk count before stepping starts. Signal
+  chunks default to 32 MiB; space chunks default to 1 GiB. A single oversized
+  space sample is written alone.
 - Each task writes `metadata.json` with requested steps, actual steps run,
   termination reason, save cadence, model dimensions, output budgets, and
   signal/space writer stats.
