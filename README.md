@@ -167,7 +167,7 @@ Purpose:
 `tasks` exposes experiment-level entry points. Callers provide `total_steps` and
 `save_interval`; IO writers automatically split signal and space streams using
 the crate-level `SIGNAL_OUTPUT_FILE_SIZE` and `SPACE_OUTPUT_FILE_SIZE` budgets,
-which default to 128 MiB and 1 GiB respectively. Users do not configure
+which default to 32 MiB and 1 GiB respectively. Users do not configure
 chunking behavior; writers compute fixed chunk sample counts before the solver
 loop starts.
 

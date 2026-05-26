@@ -24,7 +24,7 @@ task. Signal and space streams are chunked independently.
 The default file-size budgets are:
 
 ```rust
-general_lotka_volterra_rs::SIGNAL_OUTPUT_FILE_SIZE // 128 MiB
+general_lotka_volterra_rs::SIGNAL_OUTPUT_FILE_SIZE // 32 MiB
 general_lotka_volterra_rs::SPACE_OUTPUT_FILE_SIZE  // 1 GiB
 ```
 

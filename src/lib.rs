@@ -11,7 +11,7 @@ Current implementation boundary:
 */
 
 /// Target maximum JSON chunk size used by aggregate signal output writers.
-pub const SIGNAL_OUTPUT_FILE_SIZE: usize = 128 * 1024 * 1024;
+pub const SIGNAL_OUTPUT_FILE_SIZE: usize = 32 * 1024 * 1024;
 
 /// Target maximum JSON chunk size used by full spatial snapshot output writers.
 pub const SPACE_OUTPUT_FILE_SIZE: usize = 1024 * 1024 * 1024;
