@@ -3,7 +3,7 @@ Deterministic diffusive replicator task.
 
 Purpose:
     This task wires an arbitrary-dimensional local-frequency field into the
-    spatial RK4 replicator reaction-diffusion solver and writes automatically
+    spatial replicator reaction-diffusion solver and writes automatically
     sized JSON time-series chunks.
 */
 #![allow(clippy::too_many_arguments)]

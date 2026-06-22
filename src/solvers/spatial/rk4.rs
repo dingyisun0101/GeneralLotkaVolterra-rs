@@ -1,4 +1,4 @@
-//! Arbitrary-dimensional spatial GLV RK4 solver.
+//! Arbitrary-dimensional spatial GLV solver.
 //!
 //! Purpose:
 //! This module implements reaction-diffusion dynamics for a species-last
@@ -9,7 +9,7 @@
 //! finite-difference Laplacian across the spatial axes.
 //!
 //! Evolution contract:
-//! One solver step follows this sequence: RK4 raw reaction-diffusion step,
+//! One solver step follows this sequence: midpoint RK2 raw reaction-diffusion step,
 //! spatial sanitize/global-state refresh, optional noise, spatial
 //! sanitize/global-state refresh, then snapshot check.
 #![allow(clippy::too_many_arguments)]
@@ -40,7 +40,7 @@ pub enum Boundary {
     Neumann,
 }
 
-/// Diffusion configuration for the spatial RK4 solver.
+/// Diffusion configuration for the spatial solver.
 ///
 /// Details:
 /// - Purpose: Stores per-species diffusion strengths, per-axis grid spacing,
@@ -85,29 +85,23 @@ pub(super) enum Dynamics {
     LocalReplicatorFrequency,
 }
 
-/// Scratch buffers for spatial RK4 (avoid repeated allocations).
+/// Scratch buffers for spatial RK2 (avoid repeated allocations).
 ///
 /// Details:
 /// - Purpose: Owns stage derivatives and temporary spatial storage for the hot
 ///   integration loop.
-/// - Parameters:
-///   - (none): Construct with `SpatialRk4Scratch::new`.
-struct SpatialRk4Scratch {
+struct SpatialRk2Scratch {
     k1: ArrayD<f64>,
     k2: ArrayD<f64>,
-    k3: ArrayD<f64>,
-    k4: ArrayD<f64>,
     tmp: ArrayD<f64>,
 }
 
-impl SpatialRk4Scratch {
+impl SpatialRk2Scratch {
     #[inline]
     fn new(shape: &[usize]) -> Self {
         Self {
             k1: ArrayD::zeros(shape),
             k2: ArrayD::zeros(shape),
-            k3: ArrayD::zeros(shape),
-            k4: ArrayD::zeros(shape),
             tmp: ArrayD::zeros(shape),
         }
     }
@@ -277,7 +271,7 @@ fn rhs_inplace(
     Ok(())
 }
 
-/// One RK4 reaction-diffusion step writing into `out`.
+/// One midpoint RK2 reaction-diffusion step writing into `out`.
 ///
 /// Details:
 /// - Purpose: Advances one raw deterministic spatial step without enforcing
@@ -289,10 +283,10 @@ fn rhs_inplace(
 ///   - `diffusion`: Diffusion configuration.
 ///   - `dt`: Step size.
 ///   - `layout`: Cached species-last shape/stride facts.
-///   - `sc`: Reusable RK4 scratch storage.
+///   - `sc`: Reusable RK2 scratch storage.
 ///   - `out`: Raw next-space destination.
 #[inline]
-fn rk4_step_inplace_raw(
+fn rk2_step_inplace_raw(
     space: &ArrayD<f64>,
     growth_vector: &Array1<f64>,
     interaction_matrix: &Array2<f64>,
@@ -300,7 +294,7 @@ fn rk4_step_inplace_raw(
     dt: f64,
     layout: &SpatialLayout,
     dynamics: Dynamics,
-    sc: &mut SpatialRk4Scratch,
+    sc: &mut SpatialRk2Scratch,
     out: &mut ArrayD<f64>,
 ) -> Result<()> {
     let u = space.as_slice_memory_order().ok_or_else(|| {
@@ -310,7 +304,6 @@ fn rk4_step_inplace_raw(
         )
     })?;
     let half_dt = 0.5 * dt;
-    let dt_over_6 = dt / 6.0;
 
     rhs_inplace(
         space,
@@ -350,70 +343,12 @@ fn rk4_step_inplace_raw(
             .k2
             .as_slice_memory_order()
             .expect("scratch is contiguous");
-        let tmp = sc
-            .tmp
-            .as_slice_memory_order_mut()
-            .expect("scratch is contiguous");
-        for i in 0..u.len() {
-            tmp[i] = u[i] + half_dt * k2[i];
-        }
-    }
-    rhs_inplace(
-        &sc.tmp,
-        growth_vector,
-        interaction_matrix,
-        diffusion,
-        layout,
-        dynamics,
-        &mut sc.k3,
-    )?;
-
-    {
-        let k3 = sc
-            .k3
-            .as_slice_memory_order()
-            .expect("scratch is contiguous");
-        let tmp = sc
-            .tmp
-            .as_slice_memory_order_mut()
-            .expect("scratch is contiguous");
-        for i in 0..u.len() {
-            tmp[i] = u[i] + dt * k3[i];
-        }
-    }
-    rhs_inplace(
-        &sc.tmp,
-        growth_vector,
-        interaction_matrix,
-        diffusion,
-        layout,
-        dynamics,
-        &mut sc.k4,
-    )?;
-
-    {
-        let k1 = sc
-            .k1
-            .as_slice_memory_order()
-            .expect("scratch is contiguous");
-        let k2 = sc
-            .k2
-            .as_slice_memory_order()
-            .expect("scratch is contiguous");
-        let k3 = sc
-            .k3
-            .as_slice_memory_order()
-            .expect("scratch is contiguous");
-        let k4 = sc
-            .k4
-            .as_slice_memory_order()
-            .expect("scratch is contiguous");
         let y = out
             .as_slice_memory_order_mut()
             .expect("output is contiguous");
 
         for i in 0..u.len() {
-            y[i] = u[i] + dt_over_6 * (k1[i] + 2.0 * k2[i] + 2.0 * k3[i] + k4[i]);
+            y[i] = u[i] + dt * k2[i];
         }
     }
 
@@ -440,7 +375,7 @@ pub(super) fn sanitize_space_and_refresh_state(
     else {
         return Err(Error::new(
             ErrorKind::InvalidInput,
-            "spatial RK4 currently supports Mode::Population only",
+            "spatial solver currently supports Mode::Population only",
         ));
     };
 
@@ -448,7 +383,7 @@ pub(super) fn sanitize_space_and_refresh_state(
     let Some(space) = gs.space.as_mut() else {
         return Err(Error::new(
             ErrorKind::InvalidInput,
-            "spatial RK4 requires SystemState.space",
+            "spatial solver requires SystemState.space",
         ));
     };
     let u = space.as_slice_memory_order_mut().ok_or_else(|| {
@@ -514,7 +449,7 @@ pub(super) fn sanitize_local_simplex_space_and_refresh_state(
     let Mode::Frequency { cutoff } = gs.mode else {
         return Err(Error::new(
             ErrorKind::InvalidInput,
-            "spatial replicator RK4 currently supports Mode::Frequency only",
+            "spatial replicator solver currently supports Mode::Frequency only",
         ));
     };
 
@@ -522,7 +457,7 @@ pub(super) fn sanitize_local_simplex_space_and_refresh_state(
     let Some(space) = gs.space.as_mut() else {
         return Err(Error::new(
             ErrorKind::InvalidInput,
-            "spatial RK4 requires SystemState.space",
+            "spatial solver requires SystemState.space",
         ));
     };
     let u = space.as_slice_memory_order_mut().ok_or_else(|| {
@@ -704,10 +639,9 @@ fn solve_impl(
     let Some(space) = gs_i.space.take() else {
         return Err(Error::new(
             ErrorKind::InvalidInput,
-            "spatial RK4 requires SystemState.space",
+            "spatial solver requires SystemState.space",
         ));
     };
-    let space = space.to_owned();
     let layout = SpatialLayout::new(space.shape())?;
 
     validate_inputs(
@@ -721,9 +655,14 @@ fn solve_impl(
     )?;
 
     let d = layout.num_species;
-    let growth_vector_owned = growth_vector
-        .map(|x| x.to_owned())
-        .unwrap_or_else(|| Array1::zeros(d));
+    let zero_growth;
+    let growth_vector = match growth_vector {
+        Some(growth_vector) => growth_vector,
+        None => {
+            zero_growth = Array1::zeros(d);
+            &zero_growth
+        }
+    };
 
     if gs_i.state.len() != d {
         gs_i.state = Array1::zeros(d);
@@ -760,13 +699,8 @@ fn solve_impl(
 
     let shape = layout.shape.clone();
     let mode0 = gs_curr.mode.clone();
-    let mut gs_next = SystemState::from_arrays(
-        mode0,
-        0,
-        Array1::zeros(d),
-        Some(ArrayD::zeros(shape.clone())),
-    );
-    let mut sc = SpatialRk4Scratch::new(&shape);
+    let mut gs_next = SystemState::from_arrays(mode0, 0, Array1::zeros(d), None);
+    let mut sc = SpatialRk2Scratch::new(&shape);
     let mut next_space = ArrayD::zeros(shape);
     let mut noise_ctx = NoiseContext::new(d);
     let mut rng = SmallRng::from_rng(&mut rand::rng());
@@ -777,9 +711,9 @@ fn solve_impl(
     let mut termination_reason = TerminationReason::MaxSteps;
     for step in 1..=num_steps {
         let curr_space = gs_curr.space.as_ref().expect("space initialized");
-        rk4_step_inplace_raw(
+        rk2_step_inplace_raw(
             curr_space,
-            &growth_vector_owned,
+            growth_vector,
             interaction_matrix,
             diffusion,
             dt,
@@ -1018,7 +952,7 @@ mod tests {
 
     fn temp_output_dir(test_name: &str) -> std::path::PathBuf {
         let path = std::env::temp_dir().join(format!(
-            "glv_spatial_rk4_{test_name}_{}",
+            "glv_spatial_rk2_{test_name}_{}",
             std::process::id()
         ));
         let _ = fs::remove_dir_all(&path);

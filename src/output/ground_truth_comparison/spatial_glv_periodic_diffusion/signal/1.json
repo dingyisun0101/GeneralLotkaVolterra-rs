@@ -1,1 +1,1 @@
-{"file":1,"mode":{"Population":{"cutoff":null,"carrying_capacity":null}},"samples":[{"time":0,"state":{"v":1,"dim":[2],"data":[0.8,1.0]},"mass":2.0},{"time":100,"state":{"v":1,"dim":[2],"data":[0.7991187690798391,0.9942189012867109]},"mass":2.0}]}
+{"file":1,"mode":{"Population":{"cutoff":null,"carrying_capacity":null}},"samples":[{"time":0,"state":{"v":1,"dim":[2],"data":[0.8,1.0]},"mass":2.0},{"time":100,"state":{"v":1,"dim":[2],"data":[0.7991187690843977,0.9942189013196168]},"mass":2.0}]}

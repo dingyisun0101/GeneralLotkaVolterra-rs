@@ -38,6 +38,21 @@ pub struct SpaceSeries<T> {
     pub samples: Vec<SpaceRecord<T>>,
 }
 
+#[derive(Serialize)]
+struct BorrowedSpaceRecord<'a> {
+    time: usize,
+    state: &'a Array1<f64>,
+    space: &'a ArrayD<f64>,
+    mass: f64,
+}
+
+#[derive(Serialize)]
+struct BorrowedSpaceSeries<'a> {
+    file: usize,
+    mode: &'a Mode<f64>,
+    samples: [BorrowedSpaceRecord<'a>; 1],
+}
+
 pub struct SpaceWriter {
     dir: PathBuf,
     mode: Mode<f64>,
@@ -81,6 +96,13 @@ impl SpaceWriter {
         let Some(space) = gs.space.as_ref() else {
             return Ok(());
         };
+
+        if self.samples_per_chunk == 1 {
+            self.flush()?;
+            self.write_borrowed_sample(gs, space)?;
+            self.stats.samples += 1;
+            return Ok(());
+        }
 
         if self.samples.len() >= self.samples_per_chunk {
             self.flush()?;
@@ -134,6 +156,42 @@ impl SpaceWriter {
             .stats
             .estimated_bytes
             .saturating_add(estimate_file_bytes(self.sample_bytes, series_sample_len));
+        Ok(())
+    }
+
+    fn write_borrowed_sample(&mut self, gs: &SystemState<f64>, space: &ArrayD<f64>) -> Result<()> {
+        let file_path = self.dir.join(format!("{}.json", self.file_index));
+        let file = File::create(&file_path).map_err(|e| {
+            Error::new(
+                e.kind(),
+                format!("SpaceWriter::flush: create {}: {e}", file_path.display()),
+            )
+        })?;
+        let writer = BufWriter::new(file);
+        let series = BorrowedSpaceSeries {
+            file: self.file_index,
+            mode: &self.mode,
+            samples: [BorrowedSpaceRecord {
+                time: gs.time,
+                state: &gs.state,
+                space,
+                mass: gs.mass,
+            }],
+        };
+
+        serde_json::to_writer(writer, &series).map_err(|e| {
+            Error::new(
+                ErrorKind::InvalidData,
+                format!("SpaceWriter::flush: serialize {}: {e}", file_path.display()),
+            )
+        })?;
+
+        self.file_index += 1;
+        self.stats.files += 1;
+        self.stats.estimated_bytes = self
+            .stats
+            .estimated_bytes
+            .saturating_add(estimate_file_bytes(self.sample_bytes, 1));
         Ok(())
     }
 }

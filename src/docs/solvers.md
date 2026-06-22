@@ -80,7 +80,7 @@ appropriate invariant boundary afterward:
 - spatial GLV: population feasibility, optional carrying capacity, and
   aggregate refresh.
 
-## Spatial RK4
+## Spatial RK2
 
 The spatial solver evolves fields stored in `SystemState.space`. Spatial arrays
 are species-last:
@@ -96,10 +96,11 @@ d n_i(x) / dt = n_i(x) * (g_i + sum_j V_ij n_j(x)) + D_i * laplacian(n_i)(x)
 ```
 
 Diffusion uses a finite-difference Laplacian over all spatial axes with either
-periodic or Neumann boundaries. The spatial replicator variant uses the local
-replicator right-hand side and normalizes each spatial cell onto the simplex
-after every raw RK4 step. The global `SystemState.state` vector is refreshed
-from spatial totals or cell averages after each step.
+periodic or Neumann boundaries. The spatial solver advances each raw step with
+midpoint RK2 to keep scratch storage smaller than RK4. The spatial replicator
+variant uses the local replicator right-hand side and normalizes each spatial
+cell onto the simplex after every raw RK2 step. The global `SystemState.state`
+vector is refreshed from spatial totals or cell averages after each step.
 
 Spatial solves have two save cadences:
 
@@ -155,7 +156,7 @@ configured observable and uses L-infinity distance.
   applying shared noise to global state.
 - `src/solvers/spatial/mod.rs`: spatial module surface.
 - `src/solvers/spatial/rk4.rs`: arbitrary-dimensional spatial GLV and
-  local-replicator RK4 solvers.
+  local-replicator RK2 solvers. The module name is retained for API compatibility.
 - `src/solvers/spatial/noise.rs`: spatial compatibility wrapper for applying
   shared noise to each cell's local species vector.
 - `src/solvers/termination.rs`: shared early-termination configuration and

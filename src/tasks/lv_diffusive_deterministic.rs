@@ -3,7 +3,7 @@ Deterministic diffusive GLV task.
 
 Purpose:
     This task wires an arbitrary-dimensional population-density field into the
-    spatial RK4 GLV reaction-diffusion solver and writes automatically sized
+    spatial GLV reaction-diffusion solver and writes automatically sized
     JSON time-series chunks.
 */
 #![allow(clippy::too_many_arguments)]
