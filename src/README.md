@@ -160,7 +160,9 @@ deterministic raw step -> sanitize -> optional noise -> sanitize -> snapshot
 Core API:
 
 ```rust
-solvers::solve(
+use general_lotka_volterra_rs::prelude::*;
+
+solve(
     state,
     interaction_matrix,
     growth_vector,
@@ -182,6 +184,10 @@ Noise::none()
 Noise::proportional_gaussian(sigma)
 Noise::demographic_gaussian(sigma)
 ```
+
+Applications can use the prelude to import the common solver, state,
+termination, noise, spatial diffusion, metadata, output, and ndarray array
+types in one line.
 
 Core types:
 

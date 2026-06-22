@@ -19,7 +19,7 @@ pub mod termination;
 
 use crate::SystemState;
 use crate::solvers::noise::Noise;
-use crate::solvers::spatial::rk2::Diffusion;
+use crate::solvers::spatial::Diffusion;
 use crate::solvers::termination::{SolveOutcome, TerminationConfig};
 
 /// Deterministic dynamics family to integrate.

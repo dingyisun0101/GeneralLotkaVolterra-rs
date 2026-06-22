@@ -17,6 +17,7 @@ pub const SIGNAL_OUTPUT_FILE_SIZE: usize = 32 * 1024 * 1024;
 pub const SPACE_OUTPUT_FILE_SIZE: usize = 1024 * 1024 * 1024;
 
 pub mod io;
+pub mod prelude;
 pub mod solvers;
 pub mod system_state;
 pub mod tasks;

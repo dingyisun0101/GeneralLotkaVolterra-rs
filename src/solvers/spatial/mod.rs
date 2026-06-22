@@ -8,3 +8,5 @@ Purpose:
 
 pub mod noise;
 pub mod rk2;
+
+pub use rk2::{Boundary, Diffusion};
