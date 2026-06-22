@@ -14,7 +14,7 @@ pub const TOTAL_STEPS: usize = 10_000;
 // Save both aggregate signal and full spatial field every N solver steps.
 pub const SAVE_INTERVAL: usize = 500;
 
-// RK4 time step. Spatial explicit diffusion can require smaller values.
+// RK2 time step. Spatial explicit diffusion can require smaller values.
 pub const DT: f64 = 0.003;
 
 // Local frequencies below this threshold are removed during cell sanitization.

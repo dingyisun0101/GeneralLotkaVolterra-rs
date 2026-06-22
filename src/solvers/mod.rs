@@ -19,7 +19,7 @@ pub mod termination;
 
 use crate::SystemState;
 use crate::solvers::noise::Noise;
-use crate::solvers::spatial::rk4::Diffusion;
+use crate::solvers::spatial::rk2::Diffusion;
 use crate::solvers::termination::{SolveOutcome, TerminationConfig};
 
 /// Deterministic dynamics family to integrate.
@@ -101,7 +101,7 @@ pub fn solve(
                 diffusion,
                 save_space_interval,
             },
-        ) => spatial::rk4::solve_with_termination(
+        ) => spatial::rk2::solve_with_termination(
             gs_i,
             interaction_matrix,
             growth_vector,
@@ -121,7 +121,7 @@ pub fn solve(
                 diffusion,
                 save_space_interval,
             },
-        ) => spatial::rk4::solve_replicator_with_termination(
+        ) => spatial::rk2::solve_replicator_with_termination(
             gs_i,
             interaction_matrix,
             growth_vector,

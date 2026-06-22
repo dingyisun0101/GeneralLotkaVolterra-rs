@@ -15,7 +15,7 @@ use std::sync::atomic::AtomicUsize;
 use ndarray::{Array1, Array2};
 
 use crate::solvers::noise::Noise;
-use crate::solvers::spatial::rk4::Diffusion;
+use crate::solvers::spatial::rk2::Diffusion;
 use crate::solvers::termination::TerminationConfig;
 use crate::solvers::{Dynamics, SolveConfig, Space, solve};
 use crate::tasks::metadata::{TaskOutcome, output_label, prepare_output_dir, save_metadata};

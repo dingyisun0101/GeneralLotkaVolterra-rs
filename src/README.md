@@ -154,7 +154,7 @@ Purpose:
 `solvers` owns numerical evolution. The top-level API is a single dispatcher:
 
 ```text
-RK4 raw step -> sanitize -> optional noise -> sanitize -> snapshot
+deterministic raw step -> sanitize -> optional noise -> sanitize -> snapshot
 ```
 
 Core API:
@@ -204,7 +204,7 @@ the last axis:
 space[x0, x1, ..., x{k-1}, species]
 ```
 
-Lower-level spatial and non-spatial RK4 modules remain public for custom
+Lower-level non-spatial RK4 and spatial RK2 modules remain public for custom
 workflows, but task runners and normal application code use `solvers::solve`.
 
 ## Tasks

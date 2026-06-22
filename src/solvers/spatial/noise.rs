@@ -14,7 +14,7 @@ use rand::Rng;
 use crate::SystemState;
 use crate::solvers::noise::apply_noise_to_slice;
 
-use super::rk4::{
+use super::rk2::{
     Dynamics, SpatialLayout, sanitize_local_simplex_space_and_refresh_state,
     sanitize_space_and_refresh_state,
 };
@@ -40,7 +40,7 @@ pub(super) fn apply_noise_inplace(
     let Some(space) = state.space.as_mut() else {
         return Err(Error::new(
             ErrorKind::InvalidInput,
-            "spatial RK4 requires SystemState.space",
+            "spatial RK2 requires SystemState.space",
         ));
     };
     let u = space.as_slice_memory_order_mut().ok_or_else(|| {

@@ -155,8 +155,8 @@ configured observable and uses L-infinity distance.
 - `src/solvers/non_spatial/noise.rs`: non-spatial compatibility wrapper for
   applying shared noise to global state.
 - `src/solvers/spatial/mod.rs`: spatial module surface.
-- `src/solvers/spatial/rk4.rs`: arbitrary-dimensional spatial GLV and
-  local-replicator RK2 solvers. The module name is retained for API compatibility.
+- `src/solvers/spatial/rk2.rs`: arbitrary-dimensional spatial GLV and
+  local-replicator RK2 solvers.
 - `src/solvers/spatial/noise.rs`: spatial compatibility wrapper for applying
   shared noise to each cell's local species vector.
 - `src/solvers/termination.rs`: shared early-termination configuration and

@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use general_lotka_volterra_rs::solvers::noise::Noise;
-use general_lotka_volterra_rs::solvers::spatial::rk4::{Boundary, Diffusion};
+use general_lotka_volterra_rs::solvers::spatial::rk2::{Boundary, Diffusion};
 use general_lotka_volterra_rs::solvers::termination::TerminationConfig;
 use general_lotka_volterra_rs::solvers::{Dynamics, SolveConfig, Space, solve};
 use general_lotka_volterra_rs::tasks::metadata::{

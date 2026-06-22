@@ -1,2 +1,25 @@
-/target
-/output
+# Rust build output and package artifacts.
+target/
+src/target/
+
+# Generated solver/example data.
+output/
+src/output/
+**/output/
+**/outputs/
+**/data/
+**/results/
+**/processed/
+**/plots/
+
+# Python/runtime caches produced by examples or notebooks.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environment/editor files.
+.env
+.env.*
+.DS_Store

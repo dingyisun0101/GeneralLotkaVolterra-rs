@@ -2,7 +2,7 @@
 // run compares fresh Rust and SciPy outputs.
 pub const OUTPUT: &str = "output/ground_truth_comparison";
 
-// Fixed-step RK4 settings for the Rust solver. SciPy uses adaptive integration
+// Fixed-step settings for the Rust solvers. SciPy uses adaptive integration
 // with much tighter tolerances, so Rust should converge toward the SciPy answer
 // as DT decreases.
 pub const DT: f64 = 0.001;
@@ -11,7 +11,7 @@ pub const SAVE_INTERVAL: usize = NUM_STEPS;
 
 // External reference tolerances. These are intentionally looser than SciPy's
 // internal tolerances because they compare adaptive high-accuracy integration
-// against this crate's fixed-step RK4 plus sanitization.
+// against this crate's fixed-step solvers plus sanitization.
 pub const REPLICATOR_TOLERANCE: f64 = 1e-7;
 pub const SPATIAL_GLV_TOLERANCE: f64 = 1e-6;
 
