@@ -1,0 +1,11 @@
+/home/mgr/Projects/DSES/glv/src/target/debug/deps/console-874e4cebe5a964b1.d: /home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/lib.rs /home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/common_term.rs /home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/kb.rs /home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/term.rs /home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/unix_term.rs /home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/utils.rs /home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/ansi.rs
+
+/home/mgr/Projects/DSES/glv/src/target/debug/deps/libconsole-874e4cebe5a964b1.rmeta: /home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/lib.rs /home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/common_term.rs /home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/kb.rs /home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/term.rs /home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/unix_term.rs /home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/utils.rs /home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/ansi.rs
+
+/home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/lib.rs:
+/home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/common_term.rs:
+/home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/kb.rs:
+/home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/term.rs:
+/home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/unix_term.rs:
+/home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/utils.rs:
+/home/mgr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/console-0.16.2/src/ansi.rs:
