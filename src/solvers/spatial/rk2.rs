@@ -21,6 +21,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use ndarray::{Array1, Array2, ArrayD};
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
+use rayon::prelude::*;
 
 use super::noise::{Noise, NoiseContext, apply_noise_inplace};
 use crate::io::signal::SignalWriter;
@@ -202,7 +203,9 @@ fn rhs_inplace(
 
     let d = layout.num_species;
 
-    for cell in 0..layout.num_cells {
+    let inv_dx2: Vec<f64> = diffusion.spacing.iter().map(|dx| 1.0 / (dx * dx)).collect();
+
+    y.par_chunks_mut(d).enumerate().for_each(|(cell, y_cell)| {
         let base = cell * d;
 
         let upsilon = match dynamics {
@@ -234,8 +237,6 @@ fn rhs_inplace(
                 let axis_len = layout.shape[axis];
                 let stride = layout.strides[axis];
                 let coord = (base / stride) % axis_len;
-                let inv_dx2 = 1.0 / (diffusion.spacing[axis] * diffusion.spacing[axis]);
-
                 let plus_idx = if coord + 1 < axis_len {
                     center_idx + stride
                 } else {
@@ -254,7 +255,7 @@ fn rhs_inplace(
                     }
                 };
 
-                laplacian += (u[plus_idx] + u[minus_idx] - 2.0 * center) * inv_dx2;
+                laplacian += (u[plus_idx] + u[minus_idx] - 2.0 * center) * inv_dx2[axis];
             }
 
             let reaction = match dynamics {
@@ -264,9 +265,9 @@ fn rhs_inplace(
                 }
             };
 
-            y[center_idx] = reaction + diffusion.coefficients[species] * laplacian;
+            y_cell[species] = reaction + diffusion.coefficients[species] * laplacian;
         }
-    }
+    });
 
     Ok(())
 }
@@ -324,9 +325,12 @@ fn rk2_step_inplace_raw(
             .tmp
             .as_slice_memory_order_mut()
             .expect("scratch is contiguous");
-        for i in 0..u.len() {
-            tmp[i] = u[i] + half_dt * k1[i];
-        }
+        tmp.par_iter_mut()
+            .zip(u.par_iter())
+            .zip(k1.par_iter())
+            .for_each(|((tmp_i, u_i), k1_i)| {
+                *tmp_i = *u_i + half_dt * *k1_i;
+            });
     }
     rhs_inplace(
         &sc.tmp,
@@ -347,9 +351,12 @@ fn rk2_step_inplace_raw(
             .as_slice_memory_order_mut()
             .expect("output is contiguous");
 
-        for i in 0..u.len() {
-            y[i] = u[i] + dt * k2[i];
-        }
+        y.par_iter_mut()
+            .zip(u.par_iter())
+            .zip(k2.par_iter())
+            .for_each(|((y_i, u_i), k2_i)| {
+                *y_i = *u_i + dt * *k2_i;
+            });
     }
 
     Ok(())
@@ -393,24 +400,40 @@ pub(super) fn sanitize_space_and_refresh_state(
         )
     })?;
 
-    gs.state.fill(0.0);
-    for cell in 0..layout.num_cells {
-        let base = cell * layout.num_species;
-        for species in 0..layout.num_species {
-            let idx = base + species;
-            if !u[idx].is_finite() || u[idx] <= 0.0 || u[idx] < cutoff {
-                u[idx] = 0.0;
-            }
-            gs.state[species] += u[idx];
-        }
+    let totals = u
+        .par_chunks_mut(layout.num_species)
+        .fold(
+            || vec![0.0; layout.num_species],
+            |mut totals, cell| {
+                for species in 0..layout.num_species {
+                    if !cell[species].is_finite() || cell[species] <= 0.0 || cell[species] < cutoff
+                    {
+                        cell[species] = 0.0;
+                    }
+                    totals[species] += cell[species];
+                }
+                totals
+            },
+        )
+        .reduce(
+            || vec![0.0; layout.num_species],
+            |mut a, b| {
+                for species in 0..layout.num_species {
+                    a[species] += b[species];
+                }
+                a
+            },
+        );
+    for (state_i, total_i) in gs.state.iter_mut().zip(totals) {
+        *state_i = total_i;
     }
 
     let mut total = gs.state.sum();
     if let Some(capacity) = carrying_capacity {
         if capacity <= 0.0 {
-            for x in u.iter_mut() {
+            u.par_iter_mut().for_each(|x| {
                 *x = 0.0;
-            }
+            });
             gs.state.fill(0.0);
             gs.mass = 0.0;
             return Ok(());
@@ -418,9 +441,9 @@ pub(super) fn sanitize_space_and_refresh_state(
 
         if total > capacity && total > 0.0 {
             let scale = capacity / total;
-            for x in u.iter_mut() {
+            u.par_iter_mut().for_each(|x| {
                 *x *= scale;
-            }
+            });
             for x in gs.state.iter_mut() {
                 *x *= scale;
             }
@@ -467,34 +490,49 @@ pub(super) fn sanitize_local_simplex_space_and_refresh_state(
         )
     })?;
 
-    gs.state.fill(0.0);
-    for cell in 0..layout.num_cells {
-        let base = cell * layout.num_species;
-        let mut local_sum = 0.0;
+    let totals = u
+        .par_chunks_mut(layout.num_species)
+        .fold(
+            || vec![0.0; layout.num_species],
+            |mut totals, cell| {
+                let mut local_sum = 0.0;
 
-        for species in 0..layout.num_species {
-            let idx = base + species;
-            if !u[idx].is_finite() || u[idx] <= 0.0 || u[idx] < cutoff {
-                u[idx] = 0.0;
-            }
-            local_sum += u[idx];
-        }
+                for species in 0..layout.num_species {
+                    if !cell[species].is_finite() || cell[species] <= 0.0 || cell[species] < cutoff
+                    {
+                        cell[species] = 0.0;
+                    }
+                    local_sum += cell[species];
+                }
 
-        if local_sum > 0.0 {
-            let inv = 1.0 / local_sum;
-            for species in 0..layout.num_species {
-                let idx = base + species;
-                u[idx] *= inv;
-                gs.state[species] += u[idx];
-            }
-        } else {
-            let uniform = 1.0 / layout.num_species as f64;
-            for species in 0..layout.num_species {
-                let idx = base + species;
-                u[idx] = uniform;
-                gs.state[species] += uniform;
-            }
-        }
+                if local_sum > 0.0 {
+                    let inv = 1.0 / local_sum;
+                    for species in 0..layout.num_species {
+                        cell[species] *= inv;
+                        totals[species] += cell[species];
+                    }
+                } else {
+                    let uniform = 1.0 / layout.num_species as f64;
+                    for species in 0..layout.num_species {
+                        cell[species] = uniform;
+                        totals[species] += uniform;
+                    }
+                }
+
+                totals
+            },
+        )
+        .reduce(
+            || vec![0.0; layout.num_species],
+            |mut a, b| {
+                for species in 0..layout.num_species {
+                    a[species] += b[species];
+                }
+                a
+            },
+        );
+    for (state_i, total_i) in gs.state.iter_mut().zip(totals) {
+        *state_i = total_i;
     }
 
     let inv_cells = 1.0 / layout.num_cells as f64;
