@@ -93,7 +93,6 @@ pub(super) enum Dynamics {
 ///   integration loop.
 struct SpatialRk2Scratch {
     k1: ArrayD<f64>,
-    k2: ArrayD<f64>,
     tmp: ArrayD<f64>,
 }
 
@@ -102,7 +101,6 @@ impl SpatialRk2Scratch {
     fn new(shape: &[usize]) -> Self {
         Self {
             k1: ArrayD::zeros(shape),
-            k2: ArrayD::zeros(shape),
             tmp: ArrayD::zeros(shape),
         }
     }
@@ -339,12 +337,12 @@ fn rk2_step_inplace_raw(
         diffusion,
         layout,
         dynamics,
-        &mut sc.k2,
+        &mut sc.k1,
     )?;
 
     {
-        let k2 = sc
-            .k2
+        let k = sc
+            .k1
             .as_slice_memory_order()
             .expect("scratch is contiguous");
         let y = out
@@ -353,9 +351,9 @@ fn rk2_step_inplace_raw(
 
         y.par_iter_mut()
             .zip(u.par_iter())
-            .zip(k2.par_iter())
-            .for_each(|((y_i, u_i), k2_i)| {
-                *y_i = *u_i + dt * *k2_i;
+            .zip(k.par_iter())
+            .for_each(|((y_i, u_i), k_i)| {
+                *y_i = *u_i + dt * *k_i;
             });
     }
 
