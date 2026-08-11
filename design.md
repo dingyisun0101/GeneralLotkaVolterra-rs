@@ -175,6 +175,11 @@ All three slots are always populated. A non-spatial state stores a concrete
 checkpoint can therefore select every schema field and encode non-spatial
 space as JSON `null`.
 
+The schema is model-owned: GLV supplies it through
+`ScientificProject::load_with_state_schema`. User projects and Dispatcher
+stages contain only `fixed.json`, `sweep.json`, and `paths.json`; they cannot
+drift by copying or overriding `state.json`.
+
 ### Authoritative state and numerical scratch
 
 The engine's `SystemState` is the only authoritative model state. Kernels and

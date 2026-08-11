@@ -91,6 +91,10 @@ fn every_user_example_is_an_independent_glv_crate_and_project() {
         assert!(root.join("Cargo.toml").is_file(), "{name} manifest");
         assert!(root.join("README.md").is_file(), "{name} guide");
         assert!(root.join("src/main.rs").is_file(), "{name} binary");
+        assert!(
+            !root.join("config/state.json").exists(),
+            "{name} uses GLV's crate-owned schema"
+        );
         let project = load_glv_project(&root).unwrap();
         assert!(project.task_count() > 0, "{name} has at least one task");
         for task in project.task_configs() {

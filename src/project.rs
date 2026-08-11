@@ -1,15 +1,16 @@
-//! GLV validation for conventional Scientific Workflow projects.
+//! GLV project loading with one crate-owned Scientific Workflow schema.
 //!
-//! Workflow owns project loading and task expansion. This module adds only the
-//! model-family contract that the project state schema must name the three
-//! canonical GLV fields in their canonical order.
+//! Workflow owns project loading and task expansion. This module supplies the
+//! model-family schema and checks that it names the three canonical GLV fields
+//! in their canonical order.
 
 use std::path::PathBuf;
 
 use scientific_workflow::project::{ScientificProject, ScientificProjectError};
+use scientific_workflow::system_state::StateError;
 use thiserror::Error;
 
-use crate::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD};
+use crate::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD, load_state_schema};
 
 const GLV_FIELDS: [&str; 3] = [ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD];
 
@@ -17,6 +18,9 @@ const GLV_FIELDS: [&str; 3] = [ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD];
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum GlvProjectError {
+    /// The crate-owned canonical state schema could not be loaded.
+    #[error(transparent)]
+    State(#[from] StateError),
     /// Scientific Workflow rejected the conventional project documents.
     #[error(transparent)]
     Workflow(#[from] ScientificProjectError),
@@ -30,11 +34,11 @@ pub enum GlvProjectError {
     },
 }
 
-/// Loads a conventional Workflow project and validates its GLV state schema.
+/// Loads task configuration with GLV's crate-owned canonical state schema.
 pub fn load_glv_project(
     project_root: impl Into<PathBuf>,
 ) -> Result<ScientificProject, GlvProjectError> {
-    let project = ScientificProject::load(project_root)?;
+    let project = ScientificProject::load_with_state_schema(project_root, load_state_schema()?)?;
     validate_glv_project(&project)?;
     Ok(project)
 }

@@ -6,10 +6,11 @@
 - spatial local-frequency replicator reaction–diffusion with RK2; and
 - spatial General Lotka–Volterra population reaction–diffusion with RK2.
 
-Scientific Workflow owns state schemas, simulation time, project
+Scientific Workflow owns the schema representation, simulation time, project
 configuration, execution scopes, progress reporting, recording, integrity
-checks, and reconstruction. This crate owns the ecological equations,
-interaction matrices, deterministic kernels, noise plugins, and invariants.
+checks, and reconstruction. This crate owns its canonical schema content, the
+ecological equations, interaction matrices, deterministic kernels, noise
+plugins, and invariants.
 
 The minimum supported toolchain is Rust 1.97 with edition 2024.
 
@@ -35,8 +36,9 @@ println!("results: {}", execution.directory().display());
 ```
 
 The ordinary prelude exports only `run` and `GlvTemplate`. `run` loads the
-Workflow project whose root contains that configuration folder, validates its
-state schema, expands every task, creates a collision-resistant output scope,
+Workflow project whose root contains that configuration folder, supplies GLV's
+crate-owned canonical state schema, expands every task, creates a
+collision-resistant output scope,
 constructs the selected model, evolves it, records it, verifies its final
 checkpoint, and completes progress reporting.
 
@@ -112,6 +114,8 @@ after kernel, invariant, noise, and final-invariant work succeeds.
 
 Spatial population `total` preserves the historical rounded aggregate
 convention. Spatial and aggregate arrays retain full floating-point values.
+Individual projects do not copy this file and cannot override the model's
+state contract. Workflow embeds the resolved schema in every recording.
 
 ## Interaction matrices
 
@@ -143,8 +147,7 @@ examples/<model>/
 ├── config/
 │   ├── fixed.json
 │   ├── sweep.json
-│   ├── paths.json
-│   └── state.json
+│   └── paths.json
 ├── inputs/
 │   └── interaction.json
 └── src/
@@ -156,6 +159,15 @@ run independently. Its `main.rs` selects one `GlvTemplate` and passes its
 `config` directory to `run`; it contains no model construction, task loop,
 recording code, or custom configuration struct. Relative paths are resolved
 against that example's project root.
+
+## Dispatcher handoff
+
+Dispatcher should treat GLV as an opaque project runner. Its adapter selects a
+`GlvTemplate`, passes the stage's `config` directory to `run`, and retains the
+returned `ExecutionScope` as the source of verified task recordings. It does
+not supply a state schema, assemble models, interpret checkpoint internals, or
+create another output path. Advanced GLV composition remains available through
+`advanced::prelude`, but it is not part of the ordinary Dispatcher path.
 
 Spatial models use PiP's `SquareLatticeConfig` as the sole owner of shape,
 boundary condition, spacing, neighbor lookup, and Laplacian behavior. GLV's
