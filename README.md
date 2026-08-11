@@ -13,18 +13,16 @@ interaction matrices, deterministic kernels, noise plugins, and invariants.
 
 The minimum supported toolchain is Rust 1.97 with edition 2024.
 
+The current Workflow-native implementation and documentation live on the
+[`sw-version` GitHub branch](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version).
+
 ## Concrete simulation API
 
-Applications normally import one of the three concrete simulations directly:
+Applications can bring the complete model-facing API, ndarray boundary types,
+and Scientific Workflow orchestration types into scope through one prelude:
 
 ```rust
-use general_lotka_volterra_rs::kernel::{
-    InMemorySource, InteractionSource,
-};
-use general_lotka_volterra_rs::{
-    MeanFieldReplicator, MeanFieldReplicatorConfig, TimeStep,
-};
-use ndarray::{Array1, arr2};
+use general_lotka_volterra_rs::prelude::*;
 
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
 let interaction = InMemorySource::new(arr2(&[
@@ -93,6 +91,8 @@ Runnable simulation examples use the conventional project structure:
 
 ```text
 examples/<model>/
+├── Cargo.toml
+├── README.md
 ├── config/
 │   ├── fixed.json
 │   ├── sweep.json
@@ -100,32 +100,41 @@ examples/<model>/
 │   └── state.json
 ├── inputs/
 │   └── interaction.json
-└── main.rs
+└── src/
+    └── main.rs
 ```
 
-`ScientificProject` parses all four documents. `task_configs()` expands the
-sweep lazily, and each `TaskConfig` is decoded completely before numerical
-construction. Relative paths are resolved against that example's project
-root.
+Each directory is a complete crate and Workflow project that can be copied and
+run independently. `load_glv_project` delegates all four documents to
+`ScientificProject`, then checks the canonical GLV state fields.
+`task_configs()` expands the sweep lazily, and each `TaskConfig` decodes values
+directly into standard or GLV domain types before numerical construction. User
+code does not need mirror task, boundary, or recording configuration structs.
+Relative paths are resolved against that example's project root.
 
 Each run creates a new collision-resistant `ExecutionScope`; existing output
 is never deleted or overwritten. Examples execute tasks sequentially to make
 the orchestration lifecycle explicit. Task-level parallelism can later consume
 the same lazy task iterator without changing simulation internals.
 
-Run an example with its checked-in project:
+The example READMEs focus on the governing equations, parameter meanings,
+state interpretation, and usage:
+
+- [mean-field replicator](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version/examples/mean_field_replicator)
+- [mean-field replicator with demographic noise](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version/examples/mean_field_replicator_demographic)
+- [spatial replicator reaction–diffusion](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version/examples/spatial_replicator)
+- [spatial General Lotka–Volterra populations](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version/examples/spatial_general_lotka_volterra)
+
+Run any copied example from its own directory:
 
 ```sh
-cargo run --example mean_field_replicator
-cargo run --example mean_field_replicator_demographic
-cargo run --example spatial_replicator
-cargo run --example spatial_general_lotka_volterra
-cargo run --example ground_truth_comparison
+cd examples/mean_field_replicator
+cargo run --release
 ```
 
-Pass another project root as the first argument to any Workflow-recording
-example. The available example directories are the authoritative configuration
-references.
+Within this repository, all examples can be checked together with
+`cargo check --workspace`. Pass another project root as the first argument to
+any example binary.
 
 ## Recording and reading
 
@@ -145,8 +154,8 @@ final state exactly once, even when it is not aligned with an interval.
 
 Use `open_completed_glv_recording` to obtain a verified
 `StoredStateSeriesReader`. It can reconstruct an entire stream or only its
-latest state. The examples reopen their completed checkpoint stream and verify
-that it equals the simulation's final state.
+latest state. `verify_completed_glv_checkpoint` performs the standard final
+checkpoint comparison used by every example.
 
 The plotting helper validates declared byte counts and SHA-256 checksums before
 exporting signal data:
@@ -174,15 +183,18 @@ the existing running recording.
 
 ## Validation
 
-The direct `ground_truth_comparison` example compares small deterministic
-systems against a dependency-free high-resolution reference integrator without
-using persistence.
+Normal Rust tests compare deterministic mean-field and spatial trajectories
+with and without diffusion against checked-in values from an independent
+high-resolution RK4 reference implementation:
 
-`validation/run.sh` runs every example and compares the refactored code against
-legacy commit `5ad7cad1ade361e4ee40e540db72d602565e15e8`. Deterministic state
-comparisons and same-seed demographic-noise comparisons use `1e-12` absolute
-and relative tolerances. Validation outputs are written to new directories and
-never replace earlier evidence.
+```sh
+cargo test --test ground_truth
+```
+
+The dependency-free reference generator remains under `tests/ground_truth/`
+for transparent fixture regeneration. Routine tests do not require Python.
+Seeded-noise tests separately cover RNG provenance and exact same-seed
+reproducibility.
 
 ## License
 

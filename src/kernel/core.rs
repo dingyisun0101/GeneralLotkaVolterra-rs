@@ -93,10 +93,11 @@ impl KernelCore {
                 actual: output.len(),
             });
         }
+        let interaction = self.interaction.values();
         for (row, output_value) in output.iter_mut().enumerate() {
             let mut value = 0.0;
             for (column, input_value) in input.iter().copied().enumerate() {
-                value += self.interaction.values()[(row, column)] * input_value;
+                value += interaction[(row, column)] * input_value;
             }
             *output_value = value;
         }

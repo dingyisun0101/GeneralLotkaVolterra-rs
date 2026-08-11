@@ -9,9 +9,8 @@ use crate::invariant::core::{
 
 /// Species-last spatial population invariant.
 ///
-/// `total` deliberately preserves the legacy convention of the rounded exact
-/// aggregate sum. Spatial coefficients and per-species aggregates remain
-/// unrounded.
+/// `total` deliberately uses the rounded exact aggregate sum. Spatial
+/// coefficients and per-species aggregates remain unrounded.
 #[derive(Debug)]
 pub struct PopulationInvariant {
     species: usize,

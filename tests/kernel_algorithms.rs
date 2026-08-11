@@ -1,42 +1,12 @@
-use general_lotka_volterra_rs::engine::Engine;
-use general_lotka_volterra_rs::invariant::{
-    FrequencyInvariant, LocalFrequencyInvariant, PopulationInvariant,
-};
 use general_lotka_volterra_rs::kernel::{
     Boundary, Diffusion, InMemorySource, InteractionSource, Kernel, KernelAlgorithmError,
-    KernelCore, MeanFieldReplicatorRk4, SpatialGeneralLotkaVolterraRk2, SpatialLayout,
-    SpatialReplicatorRk2,
+    KernelCore, SpatialGeneralLotkaVolterraRk2, SpatialLayout, SpatialReplicatorRk2,
 };
-use general_lotka_volterra_rs::noise::{NoNoise, Noise};
 use general_lotka_volterra_rs::{
-    ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TimeStep,
-    TotalAbundance, load_state_schema,
+    ABUNDANCE_FIELD, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, load_state_schema,
 };
 use ndarray::{Array1, Array2, ArrayD, IxDyn};
 use scientific_workflow::system_state::{SimulationTime, SystemState};
-use serde_json::Value;
-
-const LEGACY_FIXTURE: &str = include_str!("fixtures/legacy_baseline.json");
-
-fn legacy_case(name: &str) -> Value {
-    let fixture: Value = serde_json::from_str(LEGACY_FIXTURE).unwrap();
-    fixture["cases"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|case| case["name"] == name)
-        .unwrap()
-        .clone()
-}
-
-fn values(value: &Value) -> Vec<f64> {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|value| value.as_f64().unwrap())
-        .collect()
-}
 
 fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemState {
     let time = SimulationTime::from_iteration_and_physical_time(0, 0.0).unwrap();
@@ -47,224 +17,6 @@ fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemStat
     state.insert_payload(SPACE_FIELD, space).unwrap();
     state.insert_payload(TOTAL_FIELD, total).unwrap();
     state
-}
-
-fn assert_close(actual: f64, expected: f64) {
-    let tolerance = 1.0e-12_f64.max(1.0e-12 * expected.abs());
-    assert!(
-        (actual - expected).abs() <= tolerance,
-        "{actual:.17e} != {expected:.17e} (tolerance {tolerance:.3e})"
-    );
-}
-
-fn spatial_payload(inputs: &Value) -> SpatialAbundance {
-    let shape = inputs["initial_space_shape"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|value| value.as_u64().unwrap() as usize)
-        .collect::<Vec<_>>();
-    Some(ArrayD::from_shape_vec(IxDyn(&shape), values(&inputs["initial_space_values"])).unwrap())
-}
-
-fn spatial_shape(inputs: &Value) -> Vec<usize> {
-    inputs["initial_space_shape"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|value| value.as_u64().unwrap() as usize)
-        .collect()
-}
-
-fn matrix(inputs: &Value, species: usize) -> KernelCore {
-    let interaction =
-        Array2::from_shape_vec((species, species), values(&inputs["interaction_values"])).unwrap();
-    KernelCore::new(InMemorySource::new(interaction).resolve(species).unwrap())
-}
-
-fn diffusion(inputs: &Value) -> Diffusion {
-    let boundary = match inputs["boundary"].as_str().unwrap() {
-        "periodic" => Boundary::Periodic,
-        "neumann" => Boundary::Neumann,
-        value => panic!("unsupported fixture boundary {value}"),
-    };
-    Diffusion::new(
-        Array1::from_vec(values(&inputs["diffusion"])),
-        values(&inputs["spacing"]),
-        boundary,
-    )
-    .unwrap()
-}
-
-fn assert_expected_spatial_state(state: &SystemState, expected: &Value) {
-    assert_eq!(
-        state.simulation_time().iteration(),
-        expected["final_iteration"].as_u64().unwrap()
-    );
-    let abundance = state
-        .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
-        .unwrap();
-    for (actual, expected) in abundance
-        .iter()
-        .copied()
-        .zip(values(&expected["abundance"]))
-    {
-        assert_close(actual, expected);
-    }
-    let space = state
-        .payload::<SpatialAbundance>(SPACE_FIELD)
-        .unwrap()
-        .as_ref()
-        .unwrap();
-    let expected_shape = expected["space"]["shape"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|value| value.as_u64().unwrap() as usize)
-        .collect::<Vec<_>>();
-    assert_eq!(space.shape(), expected_shape);
-    for (actual, expected) in space
-        .iter()
-        .copied()
-        .zip(values(&expected["space"]["values"]))
-    {
-        assert_close(actual, expected);
-    }
-    assert_close(
-        *state.payload::<TotalAbundance>(TOTAL_FIELD).unwrap(),
-        expected["total"].as_f64().unwrap(),
-    );
-}
-
-#[test]
-fn mean_field_replicator_matches_legacy_well_mixed_trajectory() {
-    let case = legacy_case("well_mixed_replicator");
-    let inputs = &case["inputs"];
-    let expected = &case["expected"];
-    let species = inputs["growth"].as_array().unwrap().len();
-    let interaction =
-        Array2::from_shape_vec((species, species), values(&inputs["interaction_values"])).unwrap();
-    let resolved = InMemorySource::new(interaction).resolve(species).unwrap();
-    let algorithm =
-        MeanFieldReplicatorRk4::new(Array1::from_vec(values(&inputs["growth"]))).unwrap();
-    assert_eq!(algorithm.scratch_lengths(), [species; 8]);
-    let kernel = Kernel::new(KernelCore::new(resolved), algorithm);
-    let noise = Noise::new(NoNoise);
-    let invariant = FrequencyInvariant::new(species, inputs["cutoff"].as_f64().unwrap()).unwrap();
-    let time_step = TimeStep::new(inputs["dt"].as_f64().unwrap()).unwrap();
-    let mut engine = Engine::new(
-        state(values(&inputs["initial_abundance"]), None, 1.0),
-        kernel,
-        noise,
-        invariant,
-        time_step,
-    )
-    .unwrap();
-
-    for _ in 0..inputs["steps"].as_u64().unwrap() {
-        engine.step().unwrap();
-    }
-
-    assert_eq!(
-        engine.state().simulation_time().iteration(),
-        expected["final_iteration"].as_u64().unwrap()
-    );
-    let abundance = engine
-        .state()
-        .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
-        .unwrap();
-    for (actual, expected) in abundance
-        .iter()
-        .copied()
-        .zip(values(&expected["abundance"]))
-    {
-        assert_close(actual, expected);
-    }
-    assert_close(
-        *engine
-            .state()
-            .payload::<TotalAbundance>(TOTAL_FIELD)
-            .unwrap(),
-        expected["total"].as_f64().unwrap(),
-    );
-}
-
-#[test]
-fn spatial_replicator_matches_legacy_trajectory() {
-    let case = legacy_case("spatial_replicator");
-    let inputs = &case["inputs"];
-    let species = inputs["growth"].as_array().unwrap().len();
-    let shape = spatial_shape(inputs);
-    let elements: usize = shape.iter().product();
-    let algorithm = SpatialReplicatorRk2::new(
-        shape,
-        Array1::from_vec(values(&inputs["growth"])),
-        diffusion(inputs),
-    )
-    .unwrap();
-    assert_eq!(algorithm.scratch_lengths(), [elements; 3]);
-    let mut engine = Engine::new(
-        state(vec![0.35, 0.35, 0.3], spatial_payload(inputs), 1.0),
-        Kernel::new(matrix(inputs, species), algorithm),
-        Noise::new(NoNoise),
-        LocalFrequencyInvariant::new(species, inputs["cutoff"].as_f64().unwrap()).unwrap(),
-        TimeStep::new(inputs["dt"].as_f64().unwrap()).unwrap(),
-    )
-    .unwrap();
-
-    for _ in 0..inputs["steps"].as_u64().unwrap() {
-        engine.step().unwrap();
-    }
-
-    assert_expected_spatial_state(engine.state(), &case["expected"]);
-}
-
-#[test]
-fn spatial_glv_matches_legacy_trajectory_and_rounded_total() {
-    let case = legacy_case("spatial_glv");
-    let inputs = &case["inputs"];
-    let species = inputs["growth"].as_array().unwrap().len();
-    let shape = spatial_shape(inputs);
-    let elements: usize = shape.iter().product();
-    let algorithm = SpatialGeneralLotkaVolterraRk2::new(
-        shape,
-        Array1::from_vec(values(&inputs["growth"])),
-        diffusion(inputs),
-    )
-    .unwrap();
-    assert_eq!(algorithm.scratch_lengths(), [elements; 3]);
-    let mut engine = Engine::new(
-        state(vec![3.5, 3.8], spatial_payload(inputs), 7.0),
-        Kernel::new(matrix(inputs, species), algorithm),
-        Noise::new(NoNoise),
-        PopulationInvariant::new(
-            species,
-            inputs["cutoff"].as_f64().unwrap(),
-            inputs["carrying_capacity"].as_f64(),
-        )
-        .unwrap(),
-        TimeStep::new(inputs["dt"].as_f64().unwrap()).unwrap(),
-    )
-    .unwrap();
-
-    for _ in 0..inputs["steps"].as_u64().unwrap() {
-        engine.step().unwrap();
-    }
-
-    assert_expected_spatial_state(engine.state(), &case["expected"]);
-    let exact_sum = engine
-        .state()
-        .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
-        .unwrap()
-        .sum();
-    assert_close(exact_sum, 7.396962628613997);
-    assert_eq!(
-        *engine
-            .state()
-            .payload::<TotalAbundance>(TOTAL_FIELD)
-            .unwrap(),
-        exact_sum.round()
-    );
 }
 
 #[test]
@@ -290,10 +42,43 @@ fn spatial_facilities_validate_layout_diffusion_and_stability() {
     let algorithm =
         SpatialGeneralLotkaVolterraRk2::new(vec![2, 1], Array1::zeros(1), diffusion).unwrap();
     algorithm
-        .validate_time_step(TimeStep::new(1.0).unwrap())
+        .validate_time_step(general_lotka_volterra_rs::TimeStep::new(1.0).unwrap())
         .unwrap();
     assert!(matches!(
-        algorithm.validate_time_step(TimeStep::new(1.01).unwrap()),
+        algorithm.validate_time_step(general_lotka_volterra_rs::TimeStep::new(1.01).unwrap()),
         Err(KernelAlgorithmError::UnstableTimeStep { .. })
+    ));
+}
+
+#[test]
+fn spatial_kernel_rejects_non_contiguous_storage() {
+    let shape = vec![2, 2, 3];
+    let mut values = ArrayD::from_shape_vec(
+        IxDyn(&shape),
+        vec![0.2, 0.3, 0.5, 0.4, 0.2, 0.4, 0.1, 0.7, 0.2, 0.3, 0.3, 0.4],
+    )
+    .unwrap();
+    values.swap_axes(0, 1);
+    assert!(values.as_slice().is_none());
+
+    let interaction = InMemorySource::new(Array2::zeros((3, 3)))
+        .resolve(3)
+        .unwrap();
+    let algorithm = SpatialReplicatorRk2::new(
+        shape,
+        Array1::zeros(3),
+        Diffusion::unit_spacing(Array1::zeros(3), 2, Boundary::Periodic).unwrap(),
+    )
+    .unwrap();
+    let kernel = Kernel::new(KernelCore::new(interaction), algorithm);
+    let state = state(vec![0.25, 0.35, 0.4], Some(values), 1.0);
+
+    assert!(matches!(
+        kernel.validate_state(&state),
+        Err(
+            general_lotka_volterra_rs::kernel::KernelStepError::Algorithm(
+                KernelAlgorithmError::NonStandardLayout
+            )
+        )
     ));
 }

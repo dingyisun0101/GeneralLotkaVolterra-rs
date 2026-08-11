@@ -12,6 +12,8 @@ pub mod engine;
 pub mod invariant;
 pub mod kernel;
 pub mod noise;
+pub mod prelude;
+pub mod project;
 pub mod reading;
 pub mod recording;
 pub mod simulation;

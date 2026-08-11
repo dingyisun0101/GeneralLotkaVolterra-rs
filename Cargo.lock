@@ -146,7 +146,7 @@ dependencies = [
 
 [[package]]
 name = "general-lotka-volterra-rs"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "ndarray",
  "rand",
@@ -169,6 +169,34 @@ dependencies = [
  "libc",
  "r-efi",
  "rand_core",
+]
+
+[[package]]
+name = "glv-example-mean-field-replicator"
+version = "0.1.0"
+dependencies = [
+ "general-lotka-volterra-rs",
+]
+
+[[package]]
+name = "glv-example-mean-field-replicator-demographic"
+version = "0.1.0"
+dependencies = [
+ "general-lotka-volterra-rs",
+]
+
+[[package]]
+name = "glv-example-spatial-general-lotka-volterra"
+version = "0.1.0"
+dependencies = [
+ "general-lotka-volterra-rs",
+]
+
+[[package]]
+name = "glv-example-spatial-replicator"
+version = "0.1.0"
+dependencies = [
+ "general-lotka-volterra-rs",
 ]
 
 [[package]]
@@ -405,9 +433,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "scientific-workflow"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f32b4f5e17c0bae98a2e92eb705128b085638cd026191de078addac0e5fcf24d"
+version = "0.1.6"
 dependencies = [
  "console",
  "erased-serde",

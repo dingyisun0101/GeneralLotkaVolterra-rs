@@ -50,7 +50,8 @@ const RESERVED_CREATION_KEYS: [&str; 5] = [
 ];
 
 /// Nonzero storage bounds for one independently sampled stream.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct StreamRecordingConfig {
     sampling_interval: SamplingInterval,
     max_chunk_bytes: NonZeroU64,
@@ -88,7 +89,8 @@ impl StreamRecordingConfig {
 }
 
 /// Independent signal, space, and checkpoint stream configuration.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct GlvRecordingConfig {
     signal: StreamRecordingConfig,
     space: StreamRecordingConfig,

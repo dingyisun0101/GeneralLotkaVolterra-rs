@@ -1,6 +1,6 @@
 [package]
 name = "general-lotka-volterra-rs"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 rust-version = "1.97"
 autoexamples = false
@@ -18,20 +18,25 @@ include = [
     "!src/target/**",
     "schemas/*.json",
     "README.md",
-    "examples/*/main.rs",
-    "examples/support.rs",
-    "examples/*/config/*.json",
-    "examples/*/inputs/*.json",
-    "examples/*/*.py",
     "tools/*.py",
 ]
+
+[workspace]
+members = [
+    "examples/mean_field_replicator",
+    "examples/mean_field_replicator_demographic",
+    "examples/spatial_replicator",
+    "examples/spatial_general_lotka_volterra",
+]
+default-members = ["."]
+resolver = "3"
 
 [dependencies]
 ndarray = { version = "0.17.2", features = ["serde"] }
 rand = "0.10"
 rand_chacha = "0.10"
 rand_distr = "0.6"
-scientific-workflow = "0.1.5"
+scientific-workflow = { version = "0.1.6", path = "../workflow/dev" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
@@ -42,22 +47,5 @@ opt-level = 3
 lto = true
 codegen-units = 1
 
-[[example]]
-name = "mean_field_replicator"
-path = "examples/mean_field_replicator/main.rs"
-
-[[example]]
-name = "mean_field_replicator_demographic"
-path = "examples/mean_field_replicator_demographic/main.rs"
-
-[[example]]
-name = "spatial_replicator"
-path = "examples/spatial_replicator/main.rs"
-
-[[example]]
-name = "spatial_general_lotka_volterra"
-path = "examples/spatial_general_lotka_volterra/main.rs"
-
-[[example]]
-name = "ground_truth_comparison"
-path = "examples/ground_truth_comparison/main.rs"
+[patch.crates-io]
+general-lotka-volterra-rs = { path = "." }

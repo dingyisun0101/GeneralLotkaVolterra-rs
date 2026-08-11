@@ -1,0 +1,9 @@
+[package]
+name = "glv-example-spatial-replicator"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+publish = false
+
+[dependencies]
+general-lotka-volterra-rs = "0.3.1"

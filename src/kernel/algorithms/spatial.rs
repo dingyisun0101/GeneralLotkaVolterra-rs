@@ -1,6 +1,7 @@
 //! Shared species-last layout, diffusion, and midpoint RK2 facilities.
 
 use ndarray::{Array1, ArrayD, IxDyn};
+use serde::{Deserialize, Serialize};
 
 use crate::kernel::core::{KernelCore, KernelStateView};
 use crate::{ABUNDANCE_FIELD, SPACE_FIELD, TimeStep};
@@ -8,7 +9,8 @@ use crate::{ABUNDANCE_FIELD, SPACE_FIELD, TimeStep};
 use super::{KernelAlgorithmError, validate_values};
 
 /// Finite-difference behavior at every spatial edge.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Boundary {
     /// Wrap the grid to its opposite edge.
     Periodic,

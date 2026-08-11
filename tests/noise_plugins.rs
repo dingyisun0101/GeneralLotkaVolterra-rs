@@ -177,3 +177,26 @@ fn invalid_noise_configuration_and_inputs_fail_before_mutation() {
     assert!(before[0].is_nan() && after[0].is_nan());
     assert_eq!(after[1], before[1]);
 }
+
+#[test]
+fn spatial_noise_rejects_non_contiguous_storage() {
+    let mut values = ArrayD::from_shape_vec(
+        IxDyn(&[2, 2, 3]),
+        vec![0.2, 0.3, 0.5, 0.4, 0.2, 0.4, 0.1, 0.7, 0.2, 0.3, 0.3, 0.4],
+    )
+    .unwrap();
+    values.swap_axes(0, 1);
+    assert!(values.as_slice().is_none());
+
+    let state = state(vec![0.25, 0.35, 0.4], Some(values), 1.0);
+    let noise = Noise::new(
+        ProportionalGaussian::new(0.1, 5, NoiseDomain::spatial(vec![2, 2, 3]).unwrap()).unwrap(),
+    );
+
+    assert!(matches!(
+        noise.validate_state(&state),
+        Err(general_lotka_volterra_rs::noise::NoiseStepError::Algorithm(
+            NoisePluginError::NonStandardSpaceLayout
+        ))
+    ));
+}

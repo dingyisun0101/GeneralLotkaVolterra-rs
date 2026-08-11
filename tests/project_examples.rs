@@ -1,23 +1,10 @@
 use std::path::PathBuf;
 
-use general_lotka_volterra_rs::kernel::{InteractionSource, JsonInteractionSource};
+use general_lotka_volterra_rs::kernel::{Boundary, InteractionSource, JsonInteractionSource};
+use general_lotka_volterra_rs::project::load_glv_project;
+use general_lotka_volterra_rs::recording::GlvRecordingConfig;
 use general_lotka_volterra_rs::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD};
-use scientific_workflow::prelude::ScientificProject;
-use serde::Deserialize;
-
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct StreamInputs {
-    sampling_interval: u64,
-    max_chunk_bytes: u64,
-    queue_bytes: u64,
-}
-
-#[derive(Debug, Deserialize, Eq, PartialEq)]
-struct RecordingInputs {
-    signal: StreamInputs,
-    space: StreamInputs,
-    checkpoint: StreamInputs,
-}
+use scientific_workflow::prelude::SamplingInterval;
 
 fn example_root(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -27,7 +14,11 @@ fn example_root(name: &str) -> PathBuf {
 
 #[test]
 fn mean_field_example_is_a_complete_lazy_workflow_project() {
-    let project = ScientificProject::load(example_root("mean_field_replicator")).unwrap();
+    let root = example_root("mean_field_replicator");
+    let project = load_glv_project(&root).unwrap();
+    assert!(root.join("Cargo.toml").is_file());
+    assert!(root.join("README.md").is_file());
+    assert!(root.join("src/main.rs").is_file());
     assert_eq!(project.task_count(), 2);
     assert_eq!(
         project
@@ -57,10 +48,21 @@ fn mean_field_example_is_a_complete_lazy_workflow_project() {
             0.005
         );
         assert_eq!(task.decode_value::<u64>("maximum_iterations").unwrap(), 100);
-        let recording = task.decode_value::<RecordingInputs>("recording").unwrap();
-        assert_eq!(recording.signal.sampling_interval, 10);
-        assert_eq!(recording.space.sampling_interval, 25);
-        assert_eq!(recording.checkpoint.sampling_interval, 50);
+        let recording = task
+            .decode_value::<GlvRecordingConfig>("recording")
+            .unwrap();
+        assert_eq!(
+            recording.signal().sampling_interval(),
+            SamplingInterval::iterations(10).unwrap()
+        );
+        assert_eq!(
+            recording.space().sampling_interval(),
+            SamplingInterval::iterations(25).unwrap()
+        );
+        assert_eq!(
+            recording.checkpoint().sampling_interval(),
+            SamplingInterval::iterations(50).unwrap()
+        );
 
         let matrix =
             JsonInteractionSource::resolved_file(task.resolve_path("interaction_matrix").unwrap())
@@ -73,4 +75,38 @@ fn mean_field_example_is_a_complete_lazy_workflow_project() {
         );
     }
     assert!(tasks.next().is_none());
+}
+
+#[test]
+fn every_user_example_is_an_independent_glv_crate_and_project() {
+    for name in [
+        "mean_field_replicator",
+        "mean_field_replicator_demographic",
+        "spatial_replicator",
+        "spatial_general_lotka_volterra",
+    ] {
+        let root = example_root(name);
+        assert!(root.join("Cargo.toml").is_file(), "{name} manifest");
+        assert!(root.join("README.md").is_file(), "{name} guide");
+        assert!(root.join("src/main.rs").is_file(), "{name} binary");
+        let project = load_glv_project(&root).unwrap();
+        assert!(project.task_count() > 0, "{name} has at least one task");
+        for task in project.task_configs() {
+            task.decode_value::<GlvRecordingConfig>("recording")
+                .unwrap();
+            assert!(task.resolve_path("interaction_matrix").unwrap().is_file());
+        }
+    }
+}
+
+#[test]
+fn domain_configuration_decodes_without_application_mirror_types() {
+    assert_eq!(
+        serde_json::from_str::<Boundary>("\"periodic\"").unwrap(),
+        Boundary::Periodic
+    );
+    assert_eq!(
+        serde_json::from_str::<Boundary>("\"neumann\"").unwrap(),
+        Boundary::Neumann
+    );
 }

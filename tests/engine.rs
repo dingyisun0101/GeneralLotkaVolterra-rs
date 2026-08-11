@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use general_lotka_volterra_rs::engine::{Engine, EngineStepError};
+use general_lotka_volterra_rs::engine::{Engine, EngineBuildError, EngineStepError};
 use general_lotka_volterra_rs::invariant::InvariantPolicy;
 use general_lotka_volterra_rs::kernel::{
     InMemorySource, InteractionSource, Kernel, KernelAlgorithm, KernelCore, KernelStateView,
@@ -242,4 +242,36 @@ fn impossible_time_advance_fails_before_any_scientific_mutation() {
             .unwrap(),
         &abundance_before
     );
+}
+
+#[test]
+fn engine_rejects_state_without_physical_time_before_validation_or_mutation() {
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let interaction = InMemorySource::new(arr2(&[[0.0]])).resolve(1).unwrap();
+    let result = Engine::new(
+        state(SimulationTime::from_iteration(7)),
+        Kernel::new(
+            KernelCore::new(interaction),
+            TestKernel {
+                scratch: Array1::zeros(1),
+                calls: Arc::clone(&calls),
+            },
+        ),
+        Noise::new(TestNoise {
+            calls: Arc::clone(&calls),
+            fail: false,
+        }),
+        TestInvariant {
+            calls: Arc::clone(&calls),
+        },
+        TimeStep::new(0.5).unwrap(),
+    );
+
+    assert!(matches!(
+        result,
+        Err(EngineBuildError::Time(StateError::MissingPhysicalTime {
+            iteration: 7
+        }))
+    ));
+    assert!(calls.lock().unwrap().is_empty());
 }

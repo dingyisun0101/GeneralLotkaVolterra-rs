@@ -3,10 +3,6 @@
 This document is the architectural authority for the completed clean-slate GLV
 implementation on `sw-version`.
 
-The old implementation is preserved beneath `legacy/` and on the read-only
-`legacy` branch. It is evidence for numerical and behavioral comparison, not a
-source tree to incrementally modernize.
-
 ## Goals
 
 - Make Scientific Workflow the sole owner of generic scientific state,
@@ -17,8 +13,8 @@ source tree to incrementally modernize.
 - Provide concrete simulations as the primary user API while allowing kernels,
   noise algorithms, invariant policies, and interaction-matrix sources to be
   composed without changing the shared engine.
-- Preserve deterministic legacy numerics within explicit tolerances before
-  changing scientific behavior.
+- Validate deterministic numerical behavior against independent
+  high-resolution ground truth before changing scientific behavior.
 - Make every resolved interaction matrix independently inspectable and exactly
   reproducible.
 - Keep numerical loops allocation-aware and free of configuration parsing,
@@ -26,8 +22,7 @@ source tree to incrementally modernize.
 
 ## Non-goals
 
-- No compatibility aliases for the legacy GLV state, solver dispatcher, task
-  API, or recording format.
+- No parallel GLV state, solver dispatcher, task API, or recording format.
 - No second GLV storage, configuration, progress, or execution abstraction
   beside Scientific Workflow.
 - No process-global runtime or writer manager.
@@ -80,6 +75,8 @@ glv/
 │   │   ├── core.rs
 │   │   └── source.rs
 │   ├── noise.rs
+│   ├── prelude.rs
+│   ├── project.rs
 │   ├── noise/
 │   │   ├── algorithms.rs
 │   │   ├── algorithms/
@@ -103,23 +100,24 @@ glv/
 │       ├── spatial_general_lotka_volterra.rs
 │       └── spatial_replicator.rs
 ├── examples/
-│   ├── support.rs
 │   ├── mean_field_replicator/
 │   ├── mean_field_replicator_demographic/
 │   ├── spatial_replicator/
-│   ├── spatial_general_lotka_volterra/
-│   └── ground_truth_comparison/
+│   └── spatial_general_lotka_volterra/
+│       └── each example contains Cargo.toml, README.md, src/main.rs,
+│           config/, and inputs/
 ├── tools/
 │   └── plot_workflow_recording.py
 └── tests/
     ├── continuation.rs
     ├── engine.rs
     ├── fixtures/
+    │   └── ground_truth.json
+    ├── ground_truth.rs
     ├── interaction_matrix.rs
     ├── invariants.rs
     ├── kernel_algorithms.rs
     ├── kernel_evolution.rs
-    ├── legacy_baseline.rs
     ├── noise_plugins.rs
     ├── plugin_contracts.rs
     ├── recording.rs
@@ -127,8 +125,8 @@ glv/
     └── state_schema.rs
 ```
 
-Legacy and validation material remain outside the published package and normal
-Cargo target discovery.
+Independent reference-generation tooling remains beneath `tests/ground_truth/`;
+routine Rust tests consume checked-in ground truth without requiring Python.
 
 ## Dependency boundary
 
@@ -374,9 +372,9 @@ diffusion. They own
 fixed-shape first-stage, midpoint, and proposed-output arrays, and propose only
 the spatial payload. The following invariant phase refreshes aggregate
 abundance and `total`. All inner sums, RK stages, neighbor visits, and final
-updates retain the legacy numerical operation order. Integration tests compare
-all three deterministic endpoints to the fixed legacy fixture at the common
-`1e-12` absolute and relative tolerance.
+updates retain a stable documented numerical operation order. Integration
+tests compare deterministic endpoints to independently generated
+high-resolution ground truth within reviewed method-specific tolerances.
 
 ### Interaction sources
 
@@ -492,8 +490,8 @@ namespaces, method `chacha12+standard_normal`, implementation version
 fixed-width seed value. Concrete simulations expose the selected plugin's
 record to orchestration.
 
-Proportional noise applies the legacy mass-projected update proportional to
-local abundance. Demographic noise scales fluctuations by square-root local
+Proportional noise applies a mass-projected update proportional to local
+abundance. Demographic noise scales fluctuations by square-root local
 abundance and removes the weighted Gaussian mean. Both clamp nonpositive or
 non-finite proposed values to zero and leave final feasibility restoration to
 the following invariant phase. A noise plugin mutates only its selected
@@ -531,8 +529,8 @@ enforcement treats spatial storage as authoritative, sanitizes it, applies an
 optional global capacity scale, refreshes per-species aggregate abundance, and
 synchronizes `total`.
 
-Absolute population `total` explicitly preserves the legacy rounded-sum
-convention. Spatial values and per-species aggregate abundance remain exact
+Absolute population `total` uses an explicit rounded-sum convention. Spatial
+values and per-species aggregate abundance remain exact
 floating-point sums; only `total` is `round(exact_sum).max(0)`. Changing this
 to an exact sum is a future scientific-behavior change requiring fixture and
 design review.
@@ -595,8 +593,8 @@ Every concrete simulation provides:
 - immutable `state`, `time_step`, model-kind, representation, `step`, and
   consuming `into_state` accessors.
 
-Spatial `new` constructors derive aggregate abundance and legacy-compatible
-`total` from the authoritative initial spatial allocation. Construction checks
+Spatial `new` constructors derive aggregate abundance and rounded `total` from
+the authoritative initial spatial allocation. Construction checks
 representation, space presence and exact shape, species dimensions, matrix
 dimension, plugin domain, invariant consistency, physical time, and the
 explicit diffusion stability limit before evolution. State insertion errors
@@ -604,9 +602,7 @@ retain ownership of any rejected payload through typed Workflow
 `PayloadInsertError` variants.
 
 `SimulationKind` supplies stable `mean_field_replicator`,
-`spatial_replicator`, and `spatial_general_lotka_volterra` metadata values. The frozen legacy
-fixture continues to use its historical `well_mixed_replicator` identifier;
-the new public API provides no compatibility alias.
+`spatial_replicator`, and `spatial_general_lotka_volterra` metadata values.
 
 ## Orchestration and recording
 
@@ -761,24 +757,16 @@ counter-based contract.
 
 ## Verification gates
 
-The fixed legacy reference is commit
-`5ad7cad1ade361e4ee40e540db72d602565e15e8`. The checked-in fixture covers
-well-mixed replicator, spatial replicator, spatial GLV, early termination, and
-legacy sampling coordinates.
+The checked-in ground-truth fixture is generated by a dependency-free,
+fine-step classical RK4 reference implementation independent of production
+kernels. Routine Rust tests compare mean-field and spatial GLV trajectories
+with and without diffusion to those values. The generator is retained for
+transparent regeneration but is not a test-time Python dependency.
 
-The publication validation harness also compiles that immutable legacy source
-and compares fresh results. Mean-field replicator and spatial GLV endpoints are
-bit-identical; spatial replicator differs by at most `1.11e-16`; eight
-same-ChaCha12-seed demographic updates differ by at most `2.78e-17`. All are
-inside the `1e-12` absolute and relative acceptance bounds.
-
-- Deterministic abundance and space comparisons use `1e-12` absolute and
-  relative tolerances unless a reviewed kernel-specific tolerance replaces
-  them.
-- Iterations, termination decisions, and interval-selected sample coordinates
-  are exact.
-- Workflow completion intentionally adds a non-aligned final state that legacy
-  max-step recording omitted.
+- Deterministic abundance and space comparisons use reviewed tolerances tied
+  to the reference step size and production integration order.
+- Iterations and interval-selected sample coordinates are exact.
+- Workflow completion always includes a non-aligned final state.
 - Every production module receives integration-test coverage outside the
   production source file.
 - Formatting, all targets, Clippy with warnings denied, rustdoc with warnings

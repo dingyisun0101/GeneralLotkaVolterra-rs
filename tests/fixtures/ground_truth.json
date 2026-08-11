@@ -1,0 +1,42 @@
+{
+  "generator": {
+    "method": "independent_classical_rk4",
+    "reference_steps": 10000,
+    "final_physical_time": 0.1,
+    "script": "tests/ground_truth/generate.py"
+  },
+  "rust_time_step": 0.001,
+  "rust_iterations": 100,
+  "cases": {
+    "mean_field": {
+      "initial_abundance": [0.2, 0.5, 0.3],
+      "growth": [0.04, -0.02, 0.01],
+      "cutoff": 0.0,
+      "interaction": [0.0, 0.3, -0.2, -0.1, 0.0, 0.25, 0.15, -0.35, 0.0],
+      "expected": [0.20256415352903542, 0.5015574443484028, 0.2958784021225609],
+      "tolerance": 1e-8
+    },
+    "spatial_no_diffusion": {
+      "shape": [4, 2],
+      "initial_space": [0.4, 0.2, 0.15, 0.5, 0.3, 0.25, 0.1, 0.35],
+      "growth": [0.2, 0.1],
+      "diffusion": [0.0, 0.0],
+      "boundary": "periodic",
+      "cutoff": 0.0,
+      "interaction": [-0.4, 0.08, -0.05, -0.3],
+      "expected": [0.40222896415208886, 0.20039808316217808, 0.15271442463005327, 0.49715119086124604, 0.3029971818622812, 0.2502473176224873, 0.10189379069928416, 0.34965035795555344],
+      "tolerance": 1e-8
+    },
+    "spatial_periodic_diffusion": {
+      "shape": [4, 2],
+      "initial_space": [0.3, 0.1, 0.25, 0.2, 0.1, 0.4, 0.15, 0.3],
+      "growth": [0.05, 0.02],
+      "diffusion": [0.01, 0.02],
+      "boundary": "periodic",
+      "cutoff": 0.0,
+      "interaction": [-0.3, 0.04, -0.02, -0.25],
+      "expected": [0.2987294882306389, 0.10048584306516806, 0.2494773216383469, 0.1994998619858722, 0.10055874711364839, 0.3961599942597549, 0.15035321209720395, 0.2980732019759161],
+      "tolerance": 1e-8
+    }
+  }
+}
