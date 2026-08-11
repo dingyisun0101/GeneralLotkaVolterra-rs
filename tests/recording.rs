@@ -4,9 +4,15 @@ use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use general_lotka_volterra_rs::invariant::FrequencyInvariant;
 use general_lotka_volterra_rs::kernel::{
-    InMemorySource, InteractionSource, persist_interaction_matrix,
+    Boundary, Diffusion, InMemorySource, InteractionSource, Kernel, KernelCore,
+    MeanFieldReplicatorRk4, persist_interaction_matrix,
 };
+use general_lotka_volterra_rs::noise::{
+    DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE, DemographicGaussian, Noise, NoiseDomain,
+};
+use general_lotka_volterra_rs::reading::open_completed_glv_recording;
 use general_lotka_volterra_rs::recording::{
     ABUNDANCE_REPRESENTATION_METADATA_KEY, COMPLETED_ITERATION_METADATA_KEY, GlvRecording,
     GlvRecordingConfig, GlvRecordingError, GlvRecordingMetadata, MODEL_KIND_METADATA_KEY,
@@ -14,12 +20,15 @@ use general_lotka_volterra_rs::recording::{
     TERMINATION_REASON_METADATA_KEY, TerminationReason,
 };
 use general_lotka_volterra_rs::{
-    AbundanceRepresentation, CHECKPOINT_STREAM, MeanFieldReplicator, MeanFieldReplicatorConfig,
-    SIGNAL_STREAM, SPACE_STREAM, TimeStep,
+    ABUNDANCE_FIELD, AbundanceRepresentation, AggregateAbundance, CHECKPOINT_STREAM,
+    MeanFieldReplicator, MeanFieldReplicatorConfig, SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM,
+    SpatialAbundance, SpatialReplicator, SpatialReplicatorConfig, TOTAL_FIELD, TimeStep,
+    TotalAbundance,
 };
-use ndarray::{Array1, Array2};
+use ndarray::{Array1, Array2, ArrayD, IxDyn};
 use scientific_workflow::configuration::{ParameterSpace, TaskParameters};
 use scientific_workflow::execution::ExecutionScope;
+use scientific_workflow::rng_record::{RNG_RECORDS_METADATA_KEY, RngRecord};
 use scientific_workflow::storage::{SamplingInterval, StorageError};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -92,6 +101,31 @@ fn make_simulation(
     .unwrap()
 }
 
+fn make_stochastic_simulation(
+    interaction: general_lotka_volterra_rs::kernel::InteractionMatrix,
+) -> MeanFieldReplicator<MeanFieldReplicatorRk4, DemographicGaussian> {
+    let time_step = TimeStep::new(0.1).unwrap();
+    let state = MeanFieldReplicator::new(
+        Array1::from_vec(vec![0.4, 0.6]),
+        interaction.clone(),
+        MeanFieldReplicatorConfig::new(Array1::zeros(2), 0.0, time_step),
+    )
+    .unwrap()
+    .into_state();
+    MeanFieldReplicator::from_plugins(
+        state,
+        AbundanceRepresentation::RelativeFrequency,
+        Kernel::new(
+            KernelCore::new(interaction),
+            MeanFieldReplicatorRk4::new(Array1::zeros(2)).unwrap(),
+        ),
+        Noise::new(DemographicGaussian::new(0.05, 42, NoiseDomain::aggregate(2).unwrap()).unwrap()),
+        FrequencyInvariant::new(2, 0.0).unwrap(),
+        time_step,
+    )
+    .unwrap()
+}
+
 fn metadata(path: &Path) -> Value {
     serde_json::from_slice(&fs::read(path.join("metadata.json")).unwrap()).unwrap()
 }
@@ -156,6 +190,14 @@ fn count_metadata_files(directory: &Path) -> usize {
         .sum()
 }
 
+fn physical_time_at(iteration: u64) -> f64 {
+    let mut physical_time = 0.0;
+    for _ in 0..iteration {
+        physical_time += 0.1;
+    }
+    physical_time
+}
+
 fn json_files(directory: &Path, output: &mut Vec<PathBuf>) {
     for entry in fs::read_dir(directory).unwrap() {
         let path = entry.unwrap().path();
@@ -186,6 +228,7 @@ fn workflow_records_all_glv_streams_metadata_terminal_state_and_integrity() {
         simulation.abundance_representation(),
         &task,
         persisted.descriptor(),
+        simulation.rng_record(),
     )
     .unwrap();
     let recording_directory = scope.task_recording_directory(task.task_ordinal());
@@ -340,6 +383,102 @@ fn workflow_records_all_glv_streams_metadata_terminal_state_and_integrity() {
         recording_json_files,
         [recording_directory.join("metadata.json")]
     );
+
+    let reader = open_completed_glv_recording(&recording_directory).unwrap();
+    let signal_series = reader.read_stream_as_state_series(SIGNAL_STREAM).unwrap();
+    let space_series = reader.read_stream_as_state_series(SPACE_STREAM).unwrap();
+    assert_eq!(
+        signal_series
+            .iter()
+            .map(|state| state.simulation_time().iteration())
+            .collect::<Vec<_>>(),
+        [0, 2, 4, 5]
+    );
+    for state in signal_series.iter() {
+        let time = state.simulation_time();
+        assert_eq!(
+            time.physical_time(),
+            Some(physical_time_at(time.iteration()))
+        );
+        assert_eq!(
+            state
+                .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
+                .unwrap(),
+            &Array1::from_vec(vec![0.4, 0.6])
+        );
+        assert_eq!(*state.payload::<TotalAbundance>(TOTAL_FIELD).unwrap(), 1.0);
+    }
+    assert_eq!(
+        space_series
+            .iter()
+            .map(|state| state.simulation_time().iteration())
+            .collect::<Vec<_>>(),
+        [0, 3, 5]
+    );
+    for state in space_series.iter() {
+        assert!(
+            state
+                .payload::<SpatialAbundance>(SPACE_FIELD)
+                .unwrap()
+                .is_none()
+        );
+    }
+}
+
+#[test]
+fn stochastic_noise_identity_is_written_once_in_creation_metadata() {
+    let workspace = Workspace::new("rng-record");
+    let scope = ExecutionScope::create_named(&workspace.root, "execution").unwrap();
+    let task = workspace.task_parameters(r#"{"seed":42,"noise_sigma":0.05}"#, "task-config");
+    let interaction = InMemorySource::new(Array2::zeros((2, 2)))
+        .resolve(2)
+        .unwrap();
+    let persisted = persist_interaction_matrix(&scope, &interaction).unwrap();
+    let simulation = make_stochastic_simulation(interaction);
+    let creation = GlvRecordingMetadata::new(
+        simulation.kind(),
+        simulation.abundance_representation(),
+        &task,
+        persisted.descriptor(),
+        simulation.rng_record(),
+    )
+    .unwrap();
+    let recording_directory = scope.task_recording_directory(0);
+    GlvRecording::start(
+        &recording_directory,
+        recording_config(8_192),
+        creation,
+        simulation.state(),
+    )
+    .unwrap()
+    .complete(simulation.state(), TerminationReason::Requested)
+    .unwrap();
+
+    let document = metadata(&recording_directory);
+    let record =
+        &document["user_metadata"][RNG_RECORDS_METADATA_KEY][DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE];
+    assert_eq!(record["method"], "chacha12+standard_normal");
+    assert_eq!(record["version"], "rand_chacha-0.10+rand_distr-0.6");
+    assert_eq!(record["key_encoding"], "u64_be_hex");
+    assert_eq!(record["key"], "000000000000002a");
+    let decoded = RngRecord::from_metadata(
+        document["user_metadata"].as_object().unwrap(),
+        DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE,
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(decoded.key(), "000000000000002a");
+    assert!(
+        document["streams"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|stream| {
+                !serde_json::to_string(stream)
+                    .unwrap()
+                    .contains("chacha12+standard_normal")
+            })
+    );
 }
 
 #[test]
@@ -359,6 +498,7 @@ fn recording_metadata_and_failure_lifecycle_fail_closed() {
             AbundanceRepresentation::AbsoluteCount,
             &task,
             persisted.descriptor(),
+            simulation.rng_record(),
         ),
         Err(RecordingMetadataError::RepresentationMismatch { .. })
     ));
@@ -369,6 +509,7 @@ fn recording_metadata_and_failure_lifecycle_fail_closed() {
             simulation.abundance_representation(),
             &reserved,
             persisted.descriptor(),
+            simulation.rng_record(),
         ),
         Err(RecordingMetadataError::ReservedTaskParameter { .. })
     ));
@@ -378,6 +519,7 @@ fn recording_metadata_and_failure_lifecycle_fail_closed() {
         simulation.abundance_representation(),
         &task,
         persisted.descriptor(),
+        simulation.rng_record(),
     )
     .unwrap();
     let failed_directory = scope.task_recording_directory(1);
@@ -441,4 +583,73 @@ fn recording_metadata_and_failure_lifecycle_fail_closed() {
         "unexpected bounded-queue error: {bounded_error:?}"
     );
     assert_eq!(metadata(&bounded_directory)["status"]["state"], "running");
+}
+
+#[test]
+fn completed_reader_round_trips_populated_spatial_payload_and_exact_time() {
+    let workspace = Workspace::new("spatial-read");
+    let scope = ExecutionScope::create_named(&workspace.root, "execution").unwrap();
+    let task = workspace.task_parameters(r#"{"seed":11}"#, "task-config");
+    let interaction = InMemorySource::new(Array2::zeros((2, 2)))
+        .resolve(2)
+        .unwrap();
+    let persisted = persist_interaction_matrix(&scope, &interaction).unwrap();
+    let initial_space = ArrayD::from_shape_vec(IxDyn(&[1, 2]), vec![0.4, 0.6]).unwrap();
+    let mut simulation = SpatialReplicator::new(
+        initial_space.clone(),
+        interaction,
+        SpatialReplicatorConfig::new(
+            vec![1, 2],
+            Array1::zeros(2),
+            Diffusion::unit_spacing(Array1::zeros(2), 1, Boundary::Periodic).unwrap(),
+            0.0,
+            TimeStep::new(0.1).unwrap(),
+        ),
+    )
+    .unwrap();
+    let creation = GlvRecordingMetadata::new(
+        simulation.kind(),
+        simulation.abundance_representation(),
+        &task,
+        persisted.descriptor(),
+        simulation.rng_record(),
+    )
+    .unwrap();
+    let recording_directory = scope.task_recording_directory(0);
+    let all_iterations = GlvRecordingConfig::new(
+        stream(1, 1_024, 8_192),
+        stream(1, 1_024, 8_192),
+        stream(1, 1_024, 8_192),
+    );
+    let mut recording = GlvRecording::start(
+        &recording_directory,
+        all_iterations,
+        creation,
+        simulation.state(),
+    )
+    .unwrap();
+    simulation.step().unwrap();
+    recording.observe_state(simulation.state()).unwrap();
+    recording
+        .complete(simulation.state(), TerminationReason::MaximumIterations)
+        .unwrap();
+
+    let reader = open_completed_glv_recording(&recording_directory).unwrap();
+    let series = reader.read_stream_as_state_series(SPACE_STREAM).unwrap();
+    assert_eq!(series.len(), 2);
+    for state in series.iter() {
+        let time = state.simulation_time();
+        assert_eq!(
+            time.physical_time(),
+            Some(physical_time_at(time.iteration()))
+        );
+        assert_eq!(
+            state
+                .payload::<SpatialAbundance>(SPACE_FIELD)
+                .unwrap()
+                .as_ref()
+                .unwrap(),
+            &initial_space
+        );
+    }
 }

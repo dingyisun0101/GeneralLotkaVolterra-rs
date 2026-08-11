@@ -60,6 +60,10 @@ struct TestNoise {
 impl NoiseAlgorithm for TestNoise {
     type Error = TestError;
 
+    fn rng_record(&self) -> Option<&scientific_workflow::rng_record::RngRecord> {
+        None
+    }
+
     fn validate(
         &self,
         _abundance: &AggregateAbundance,

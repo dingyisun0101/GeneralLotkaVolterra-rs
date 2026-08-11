@@ -8,9 +8,10 @@ use std::num::NonZeroU64;
 use std::path::Path;
 
 use scientific_workflow::configuration::TaskParameters;
+use scientific_workflow::rng_record::{RNG_RECORDS_METADATA_KEY, RngRecord, RngRecordError};
 use scientific_workflow::storage::{
     CompletedRecording, SamplingInterval, StateStreamConfig, StorageError, SystemStateWriter,
-    TimeAxisMetadata,
+    SystemStateWriterBuilder, TimeAxisMetadata,
 };
 use scientific_workflow::system_state::{StateError, SystemState};
 use serde::{Deserialize, Serialize};
@@ -18,6 +19,7 @@ use serde_json::{Map, Value};
 use thiserror::Error;
 
 use crate::kernel::{INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactDescriptor};
+use crate::reading::glv_json_decoders;
 use crate::simulation::SimulationKind;
 use crate::{
     ABUNDANCE_FIELD, AbundanceRepresentation, CHECKPOINT_STREAM, SIGNAL_STREAM, SPACE_FIELD,
@@ -39,11 +41,12 @@ pub const TERMINATION_REASON_METADATA_KEY: &str = "termination_reason";
 /// Terminal-metadata key containing the last successfully completed iteration.
 pub const COMPLETED_ITERATION_METADATA_KEY: &str = "completed_iteration";
 
-const RESERVED_CREATION_KEYS: [&str; 4] = [
+const RESERVED_CREATION_KEYS: [&str; 5] = [
     MODEL_KIND_METADATA_KEY,
     ABUNDANCE_REPRESENTATION_METADATA_KEY,
     INTERACTION_MATRIX_METADATA_KEY,
     TASK_ORDINAL_METADATA_KEY,
+    RNG_RECORDS_METADATA_KEY,
 ];
 
 /// Nonzero storage bounds for one independently sampled stream.
@@ -137,6 +140,7 @@ impl GlvRecordingMetadata {
         abundance_representation: AbundanceRepresentation,
         task: &TaskParameters,
         interaction: &InteractionArtifactDescriptor,
+        rng_record: Option<&RngRecord>,
     ) -> Result<Self, RecordingMetadataError> {
         let expected = model_kind.abundance_representation();
         if abundance_representation != expected {
@@ -174,6 +178,9 @@ impl GlvRecordingMetadata {
                 key: INTERACTION_MATRIX_METADATA_KEY.to_owned(),
             });
         }
+        if let Some(record) = rng_record {
+            record.insert_into_metadata(&mut values)?;
+        }
         Ok(Self {
             model_kind,
             abundance_representation,
@@ -194,6 +201,12 @@ impl GlvRecordingMetadata {
     /// Borrows the complete Workflow user-metadata map.
     pub const fn values(&self) -> &Map<String, Value> {
         &self.values
+    }
+
+    /// Adds another application-namespaced Workflow RNG record.
+    pub fn with_rng_record(mut self, record: &RngRecord) -> Result<Self, RecordingMetadataError> {
+        record.insert_into_metadata(&mut self.values)?;
+        Ok(self)
     }
 
     fn into_values(self) -> Map<String, Value> {
@@ -232,6 +245,9 @@ impl TerminationReason {
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum RecordingMetadataError {
+    /// A Workflow RNG record was invalid or reused a namespace.
+    #[error(transparent)]
+    RngRecord(#[from] RngRecordError),
     /// A task parameter would overwrite GLV-owned provenance.
     #[error("resolved task parameter `{key}` collides with reserved recording metadata")]
     ReservedTaskParameter {
@@ -284,29 +300,28 @@ impl GlvRecording {
         initial_state: &SystemState,
     ) -> Result<Self, GlvRecordingError> {
         let schema = load_state_schema().map_err(GlvRecordingError::StateSchema)?;
-        let mut writer = SystemStateWriter::builder(directory.as_ref(), &schema)
-            .with_time_axis_metadata(
-                TimeAxisMetadata::new("iteration").with_physical_time_name("physical_time"),
-            )
-            .with_user_metadata(metadata.into_values())
-            .add_state_stream(state_stream(
-                SIGNAL_STREAM,
-                [ABUNDANCE_FIELD, TOTAL_FIELD],
-                config.signal(),
-            ))
-            .add_state_stream(state_stream(
-                SPACE_STREAM,
-                [ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD],
-                config.space(),
-            ))
-            .add_state_stream(state_stream(
-                CHECKPOINT_STREAM,
-                [ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD],
-                config.checkpoint(),
-            ))
+        let mut writer = recording_builder(directory.as_ref(), &schema, config, metadata)
             .create_new_recording()?;
         writer.observe_state(initial_state)?;
         Ok(Self { writer })
+    }
+
+    /// Reopens a running recording and reconstructs its newest complete checkpoint.
+    ///
+    /// Scientific Workflow validates the complete writer configuration,
+    /// recovers any open tails, and enforces sealed-checkpoint integrity before
+    /// this method receives either the state or append-capable writer. The
+    /// returned checkpoint is not observed again; orchestration records only
+    /// subsequently successful evolution steps.
+    pub fn continue_from_latest_checkpoint(
+        directory: impl AsRef<Path>,
+        config: GlvRecordingConfig,
+        metadata: GlvRecordingMetadata,
+    ) -> Result<(Self, SystemState), GlvRecordingError> {
+        let schema = load_state_schema().map_err(GlvRecordingError::StateSchema)?;
+        let (writer, state) = recording_builder(directory.as_ref(), &schema, config, metadata)
+            .continue_recording_from_latest_checkpoint(CHECKPOINT_STREAM, glv_json_decoders()?)?;
+        Ok((Self { writer }, state))
     }
 
     /// Returns the Workflow-owned recording directory.
@@ -358,6 +373,34 @@ impl GlvRecording {
             .mark_recording_failed_with_terminal_metadata(message, terminal_metadata)?;
         Ok(())
     }
+}
+
+fn recording_builder(
+    directory: &Path,
+    schema: &scientific_workflow::system_state::SystemStateSchema,
+    config: GlvRecordingConfig,
+    metadata: GlvRecordingMetadata,
+) -> SystemStateWriterBuilder {
+    SystemStateWriter::builder(directory, schema)
+        .with_time_axis_metadata(
+            TimeAxisMetadata::new("iteration").with_physical_time_name("physical_time"),
+        )
+        .with_user_metadata(metadata.into_values())
+        .add_state_stream(state_stream(
+            SIGNAL_STREAM,
+            [ABUNDANCE_FIELD, TOTAL_FIELD],
+            config.signal(),
+        ))
+        .add_state_stream(state_stream(
+            SPACE_STREAM,
+            [ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD],
+            config.space(),
+        ))
+        .add_state_stream(state_stream(
+            CHECKPOINT_STREAM,
+            [ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD],
+            config.checkpoint(),
+        ))
 }
 
 fn state_stream<const FIELDS: usize>(

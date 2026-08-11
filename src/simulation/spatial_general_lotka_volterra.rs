@@ -1,6 +1,7 @@
 //! Concrete spatial General Lotka–Volterra population simulation.
 
 use ndarray::{Array1, ArrayD};
+use scientific_workflow::rng_record::RngRecord;
 use scientific_workflow::system_state::{SimulationTime, SystemState};
 
 use crate::engine::{Engine, EngineStepError};
@@ -201,6 +202,11 @@ where
     /// Returns the fixed physical-time increment.
     pub const fn time_step(&self) -> TimeStep {
         self.engine.time_step()
+    }
+
+    /// Returns immutable RNG provenance declared by the selected noise plugin.
+    pub fn rng_record(&self) -> Option<&RngRecord> {
+        self.engine.rng_record()
     }
 
     /// Performs one complete shared-engine step.

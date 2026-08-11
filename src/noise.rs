@@ -7,5 +7,8 @@
 mod algorithms;
 pub mod core;
 
-pub use algorithms::{DemographicGaussian, NoNoise, ProportionalGaussian};
+pub use algorithms::{
+    DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE, DemographicGaussian, NoNoise,
+    PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE, ProportionalGaussian,
+};
 pub use core::{Noise, NoiseAlgorithm, NoiseDomain, NoisePluginError, NoiseStepError};

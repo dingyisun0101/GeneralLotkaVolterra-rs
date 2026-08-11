@@ -7,7 +7,8 @@ use general_lotka_volterra_rs::kernel::{
     ArtifactDisposition, GeneratedSource, GeneratorRandomness, INTERACTION_MATRIX_FORMAT,
     INTERACTION_MATRIX_METADATA_KEY, InMemorySource, InteractionArtifactError,
     InteractionGenerator, InteractionProvenance, InteractionSource, InteractionSourceError,
-    InteractionSourceKind, JsonInteractionSource, persist_interaction_matrix,
+    InteractionSourceKind, JsonInteractionSource, load_verified_interaction_matrix,
+    persist_interaction_matrix,
 };
 use ndarray::{Array2, arr2};
 use scientific_workflow::execution::ExecutionScope;
@@ -253,7 +254,10 @@ fn persisted_artifact_is_a_checked_json_file_source() {
     let loaded = JsonInteractionSource::resolved_file(&path)
         .resolve(2)
         .unwrap();
+    let verified =
+        load_verified_interaction_matrix(scope.directory(), persisted.descriptor()).unwrap();
     assert_eq!(loaded.values(), original.values());
+    assert_eq!(verified.values(), original.values());
     assert!(matches!(
         loaded.provenance(),
         InteractionProvenance::JsonFile { path: source } if source == &path
@@ -305,6 +309,10 @@ fn malformed_json_and_artifact_collisions_fail_closed() {
     let persisted = persist_interaction_matrix(&scope, &matrix).unwrap();
     let path = scope.directory().join(persisted.descriptor().path());
     fs::write(&path, b"different bytes").unwrap();
+    assert!(matches!(
+        load_verified_interaction_matrix(scope.directory(), persisted.descriptor()),
+        Err(general_lotka_volterra_rs::kernel::InteractionArtifactLoadError::DigestMismatch { .. })
+    ));
     assert!(matches!(
         persist_interaction_matrix(&scope, &matrix),
         Err(InteractionArtifactError::DigestCollision { .. })

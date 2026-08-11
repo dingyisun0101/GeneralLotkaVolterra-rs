@@ -6,6 +6,7 @@ use std::fmt;
 use rand::SeedableRng;
 use rand_chacha::ChaCha12Rng;
 use rand_distr::{Distribution, StandardNormal};
+use scientific_workflow::rng_record::{RngRecord, RngRecordError};
 use scientific_workflow::system_state::{StateError, SystemState};
 use thiserror::Error as ThisError;
 
@@ -96,6 +97,7 @@ pub(crate) struct GaussianWorkspace {
     domain: NoiseDomain,
     sigma: f64,
     seed: u64,
+    rng_record: RngRecord,
     rng: ChaCha12Rng,
     normal: StandardNormal,
     eta: Vec<f64>,
@@ -120,16 +122,26 @@ impl GaussianWorkspace {
         sigma: f64,
         seed: u64,
         domain: NoiseDomain,
+        namespace: &'static str,
     ) -> Result<Self, NoisePluginError> {
         if !sigma.is_finite() || sigma < 0.0 {
             return Err(NoisePluginError::InvalidSigma { value: sigma });
         }
         let species = domain.species();
         let elements = domain.elements();
+        let rng_record = RngRecord::new(
+            namespace,
+            "chacha12+standard_normal",
+            "rand_chacha-0.10+rand_distr-0.6",
+            "u64_be_hex",
+            format!("{seed:016x}"),
+        )
+        .map_err(NoisePluginError::RngRecord)?;
         Ok(Self {
             domain,
             sigma,
             seed,
+            rng_record,
             rng: ChaCha12Rng::seed_from_u64(seed),
             normal: StandardNormal,
             eta: vec![0.0; species],
@@ -147,6 +159,10 @@ impl GaussianWorkspace {
 
     pub(crate) const fn domain(&self) -> &NoiseDomain {
         &self.domain
+    }
+
+    pub(crate) const fn rng_record(&self) -> &RngRecord {
+        &self.rng_record
     }
 
     pub(crate) fn scratch_capacities(&self) -> (usize, usize) {
@@ -345,6 +361,9 @@ fn validate_noise_values(
 #[derive(Debug, ThisError)]
 #[non_exhaustive]
 pub enum NoisePluginError {
+    /// Workflow rejected the immutable RNG provenance declaration.
+    #[error("invalid noise RNG record: {0}")]
+    RngRecord(#[source] RngRecordError),
     /// Every noise target requires at least one species.
     #[error("noise species dimension must be greater than zero")]
     EmptySpecies,
@@ -438,6 +457,9 @@ pub trait NoiseAlgorithm {
     /// Algorithm-specific validation or stochastic-update failure.
     type Error: Error + Send + Sync + 'static;
 
+    /// Returns immutable RNG provenance, or explicitly declares deterministic behavior.
+    fn rng_record(&self) -> Option<&RngRecord>;
+
     /// Validates a state domain before evolution begins.
     fn validate(
         &self,
@@ -490,6 +512,11 @@ impl<N> Noise<N>
 where
     N: NoiseAlgorithm,
 {
+    /// Returns the algorithm's immutable RNG provenance when it is stochastic.
+    pub fn rng_record(&self) -> Option<&RngRecord> {
+        self.algorithm.rng_record()
+    }
+
     /// Validates canonical state payloads without mutating them.
     pub fn validate_state(&self, state: &SystemState) -> Result<(), NoiseStepError<N::Error>> {
         let (abundance, space) = state

@@ -2,7 +2,7 @@
 
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use scientific_workflow::execution::ExecutionScope;
@@ -12,7 +12,8 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use super::source::{
-    GeneratorProvenance, INTERACTION_MATRIX_FORMAT, InteractionMatrix, InteractionSourceKind,
+    GeneratorProvenance, INTERACTION_MATRIX_FORMAT, InteractionMatrix, InteractionSource,
+    InteractionSourceError, InteractionSourceKind, JsonInteractionSource,
 };
 
 /// Creation-metadata key holding the compact matrix descriptor.
@@ -173,6 +174,103 @@ pub fn persist_interaction_matrix(
     ))
 }
 
+/// Loads one recorded interaction artifact after verifying its exact identity.
+///
+/// `execution_directory` is the execution-scope root against which the
+/// descriptor's relative path was recorded. Exact SHA-256 verification occurs
+/// before JSON decoding or matrix construction.
+pub fn load_verified_interaction_matrix(
+    execution_directory: impl AsRef<Path>,
+    descriptor: &InteractionArtifactDescriptor,
+) -> Result<InteractionMatrix, InteractionArtifactLoadError> {
+    validate_descriptor(descriptor)?;
+    let execution_directory = fs::canonicalize(execution_directory.as_ref()).map_err(|source| {
+        InteractionArtifactLoadError::Io {
+            operation: "resolve execution directory",
+            path: execution_directory.as_ref().to_path_buf(),
+            source,
+        }
+    })?;
+    let relative = Path::new(descriptor.path());
+    if relative.as_os_str().is_empty()
+        || relative
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_)))
+    {
+        return Err(InteractionArtifactLoadError::InvalidDescriptor {
+            reason: "artifact path must be a nonempty normalized relative path".to_owned(),
+        });
+    }
+    let unresolved = execution_directory.join(relative);
+    let path =
+        fs::canonicalize(&unresolved).map_err(|source| InteractionArtifactLoadError::Io {
+            operation: "resolve interaction artifact",
+            path: unresolved,
+            source,
+        })?;
+    if !path.starts_with(&execution_directory) {
+        return Err(InteractionArtifactLoadError::InvalidDescriptor {
+            reason: "artifact path resolves outside the execution directory".to_owned(),
+        });
+    }
+    let bytes = fs::read(&path).map_err(|source| InteractionArtifactLoadError::Io {
+        operation: "read interaction artifact",
+        path: path.clone(),
+        source,
+    })?;
+    let actual = sha256_hex(&bytes);
+    if actual != descriptor.sha256 {
+        return Err(InteractionArtifactLoadError::DigestMismatch {
+            path,
+            expected: descriptor.sha256.clone(),
+            actual,
+        });
+    }
+    let matrix = JsonInteractionSource::resolved_file(&path).resolve(descriptor.rows)?;
+    if matrix.species() != descriptor.rows || descriptor.columns != descriptor.rows {
+        return Err(InteractionArtifactLoadError::InvalidDescriptor {
+            reason: format!(
+                "descriptor shape {}x{} does not match a square matrix",
+                descriptor.rows, descriptor.columns
+            ),
+        });
+    }
+    Ok(matrix)
+}
+
+fn validate_descriptor(
+    descriptor: &InteractionArtifactDescriptor,
+) -> Result<(), InteractionArtifactLoadError> {
+    if descriptor.format != INTERACTION_MATRIX_FORMAT {
+        return Err(InteractionArtifactLoadError::InvalidDescriptor {
+            reason: format!(
+                "artifact format `{}` is not `{INTERACTION_MATRIX_FORMAT}`",
+                descriptor.format
+            ),
+        });
+    }
+    if descriptor.rows == 0 || descriptor.rows != descriptor.columns {
+        return Err(InteractionArtifactLoadError::InvalidDescriptor {
+            reason: format!(
+                "artifact shape {}x{} must be nonempty and square",
+                descriptor.rows, descriptor.columns
+            ),
+        });
+    }
+    if descriptor.sha256.len() != 64
+        || !descriptor
+            .sha256
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+    {
+        return Err(InteractionArtifactLoadError::InvalidDescriptor {
+            reason: "artifact SHA-256 must contain exactly 64 lowercase hexadecimal digits"
+                .to_owned(),
+        });
+    }
+    Ok(())
+}
+
 fn persisted_descriptor(
     matrix: &InteractionMatrix,
     digest: String,
@@ -316,4 +414,42 @@ pub enum InteractionArtifactError {
         /// Input artifact directory.
         directory: PathBuf,
     },
+}
+
+/// Failure while verifying and reconstructing a recorded interaction artifact.
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum InteractionArtifactLoadError {
+    /// The compact metadata descriptor violates the artifact contract.
+    #[error("invalid interaction artifact descriptor: {reason}")]
+    InvalidDescriptor {
+        /// Concise rejected invariant.
+        reason: String,
+    },
+    /// A filesystem operation failed.
+    #[error("failed to {operation} at `{path}`")]
+    Io {
+        /// Stable operation label.
+        operation: &'static str,
+        /// Affected path.
+        path: PathBuf,
+        /// Underlying failure.
+        #[source]
+        source: std::io::Error,
+    },
+    /// Exact artifact bytes disagree with the recorded identity.
+    #[error(
+        "interaction artifact `{path}` has SHA-256 `{actual}`, but metadata declares `{expected}`"
+    )]
+    DigestMismatch {
+        /// Verified artifact path.
+        path: PathBuf,
+        /// Metadata-declared lowercase digest.
+        expected: String,
+        /// Digest computed over exact current bytes.
+        actual: String,
+    },
+    /// Verified artifact bytes do not encode a valid interaction matrix.
+    #[error(transparent)]
+    Matrix(#[from] InteractionSourceError),
 }

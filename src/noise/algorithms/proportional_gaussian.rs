@@ -5,6 +5,10 @@ use crate::{AggregateAbundance, SpatialAbundance, TimeStep};
 use crate::noise::core::{
     GaussianKind, GaussianWorkspace, NoiseAlgorithm, NoiseDomain, NoisePluginError,
 };
+use scientific_workflow::rng_record::RngRecord;
+
+/// Workflow metadata namespace for proportional Gaussian RNG provenance.
+pub const PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE: &str = "glv.noise.proportional_gaussian";
 
 /// Seeded proportional Gaussian noise with fixed reusable scratch.
 #[derive(Debug)]
@@ -16,7 +20,12 @@ impl ProportionalGaussian {
     /// Creates a seeded proportional plugin for one fixed payload domain.
     pub fn new(sigma: f64, seed: u64, domain: NoiseDomain) -> Result<Self, NoisePluginError> {
         Ok(Self {
-            workspace: GaussianWorkspace::new(sigma, seed, domain)?,
+            workspace: GaussianWorkspace::new(
+                sigma,
+                seed,
+                domain,
+                PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE,
+            )?,
         })
     }
 
@@ -43,6 +52,10 @@ impl ProportionalGaussian {
 
 impl NoiseAlgorithm for ProportionalGaussian {
     type Error = NoisePluginError;
+
+    fn rng_record(&self) -> Option<&RngRecord> {
+        Some(self.workspace.rng_record())
+    }
 
     fn validate(
         &self,

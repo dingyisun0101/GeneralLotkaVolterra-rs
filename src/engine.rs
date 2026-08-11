@@ -7,6 +7,7 @@
 use std::error::Error;
 use std::fmt;
 
+use scientific_workflow::rng_record::RngRecord;
 use scientific_workflow::system_state::{SimulationTime, StateError, SystemState};
 
 use crate::TimeStep;
@@ -87,6 +88,11 @@ where
     /// Returns the validated physical-time increment.
     pub const fn time_step(&self) -> TimeStep {
         self.time_step
+    }
+
+    /// Returns immutable RNG provenance declared by the noise plugin.
+    pub fn rng_record(&self) -> Option<&RngRecord> {
+        self.noise.rng_record()
     }
 
     /// Deliberately transfers ownership of the authoritative Workflow state.

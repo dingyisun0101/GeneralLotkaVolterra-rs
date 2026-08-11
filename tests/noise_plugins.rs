@@ -1,7 +1,8 @@
 use std::mem::size_of;
 
 use general_lotka_volterra_rs::noise::{
-    DemographicGaussian, NoNoise, Noise, NoiseDomain, NoisePluginError, ProportionalGaussian,
+    DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE, DemographicGaussian, NoNoise, Noise, NoiseDomain,
+    NoisePluginError, PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE, ProportionalGaussian,
 };
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TimeStep,
@@ -30,6 +31,7 @@ fn spatial(values: Vec<f64>) -> SpatialAbundance {
 fn no_noise_is_zero_sized_and_changes_nothing() {
     assert_eq!(size_of::<NoNoise>(), 0);
     let mut noise = Noise::new(NoNoise);
+    assert!(noise.rng_record().is_none());
     let mut state = state(vec![0.25, 0.75], None, 1.0);
     let time = state.simulation_time();
     let abundance = state
@@ -56,6 +58,12 @@ fn demographic_noise_is_seeded_reproducible_and_reuses_scratch() {
     let capacities = algorithm_a.scratch_capacities();
     let mut noise_a = Noise::new(algorithm_a);
     let mut noise_b = Noise::new(algorithm_b);
+    let record = noise_a.rng_record().unwrap();
+    assert_eq!(record.namespace(), DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE);
+    assert_eq!(record.method(), "chacha12+standard_normal");
+    assert_eq!(record.version(), "rand_chacha-0.10+rand_distr-0.6");
+    assert_eq!(record.key_encoding(), "u64_be_hex");
+    assert_eq!(record.key(), "0000000000000011");
     let mut state_a = state(vec![4.0, 9.0, 16.0], None, 29.0);
     let mut state_b = state(vec![4.0, 9.0, 16.0], None, 29.0);
     let initial_time = state_a.simulation_time();
@@ -95,6 +103,10 @@ fn proportional_spatial_noise_updates_only_space_reproducibly() {
     let domain = NoiseDomain::spatial(vec![2, 3]).unwrap();
     let mut noise_a = Noise::new(ProportionalGaussian::new(0.05, 99, domain.clone()).unwrap());
     let mut noise_b = Noise::new(ProportionalGaussian::new(0.05, 99, domain).unwrap());
+    assert_eq!(
+        noise_a.rng_record().unwrap().namespace(),
+        PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE
+    );
     let mut state_a = state(
         vec![0.3, 0.3, 0.4],
         spatial(vec![0.2, 0.3, 0.5, 0.4, 0.2, 0.4]),

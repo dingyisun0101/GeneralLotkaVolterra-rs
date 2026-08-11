@@ -98,6 +98,7 @@ glv/
 │   │       ├── frequency.rs
 │   │       ├── local_frequency.rs
 │   │       └── population.rs
+│   ├── reading.rs
 │   ├── recording.rs
 │   ├── simulation.rs
 │   └── simulation/
@@ -105,6 +106,7 @@ glv/
 │       ├── spatial_general_lotka_volterra.rs
 │       └── spatial_replicator.rs
 └── tests/
+    ├── continuation.rs
     ├── engine.rs
     ├── fixtures/
     ├── interaction_matrix.rs
@@ -127,6 +129,7 @@ Cargo target discovery.
 Scientific Workflow owns:
 
 - `SystemState`, `SystemStateSchema`, and `SimulationTime`;
+- validation and persistence of RNG-agnostic `RngRecord` metadata;
 - `ScientificProject`, `TaskConfig`, and project path resolution;
 - `ExecutionScope` and task recording paths;
 - `SystemStateWriter`, stream sampling, queues, chunking, checksums, and
@@ -142,6 +145,7 @@ GLV owns:
   configuration;
 - deterministic kernels and their reusable scratch storage;
 - noise algorithms and RNG ownership;
+- RNG selection, key creation, sampling, distribution transforms, and cursors;
 - frequency, local-frequency, and population invariant policies;
 - termination checks and model-specific outcomes;
 - concrete simulation constructors and validation; and
@@ -473,6 +477,15 @@ the complete input and sampling scale before advancing the RNG, computes every
 cell into the proposal buffer, and commits only after the complete proposal
 succeeds.
 
+Every `NoiseAlgorithm` explicitly returns either an immutable Workflow
+`RngRecord` or `None` for deterministic behavior. Workflow provides only
+the validated record format and metadata insertion/read interface; it contains
+no RNG implementation. The built-in Gaussian plugins record distinct GLV
+namespaces, method `chacha12+standard_normal`, implementation version
+`rand_chacha-0.10+rand_distr-0.6`, key encoding `u64_be_hex`, and the exact
+fixed-width seed value. Concrete simulations expose the selected plugin's
+record to orchestration.
+
 Proportional noise applies the legacy mass-projected update proportional to
 local abundance. Demographic noise scales fluctuations by square-root local
 abundance and removes the weighted Gaussian mean. Both clamp nonpositive or
@@ -637,9 +650,13 @@ as JSON `null`.
 `GlvRecordingMetadata` combines stable `SimulationKind` and
 `AbundanceRepresentation` values, exact resolved `TaskParameters` plus
 `task_ordinal`, and the content-addressed `InteractionArtifactDescriptor` in
-Workflow creation-time `user_metadata`. Reserved-key collisions and a
-representation incompatible with the selected model fail before recording
-creation.
+Workflow creation-time `user_metadata`. It also accepts the concrete
+simulation's optional `RngRecord`, stores stochastic method/version/key
+identity beneath Workflow's reserved `rng_records` object, and permits
+additional non-colliding component namespaces. RNG identity is written
+once in creation metadata, never in sampled state streams. Reserved-key or
+RNG-namespace collisions and a representation incompatible with the
+selected model fail before recording creation.
 
 Successful completion consumes the writer, records the final state exactly
 once through Workflow's terminal deduplication, and commits typed
@@ -653,11 +670,21 @@ running and recoverable. The recording directory contains Workflow's sole
 
 ## Reconstruction and continuation
 
-Readers register direct Serde decoders for:
+`reading.rs` is a thin adapter over Scientific Workflow storage. It registers
+direct Serde decoders for:
 
 - `Array1<f64>` under `abundance`;
 - `Option<ArrayD<f64>>` under `space`; and
 - `f64` under `total`.
+
+`open_completed_glv_recording` supplies that registry to
+`StoredStateSeriesReader`. Scientific Workflow remains responsible for
+completed-recording metadata validation, chunk byte-count and SHA-256
+verification, JSON decoding, exact `SimulationTime` reconstruction, and typed
+state-series assembly. GLV defines no separate signal reader, space reader,
+record parser, or completed-recording integrity checker. Integration tests
+cover aggregate and populated spatial round trips, non-spatial `None`, and
+exact iteration and physical-time coordinates.
 
 A deterministic continuation requires:
 
@@ -671,6 +698,34 @@ The latest selected sealed checkpoint chunk must pass byte-count and SHA-256
 verification before reconstruction. Continuation appends to the same running
 recording and must produce the same final state as uninterrupted deterministic
 execution.
+
+Scientific Workflow owns and enforces continuation integrity. Its
+`continue_recording_from_latest_checkpoint` path verifies the selected latest
+sealed checkpoint chunk's declared byte count and SHA-256 checksum before
+decoding its final record or returning an append-capable writer. A recovered
+open tail is decoded only after Workflow validates its complete JSONL prefix.
+GLV neither selects integrity policy nor duplicates these checks.
+
+`GlvRecording::continue_from_latest_checkpoint` rebuilds the exact original
+writer configuration and delegates recovery, checkpoint reconstruction, and
+append ownership to Workflow. Workflow rejects any difference in time-axis
+metadata, resolved task/GLV metadata, or stream configuration. The returned
+checkpoint is not observed a second time.
+
+`load_verified_interaction_matrix` resolves the descriptor's normalized path
+beneath the execution directory, verifies SHA-256 over the exact artifact
+bytes, and only then decodes and validates the matrix. The matching concrete
+simulation's existing `from_state` constructor consumes the complete Workflow
+checkpoint, verified matrix, abundance representation, and original typed task
+configuration. Reconstructing its kernel and plugins allocates fresh numerical
+scratch while the checkpoint remains the sole authoritative scientific state.
+
+An end-to-end deterministic test interrupts after a successfully observed
+state, reopens the same recording, reconstructs the simulation, and confirms
+that its final state and signal, space, and checkpoint sample sequences exactly
+match uninterrupted execution. Exact stochastic continuation remains
+explicitly unsupported until RNG restart state has an approved serializable or
+counter-based contract.
 
 ## Error and validation principles
 

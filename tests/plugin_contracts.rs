@@ -102,6 +102,10 @@ struct AdditiveNoise {
 impl NoiseAlgorithm for AdditiveNoise {
     type Error = TestPluginError;
 
+    fn rng_record(&self) -> Option<&scientific_workflow::rng_record::RngRecord> {
+        None
+    }
+
     fn validate(
         &self,
         abundance: &AggregateAbundance,

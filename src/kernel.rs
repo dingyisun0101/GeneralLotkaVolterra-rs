@@ -16,7 +16,8 @@ pub use algorithms::{
 };
 pub use artifact::{
     ArtifactDisposition, INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactDescriptor,
-    InteractionArtifactError, PersistedInteraction, persist_interaction_matrix,
+    InteractionArtifactError, InteractionArtifactLoadError, PersistedInteraction,
+    load_verified_interaction_matrix, persist_interaction_matrix,
 };
 pub use core::{
     Kernel, KernelAlgorithm, KernelCore, KernelCoreError, KernelStateView, KernelStepError,

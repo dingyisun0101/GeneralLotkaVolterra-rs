@@ -157,6 +157,10 @@ order and completion status for the clean-slate GLV crate on `sw-version`.
   scratch.
 - [x] Keep noise independent from final invariant enforcement and time
   advancement.
+- [x] Require every noise plugin to explicitly declare either a Workflow RNG
+  record or deterministic behavior.
+- [x] Record the built-in Gaussian method, implementation version, key
+  encoding, and exact seed key without moving RNG behavior into Workflow.
 - [x] Test invariant boundaries, non-finite inputs, cutoff, capacity, local
   simplex behavior, seeded noise reproducibility, and allocation reuse.
 - [x] Keep exact stochastic continuation explicitly unsupported until a
@@ -210,6 +214,8 @@ order and completion status for the clean-slate GLV crate on `sw-version`.
   stream intervals and nonzero byte limits.
 - [x] Include model kind, abundance representation, resolved task parameters,
   and interaction artifact descriptor in creation-time metadata.
+- [x] Write stochastic noise identity once as namespaced Workflow RNG-record
+  metadata and never repeat it in state streams.
 - [x] Observe the initial state once and every successful step
   unconditionally; remove all solver-side modulo sampling.
 - [x] Complete successful recordings with the final state exactly once.
@@ -225,23 +231,23 @@ order and completion status for the clean-slate GLV crate on `sw-version`.
 
 ## Stage 10: implement reading and deterministic continuation
 
-- [ ] Register direct Serde decoders for `Array1<f64>`,
+- [x] Register direct Serde decoders for `Array1<f64>`,
   `Option<ArrayD<f64>>`, and `f64`.
-- [ ] Replace legacy signal/space readers with `StoredStateSeriesReader`.
-- [ ] Verify typed signal and space round trips with exact simulation times.
-- [ ] Close Scientific Workflow's mandatory-integrity gap by verifying the
+- [x] Replace legacy signal/space readers with `StoredStateSeriesReader`.
+- [x] Verify typed signal and space round trips with exact simulation times.
+- [x] Close Scientific Workflow's mandatory-integrity gap by verifying the
   selected latest sealed checkpoint chunk's byte count and SHA-256 checksum
   before enabling GLV continuation.
-- [ ] Verify the referenced interaction artifact's exact bytes and SHA-256
+- [x] Verify the referenced interaction artifact's exact bytes and SHA-256
   digest before reconstructing a kernel.
-- [ ] Reconstruct the concrete simulation from complete checkpoint, original
+- [x] Reconstruct the concrete simulation from complete checkpoint, original
   task configuration, and resolved interaction artifact.
-- [ ] Reallocate numerical scratch without creating a second scientific state.
-- [ ] Continue the same running recording without overwriting existing data.
-- [ ] Verify uninterrupted and resumed deterministic runs produce the same
+- [x] Reallocate numerical scratch without creating a second scientific state.
+- [x] Continue the same running recording without overwriting existing data.
+- [x] Verify uninterrupted and resumed deterministic runs produce the same
   final state and sample sequence.
-- [ ] Do not claim exact stochastic continuation until RNG restart is part of
-  the state or reproducible configuration contract.
+- [x] Do not claim exact stochastic continuation until a stateful RNG cursor is
+  checkpointed or a reviewed counter-based draw mapping replaces it.
 
 ## Stage 11: replace project orchestration and examples
 

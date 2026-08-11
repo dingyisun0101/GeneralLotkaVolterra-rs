@@ -5,6 +5,10 @@ use crate::{AggregateAbundance, SpatialAbundance, TimeStep};
 use crate::noise::core::{
     GaussianKind, GaussianWorkspace, NoiseAlgorithm, NoiseDomain, NoisePluginError,
 };
+use scientific_workflow::rng_record::RngRecord;
+
+/// Workflow metadata namespace for demographic Gaussian RNG provenance.
+pub const DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE: &str = "glv.noise.demographic_gaussian";
 
 /// Seeded demographic Gaussian noise with fixed reusable scratch.
 #[derive(Debug)]
@@ -16,7 +20,12 @@ impl DemographicGaussian {
     /// Creates a seeded demographic plugin for one fixed payload domain.
     pub fn new(sigma: f64, seed: u64, domain: NoiseDomain) -> Result<Self, NoisePluginError> {
         Ok(Self {
-            workspace: GaussianWorkspace::new(sigma, seed, domain)?,
+            workspace: GaussianWorkspace::new(
+                sigma,
+                seed,
+                domain,
+                DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE,
+            )?,
         })
     }
 
@@ -43,6 +52,10 @@ impl DemographicGaussian {
 
 impl NoiseAlgorithm for DemographicGaussian {
     type Error = NoisePluginError;
+
+    fn rng_record(&self) -> Option<&RngRecord> {
+        Some(self.workspace.rng_record())
+    }
 
     fn validate(
         &self,
