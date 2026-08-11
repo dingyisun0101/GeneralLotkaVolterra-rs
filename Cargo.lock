@@ -152,6 +152,7 @@ dependencies = [
  "rand",
  "rand_chacha",
  "rand_distr",
+ "scientific-interaction",
  "scientific-workflow",
  "serde",
  "serde_json",
@@ -432,8 +433,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
+name = "scientific-interaction"
+version = "0.1.0"
+dependencies = [
+ "ndarray",
+ "scientific-workflow",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
 name = "scientific-workflow"
 version = "0.1.6"
+source = "git+https://github.com/dingyisun0101/Scientific-Workflow?rev=10755a7ab5f1f2158e0bdbbe3fc8c570084f0293#10755a7ab5f1f2158e0bdbbe3fc8c570084f0293"
 dependencies = [
  "console",
  "erased-serde",

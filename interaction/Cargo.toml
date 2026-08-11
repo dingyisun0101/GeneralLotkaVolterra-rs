@@ -1,0 +1,17 @@
+[package]
+name = "scientific-interaction"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+publish = false
+description = "Shared interaction-matrix sources and content-addressed artifacts"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/dingyisun0101/GeneralLotkaVolterra-rs"
+
+[dependencies]
+ndarray = { version = "0.17.2", features = ["serde"] }
+scientific-workflow = { git = "https://github.com/dingyisun0101/Scientific-Workflow", rev = "10755a7ab5f1f2158e0bdbbe3fc8c570084f0293", version = "0.1.6" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11"
+thiserror = "2"

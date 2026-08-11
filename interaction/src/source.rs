@@ -6,8 +6,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use ndarray::Array2;
+use scientific_workflow::rng_record::{RngRecord, RngRecordError};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use thiserror::Error as ThisError;
 
 /// Stable format identifier for persisted interaction matrices.
@@ -15,6 +16,12 @@ pub const INTERACTION_MATRIX_FORMAT: &str = "glv.interaction-matrix.v1";
 
 /// Stable logical layout of values in an interaction artifact.
 pub const INTERACTION_MATRIX_LAYOUT: &str = "row_major";
+
+/// Workflow metadata namespace for stochastic matrix generation.
+pub const INTERACTION_GENERATOR_RNG_NAMESPACE: &str = "scientific_interaction.generator";
+
+/// Stable persisted seed representation.
+pub const INTERACTION_GENERATOR_KEY_ENCODING: &str = "u64-lower-hex";
 
 /// A validated immutable interaction matrix and its resolution provenance.
 #[derive(Clone, Debug)]
@@ -42,6 +49,11 @@ impl InteractionMatrix {
     /// Borrows the complete source provenance.
     pub const fn provenance(&self) -> &InteractionProvenance {
         &self.provenance
+    }
+
+    /// Returns a Workflow RNG record when this matrix came from a stochastic generator.
+    pub fn generator_rng_record(&self) -> Result<Option<RngRecord>, RngRecordError> {
+        self.provenance.generator_rng_record()
     }
 
     pub(crate) fn artifact_document(&self) -> InteractionMatrixDocument {
@@ -118,6 +130,14 @@ impl InteractionProvenance {
             _ => None,
         }
     }
+
+    /// Returns a Workflow RNG record for stochastic generation only.
+    pub fn generator_rng_record(&self) -> Result<Option<RngRecord>, RngRecordError> {
+        let Some(generator) = self.generator() else {
+            return Ok(None);
+        };
+        generator.rng_record()
+    }
 }
 
 /// Reproducibility metadata for one generated matrix.
@@ -148,6 +168,25 @@ impl GeneratorProvenance {
     /// Returns the explicit stochastic seed, or `None` for deterministic generation.
     pub const fn seed(&self) -> Option<u64> {
         self.seed
+    }
+
+    /// Converts a stochastic seed into Workflow's lightweight provenance record.
+    pub fn rng_record(&self) -> Result<Option<RngRecord>, RngRecordError> {
+        let Some(seed) = self.seed else {
+            return Ok(None);
+        };
+        let mut parameters = Map::new();
+        parameters.insert("generator_parameters".to_owned(), self.parameters.clone());
+        Ok(Some(
+            RngRecord::new(
+                INTERACTION_GENERATOR_RNG_NAMESPACE,
+                &self.identity,
+                &self.version,
+                INTERACTION_GENERATOR_KEY_ENCODING,
+                format!("{seed:016x}"),
+            )?
+            .with_parameters(parameters),
+        ))
     }
 }
 

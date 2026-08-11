@@ -8,8 +8,8 @@ use ndarray::{Array2, ArrayD, ArrayView1, ArrayViewD};
 use scientific_workflow::system_state::{StateError, SystemState};
 use thiserror::Error as ThisError;
 
-use super::source::{InteractionMatrix, InteractionProvenance};
 use crate::{ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TimeStep};
+use scientific_interaction::{InteractionMatrix, InteractionProvenance};
 
 /// Invalid shared matrix application.
 #[derive(Debug, ThisError)]

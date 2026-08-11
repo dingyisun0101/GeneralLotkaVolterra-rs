@@ -138,6 +138,15 @@ fn generated_sources_record_typed_parameters_version_and_seed() {
     assert_eq!(generator.version(), "1");
     assert_eq!(generator.parameters()["diagonal"], -0.25);
     assert_eq!(generator.seed(), Some(42));
+    let rng = resolved
+        .generator_rng_record()
+        .unwrap()
+        .expect("stochastic generator RNG record");
+    assert_eq!(rng.namespace(), "scientific_interaction.generator");
+    assert_eq!(rng.method(), "test.diagonal");
+    assert_eq!(rng.version(), "1");
+    assert_eq!(rng.key(), "000000000000002a");
+    assert_eq!(rng.parameters()["generator_parameters"]["diagonal"], -0.25);
 }
 
 #[test]

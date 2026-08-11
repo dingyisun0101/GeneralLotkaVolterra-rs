@@ -6,26 +6,22 @@
 //! advance its simulation time.
 
 mod algorithms;
-pub mod artifact;
 pub mod core;
-pub mod source;
 
 pub use algorithms::{
     Boundary, Diffusion, KernelAlgorithmError, MeanFieldReplicatorRk4,
     SpatialGeneralLotkaVolterraRk2, SpatialLayout, SpatialReplicatorRk2,
 };
-pub use artifact::{
-    ArtifactDisposition, INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactDescriptor,
-    InteractionArtifactError, InteractionArtifactLoadError, PersistedInteraction,
-    load_verified_interaction_matrix, persist_interaction_matrix,
-};
 pub use core::{
     Kernel, KernelAlgorithm, KernelCore, KernelCoreError, KernelStateView, KernelStepError,
     KernelUpdate, KernelUpdateError,
 };
-pub use source::{
-    GeneratedSource, GeneratorProvenance, GeneratorRandomness, INTERACTION_MATRIX_FORMAT,
-    INTERACTION_MATRIX_LAYOUT, InMemorySource, InteractionGenerator, InteractionMatrix,
-    InteractionProvenance, InteractionSource, InteractionSourceError, InteractionSourceKind,
-    JsonInteractionSource,
+pub use scientific_interaction::{
+    ArtifactDisposition, GeneratedSource, GeneratorProvenance, GeneratorRandomness,
+    INTERACTION_GENERATOR_KEY_ENCODING, INTERACTION_GENERATOR_RNG_NAMESPACE,
+    INTERACTION_MATRIX_FORMAT, INTERACTION_MATRIX_LAYOUT, INTERACTION_MATRIX_METADATA_KEY,
+    InMemorySource, InteractionArtifactDescriptor, InteractionArtifactError,
+    InteractionArtifactLoadError, InteractionGenerator, InteractionMatrix, InteractionProvenance,
+    InteractionSource, InteractionSourceError, InteractionSourceKind, JsonInteractionSource,
+    PersistedInteraction, load_verified_interaction_matrix, persist_interaction_matrix,
 };
