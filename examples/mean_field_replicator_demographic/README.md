@@ -32,12 +32,14 @@ Copy the entire directory and run:
 cargo run --release
 ```
 
-The checked-in `config/sweep.json` runs the same scientific parameters with
-multiple seeds. Edit `sigma` in `config/fixed.json` to control noise strength,
-or pass another compatible project root:
+The binary delegates the complete project to
+`GlvTemplate::MeanFieldReplicatorDemographic`. The checked-in
+`config/sweep.json` runs the same scientific parameters with multiple complete
+PiP `RngConfig` values. Edit `sigma` in `config/fixed.json` to control noise
+strength, or pass another compatible configuration folder:
 
 ```sh
-cargo run --release -- /path/to/project
+cargo run --release -- /path/to/project/config
 ```
 
 Each task receives its own recording directory. Signal, spatial, and checkpoint

@@ -27,13 +27,21 @@ Install Rust 1.97 or newer, copy this entire directory, and run:
 cargo run --release
 ```
 
-An optional first argument selects another compatible Workflow project:
+The binary contains only the ordinary two-item prelude and this call:
 
-```sh
-cargo run --release -- /path/to/project
+```rust
+run(GlvTemplate::MeanFieldReplicator, config)?;
 ```
 
-The default project is this directory. `config/fixed.json` contains common
+An optional first argument selects another compatible Workflow configuration
+folder:
+
+```sh
+cargo run --release -- /path/to/project/config
+```
+
+The default configuration is this directory's `config/` folder.
+`config/fixed.json` contains common
 parameters, `config/sweep.json` varies `cutoff`, and `config/paths.json` names
 the interaction matrix and output root. The matrix file uses rows as affected
 species and columns as contributing species.

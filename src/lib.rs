@@ -6,6 +6,7 @@ use ndarray::{Array1, ArrayD};
 use scientific_workflow::system_state::{StateError, SystemStateSchema};
 use serde::{Deserialize, Serialize};
 
+pub mod advanced;
 pub mod core;
 #[doc(hidden)]
 pub mod engine;
@@ -17,6 +18,9 @@ pub mod project;
 pub mod reading;
 pub mod recording;
 pub mod simulation;
+mod template;
+
+pub use template::{GlvRunError, GlvTemplate, run};
 
 pub use simulation::{
     MeanFieldReplicator, MeanFieldReplicatorConfig, SpatialGeneralLotkaVolterra,

@@ -5,6 +5,7 @@ use general_lotka_volterra_rs::kernel::{
 };
 use general_lotka_volterra_rs::project::load_glv_project;
 use general_lotka_volterra_rs::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD};
+use physics_in_parallel::rng::RngConfig;
 use scientific_workflow::prelude::{SamplingInterval, StateStreamConfig};
 
 fn example_root(name: &str) -> PathBuf {
@@ -110,4 +111,11 @@ fn domain_configuration_decodes_without_application_mirror_types() {
         serde_json::from_str::<BoundaryCondition>("\"neumann\"").unwrap(),
         BoundaryCondition::Neumann
     );
+
+    let project = load_glv_project(example_root("mean_field_replicator_demographic")).unwrap();
+    let seeds = project
+        .task_configs()
+        .map(|task| task.decode_value::<RngConfig>("rng").unwrap().seed())
+        .collect::<Vec<_>>();
+    assert_eq!(seeds, [Some(7), Some(11)]);
 }

@@ -1,6 +1,12 @@
 {
   "mode": "cartesian",
   "axes": [
-    {"name": "seed", "values": [7, 11]}
+    {
+      "name": "rng",
+      "values": [
+        {"seed": 7},
+        {"seed": 11}
+      ]
+    }
   ]
 }

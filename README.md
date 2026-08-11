@@ -16,40 +16,85 @@ The minimum supported toolchain is Rust 1.97 with edition 2024.
 The current Workflow-native implementation and documentation live on the
 [`sw-version` GitHub branch](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version).
 
-## Concrete simulation API
+## Ordinary users: one entry point
 
-Applications can bring the complete model-facing API, ndarray boundary types,
-and Scientific Workflow orchestration types into scope through one prelude:
+Ordinary applications import a deliberately two-item prelude, select a built-in
+template, and point it at a conventional Workflow `config` directory:
 
-```rust
+```rust,no_run
 use general_lotka_volterra_rs::prelude::*;
 
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
-let interaction = InMemorySource::new(arr2(&[
-    [0.0, 0.4],
-    [-0.3, 0.0],
-]))
-.resolve(2)?;
-let config = MeanFieldReplicatorConfig::new(
-    Array1::zeros(2),
-    1e-12,
-    TimeStep::new(0.005)?,
-);
-let mut simulation = MeanFieldReplicator::new(
-    Array1::from_vec(vec![0.6, 0.4]),
-    interaction,
-    config,
+let execution = run(
+    GlvTemplate::MeanFieldReplicator,
+    "examples/mean_field_replicator/config",
 )?;
-
-simulation.step()?;
-assert_eq!(simulation.state().simulation_time().iteration(), 1);
+println!("results: {}", execution.directory().display());
 # Ok(())
 # }
 ```
 
-There is intentionally no generic GLV dispatcher. Applications orchestrate a
-concrete simulation, which keeps invalid model/plugin combinations out of the
-runtime API.
+The ordinary prelude exports only `run` and `GlvTemplate`. `run` loads the
+Workflow project whose root contains that configuration folder, validates its
+state schema, expands every task, creates a collision-resistant output scope,
+constructs the selected model, evolves it, records it, verifies its final
+checkpoint, and completes progress reporting.
+
+Built-in templates are:
+
+| Template | Scientific composition |
+| --- | --- |
+| `MeanFieldReplicator` | deterministic mean-field replicator with RK4 |
+| `MeanFieldReplicatorDemographic` | RK4 mean-field replicator with demographic Gaussian noise |
+| `SpatialReplicator` | local-frequency reaction–diffusion with midpoint RK2 |
+| `SpatialGeneralLotkaVolterra` | absolute-population reaction–diffusion with midpoint RK2 |
+
+All scientific values and output locations remain in the Workflow project
+documents. There is no separate output-path argument and therefore no second
+path authority outside `config/paths.json`.
+
+## Advanced users: custom templates
+
+Authors who need a new scientific composition use the explicitly separate
+advanced layer:
+
+```rust,ignore
+use general_lotka_volterra_rs::advanced::prelude::*;
+
+struct MyTemplate;
+
+impl GlvProjectTemplate for MyTemplate {
+    fn name(&self) -> &str {
+        "my_template"
+    }
+
+    fn run_task(
+        &mut self,
+        scope: &ExecutionScope,
+        reporter: &ProgressReporter,
+        task: TaskConfig,
+    ) -> Result<(), TemplateTaskError> {
+        // Decode the task, compose model/kernel/noise/invariant building
+        // blocks, and use Workflow recording and progress directly.
+        todo!()
+    }
+}
+
+run(MyTemplate, "path/to/project/config")?;
+```
+
+`advanced::prelude` exposes the concrete models, kernels, noise plugins,
+invariants, interaction sources, recording adapter, ndarray boundary types,
+PiP spatial/RNG configuration, Workflow prelude, and the
+`GlvProjectTemplate` contract. Built-in templates are assembled from these same
+components; they have no privileged model API.
+
+The outer `run` function always owns project loading, task iteration, execution
+scope creation, and the project-level reporter. A custom template owns only its
+per-task scientific composition: it decodes the supplied `TaskConfig`, starts
+and completes that task's `TaskProgress`, resolves scientific inputs, constructs
+and steps the model, and delegates recording to `GlvRecording`. It should not
+create another project, scope, reporter, task wrapper, or output-path system.
 
 ## Canonical state
 
@@ -105,12 +150,10 @@ examples/<model>/
 ```
 
 Each directory is a complete crate and Workflow project that can be copied and
-run independently. `load_glv_project` delegates all four documents to
-`ScientificProject`, then checks the canonical GLV state fields.
-`task_configs()` expands the sweep lazily, and each `TaskConfig` decodes values
-directly into standard or GLV domain types before numerical construction. User
-code does not need mirror task, boundary, or recording configuration structs.
-Relative paths are resolved against that example's project root.
+run independently. Its `main.rs` selects one `GlvTemplate` and passes its
+`config` directory to `run`; it contains no model construction, task loop,
+recording code, or custom configuration struct. Relative paths are resolved
+against that example's project root.
 
 Spatial models use PiP's `SquareLatticeConfig` as the sole owner of shape,
 boundary condition, spacing, neighbor lookup, and Laplacian behavior. GLV's
@@ -119,9 +162,9 @@ species-last ndarray state shape is derived from that lattice configuration and
 the growth-vector length.
 
 Each run creates a new collision-resistant `ExecutionScope`; existing output
-is never deleted or overwritten. Examples execute tasks sequentially to make
-the orchestration lifecycle explicit. Task-level parallelism can later consume
-the same lazy task iterator without changing simulation internals.
+is never deleted or overwritten. Built-in templates execute tasks sequentially.
+Task-level parallelism can later consume the same lazy task iterator without
+changing simulation internals.
 
 The example READMEs focus on the governing equations, parameter meanings,
 state interpretation, and usage:
@@ -139,8 +182,8 @@ cargo run --release
 ```
 
 Within this repository, all examples can be checked together with
-`cargo check --workspace`. Pass another project root as the first argument to
-any example binary.
+`cargo check --workspace`. Pass another compatible `config` directory as the
+first argument to any example binary.
 
 ## Recording and reading
 

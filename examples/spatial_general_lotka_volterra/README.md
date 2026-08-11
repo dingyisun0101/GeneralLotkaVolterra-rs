@@ -39,7 +39,9 @@ Important values in `config/fixed.json` are:
 - `carrying_capacity`: a positive total capacity or `null`; and
 - `physical_time_increment`: RK2 time increment.
 
-Pass another compatible Workflow project as the optional first argument.
+The binary selects `GlvTemplate::SpatialGeneralLotkaVolterra` and contains no
+model assembly or recording code. Pass another compatible Workflow `config`
+folder as the optional first argument.
 Every invocation creates new output and records aggregate, spatial, and
 checkpoint streams. The program verifies the final checkpoint before success.
 

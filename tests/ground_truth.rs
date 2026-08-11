@@ -1,4 +1,4 @@
-use general_lotka_volterra_rs::prelude::*;
+use general_lotka_volterra_rs::advanced::prelude::*;
 use serde_json::Value;
 
 const GROUND_TRUTH: &str = include_str!("fixtures/ground_truth.json");

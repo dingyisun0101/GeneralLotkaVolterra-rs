@@ -33,10 +33,12 @@ Change `spatial_shape`, per-species `diffusion`, per-axis `spacing`, or
 `boundary` to define another lattice. The final array axis is inferred from the
 length of `initial_cell`; the interaction matrix must have the same dimension.
 
-An optional project path allows the same binary to run another configuration:
+The binary selects `GlvTemplate::SpatialReplicator`; all construction and
+Workflow orchestration are supplied by that built-in template. An optional
+configuration-folder path allows the same binary to run another project:
 
 ```sh
-cargo run --release -- /path/to/project
+cargo run --release -- /path/to/project/config
 ```
 
 Outputs are written to a fresh execution scope. The `space` stream retains the

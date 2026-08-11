@@ -6,4 +6,4 @@ rust-version = "1.97"
 publish = false
 
 [dependencies]
-general-lotka-volterra-rs = "0.3.1"
+general-lotka-volterra-rs = "0.3.2"

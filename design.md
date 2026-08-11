@@ -10,9 +10,9 @@ implementation on `sw-version`.
   and progress behavior.
 - Keep GLV responsible for ecological equations, numerical algorithms,
   invariants, stochastic updates, validation, and model-specific assembly.
-- Provide concrete simulations as the primary user API while allowing kernels,
-  noise algorithms, invariant policies, and interaction-matrix sources to be
-  composed without changing the shared engine.
+- Provide one ordinary-user `run(template, config_folder)` entry point and keep
+  concrete simulations, kernels, noise algorithms, invariant policies, and
+  interaction sources in a separate advanced template-authoring layer.
 - Validate deterministic numerical behavior against independent
   high-resolution ground truth before changing scientific behavior.
 - Make every resolved interaction matrix independently inspectable and exactly
@@ -61,6 +61,7 @@ glv/
 │   └── state.json
 ├── src/
 │   ├── lib.rs
+│   ├── advanced.rs
 │   ├── core.rs
 │   ├── engine.rs
 │   ├── kernel.rs
@@ -95,6 +96,7 @@ glv/
 │   ├── reading.rs
 │   ├── recording.rs
 │   ├── simulation.rs
+│   ├── template.rs
 │   └── simulation/
 │       ├── mean_field_replicator.rs
 │       ├── spatial_general_lotka_volterra.rs
@@ -148,8 +150,8 @@ GLV owns:
 - interaction, growth, diffusion, cutoff, carrying-capacity, and stochastic
   configuration;
 - deterministic kernels and their reusable scratch storage;
-- noise algorithms and RNG ownership;
-- RNG selection, key creation, sampling, distribution transforms, and cursors;
+- noise algorithms that consume PiP's universal `RngConfig` and retain the
+  resolved sampler state;
 - frequency, local-frequency, and population invariant policies;
 - termination checks and model-specific outcomes;
 - concrete simulation constructors and validation; and
@@ -394,8 +396,7 @@ Implemented source families are:
 - JSON: exact inline rows decoded by Workflow or a versioned matrix file at an
   already resolved project path; and
 - generated: a typed generator with explicit algorithm identity, version,
-  serializable parameters, and a randomness enum whose stochastic variant
-  structurally requires a seed.
+  serializable parameters, and optional resolved PiP `RngConfig` provenance.
 
 Scientific Workflow remains the configuration parser. `ScientificProject` and
 `TaskConfig` decode `fixed.json`, `sweep.json`, and `paths.json` into typed GLV
@@ -449,7 +450,7 @@ creation-time metadata:
 - execution-relative artifact path;
 - source kind; and
 - for generators, generator identity, generator version, parameters, and
-  seed.
+  resolved `RngConfig` when stochastic.
 
 The matrix is not a Workflow state field and is not repeated in checkpoints.
 Its coefficients are also absent from task metadata; only the compact
@@ -605,9 +606,25 @@ retain ownership of any rejected payload through typed Workflow
 `SimulationKind` supplies stable `mean_field_replicator`,
 `spatial_replicator`, and `spatial_general_lotka_volterra` metadata values.
 
+## Ordinary and advanced API layers
+
+The ordinary `prelude` exports only `run` and `GlvTemplate`. The caller selects
+one built-in scientific composition and supplies the conventional Workflow
+`config` folder. `run` derives the project root, loads and validates the
+project, expands tasks, creates the Workflow execution scope and progress
+reporter, delegates model-specific work to the template, and returns the
+completed `ExecutionScope`.
+
+The separate `advanced::prelude` exposes the building blocks needed to create a
+custom composition. `GlvProjectTemplate` is the only extension contract. Its
+`run_task` method receives Workflow's existing `ExecutionScope`,
+`ProgressReporter`, and `TaskConfig` directly; GLV defines no parallel context,
+task, or configuration wrapper. The built-in `GlvTemplate` enum implements the
+same contract using the same advanced model/plugin APIs.
+
 ## Orchestration and recording
 
-An application `main.rs` directly orchestrates concrete simulations:
+The single entry point owns this standard project flow:
 
 ```text
 ScientificProject
@@ -632,9 +649,10 @@ complete with final state and terminal metadata
 Every runnable model example supplies conventional
 `config/{fixed,sweep,paths,state}.json` inputs. Scientific parameters are
 decoded from `TaskConfig`; interaction files are resolved before construction
-and persisted once per execution scope. Examples iterate lazy task
-configurations sequentially and report through `ProgressReporter` and
-`TaskProgress`. No replacement GLV dispatcher exists.
+and persisted once per execution scope. `run` iterates lazy task configurations
+sequentially and reports through `ProgressReporter` and `TaskProgress`.
+Example `main.rs` files only select a built-in template and pass their config
+folder.
 
 After completion, examples reopen the checkpoint stream through
 `StoredStateSeriesReader` and compare it with the in-memory final state. The
