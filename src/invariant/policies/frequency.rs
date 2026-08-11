@@ -2,7 +2,7 @@
 
 use crate::{AggregateAbundance, SpatialAbundance, TotalAbundance};
 
-use super::core::{
+use crate::invariant::core::{
     InvariantPolicy, InvariantPolicyError, close, validate_abundance_values,
     validate_species_and_cutoff,
 };

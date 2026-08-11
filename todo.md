@@ -164,62 +164,62 @@ order and completion status for the clean-slate GLV crate on `sw-version`.
 
 ## Stage 7: implement deterministic kernel algorithms
 
-- [ ] Implement `WellMixedReplicatorRk4` with model-owned RK4 stages and
+- [x] Implement `MeanFieldReplicatorRk4` with model-owned RK4 stages and
   matrix-vector scratch.
-- [ ] Verify the well-mixed deterministic trajectory against the legacy
+- [x] Verify the well-mixed deterministic trajectory against the legacy
   fixture before proceeding.
-- [ ] Implement the shared spatial layout and boundary facilities required by
+- [x] Implement the shared spatial layout and boundary facilities required by
   spatial kernels.
-- [ ] Implement `SpatialReplicatorRk2` with reusable spatial scratch.
-- [ ] Verify spatial replicator abundance and space against the legacy fixture.
-- [ ] Implement `SpatialGlvRk2` with reusable spatial scratch.
-- [ ] Verify spatial GLV abundance, space, and reviewed total semantics against
+- [x] Implement `SpatialReplicatorRk2` with reusable spatial scratch.
+- [x] Verify spatial replicator abundance and space against the legacy fixture.
+- [x] Implement `SpatialGeneralLotkaVolterraRk2` with reusable spatial scratch.
+- [x] Verify spatial GLV abundance, space, and reviewed total semantics against
   the legacy fixture.
-- [ ] Preserve the legacy numerical operation order unless an intentional
+- [x] Preserve the legacy numerical operation order unless an intentional
   scientific change is separately reviewed and recorded.
-- [ ] Keep all kernel tests under integration-test targets rather than
+- [x] Keep all kernel tests under integration-test targets rather than
   production files.
 
 ## Stage 8: expose concrete simulation APIs
 
-- [ ] Add top-level `simulation.rs` and `simulation/` implementation files.
-- [ ] Implement `WellMixedReplicator` as a legal engine composition.
-- [ ] Implement `SpatialReplicator` as a legal engine composition.
-- [ ] Implement `SpatialGlv` as a legal engine composition.
-- [ ] Keep concrete simulations limited to typed configuration, constructors,
+- [x] Add top-level `simulation.rs` and `simulation/` implementation files.
+- [x] Implement `MeanFieldReplicator` as a legal engine composition.
+- [x] Implement `SpatialReplicator` as a legal engine composition.
+- [x] Implement `SpatialGeneralLotkaVolterra` as a legal engine composition.
+- [x] Keep concrete simulations limited to typed configuration, constructors,
   reconstruction validation, plugin wiring, defaults, and convenience
   accessors.
-- [ ] Provide construction from initial values and from reconstructed Workflow
+- [x] Provide construction from initial values and from reconstructed Workflow
   state.
-- [ ] Validate abundance representation, space presence, dimensions, kernel
+- [x] Validate abundance representation, space presence, dimensions, kernel
   matrix dimension, and plugin compatibility before evolution.
-- [ ] Allow compatible alternate kernel and noise plugins through builders or
+- [x] Allow compatible alternate kernel and noise plugins through builders or
   defaulted generic parameters without making the internal engine the primary
   API.
-- [ ] Re-export all three concrete simulations at the crate root.
-- [ ] Verify normal user code imports concrete simulations directly from
+- [x] Re-export all three concrete simulations at the crate root.
+- [x] Verify normal user code imports concrete simulations directly from
   `general_lotka_volterra_rs`.
 
 ## Stage 9: integrate Workflow recording and terminal metadata
 
-- [ ] Define `signal` as `abundance` plus `total`.
-- [ ] Define `space` as `abundance`, `space`, and `total`.
-- [ ] Define `checkpoint` as all three canonical fields; non-spatial records
+- [x] Define `signal` as `abundance` plus `total`.
+- [x] Define `space` as `abundance`, `space`, and `total`.
+- [x] Define `checkpoint` as all three canonical fields; non-spatial records
   encode `space` as `null`.
-- [ ] Build one `SystemStateWriter` per simulation run with independent typed
+- [x] Build one `SystemStateWriter` per simulation run with independent typed
   stream intervals and nonzero byte limits.
-- [ ] Include model kind, abundance representation, resolved task parameters,
+- [x] Include model kind, abundance representation, resolved task parameters,
   and interaction artifact descriptor in creation-time metadata.
-- [ ] Observe the initial state once and every successful step
+- [x] Observe the initial state once and every successful step
   unconditionally; remove all solver-side modulo sampling.
-- [ ] Complete successful recordings with the final state exactly once.
-- [ ] Commit termination reason and completed iteration as terminal metadata;
+- [x] Complete successful recordings with the final state exactly once.
+- [x] Commit termination reason and completed iteration as terminal metadata;
   create no GLV sidecar metadata file.
-- [ ] Use `CompletedRecording` for timing and stream record, chunk, and byte
+- [x] Use `CompletedRecording` for timing and stream record, chunk, and byte
   summaries.
-- [ ] Mark intentional simulation failures and leave unexpected interruption
+- [x] Mark intentional simulation failures and leave unexpected interruption
   recoverable as a running recording.
-- [ ] Test independent intervals, final-state behavior, exact-byte chunks,
+- [x] Test independent intervals, final-state behavior, exact-byte chunks,
   bounded backpressure, checksums, failure lifecycle, matrix descriptors, and
   the single-metadata-file rule.
 

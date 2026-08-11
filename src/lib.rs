@@ -18,6 +18,13 @@ pub mod engine;
 pub mod invariant;
 pub mod kernel;
 pub mod noise;
+pub mod recording;
+pub mod simulation;
+
+pub use simulation::{
+    MeanFieldReplicator, MeanFieldReplicatorConfig, SpatialGeneralLotkaVolterra,
+    SpatialGeneralLotkaVolterraConfig, SpatialReplicator, SpatialReplicatorConfig,
+};
 
 pub use core::{TimeStep, TimeStepError};
 

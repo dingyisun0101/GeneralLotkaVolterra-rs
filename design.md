@@ -73,41 +73,49 @@ glv/
 │   ├── engine.rs
 │   ├── kernel.rs
 │   ├── kernel/
+│   │   ├── algorithms.rs
+│   │   ├── algorithms/
+│   │   │   ├── mean_field_replicator_rk4.rs
+│   │   │   ├── spatial.rs
+│   │   │   ├── spatial_general_lotka_volterra_rk2.rs
+│   │   │   └── spatial_replicator_rk2.rs
 │   │   ├── artifact.rs
 │   │   ├── core.rs
-│   │   ├── source.rs
-│   │   ├── source/
-│   │   │   ├── generated.rs
-│   │   │   └── json.rs
-│   │   ├── spatial_glv_rk2.rs
-│   │   ├── spatial_replicator_rk2.rs
-│   │   └── well_mixed_replicator_rk4.rs
+│   │   └── source.rs
 │   ├── noise.rs
 │   ├── noise/
-│   │   ├── core.rs
-│   │   ├── demographic_gaussian.rs
-│   │   ├── none.rs
-│   │   └── proportional_gaussian.rs
+│   │   ├── algorithms.rs
+│   │   ├── algorithms/
+│   │   │   ├── demographic_gaussian.rs
+│   │   │   ├── none.rs
+│   │   │   └── proportional_gaussian.rs
+│   │   └── core.rs
 │   ├── invariant.rs
 │   ├── invariant/
 │   │   ├── core.rs
-│   │   ├── frequency.rs
-│   │   ├── local_frequency.rs
-│   │   └── population.rs
+│   │   ├── policies.rs
+│   │   └── policies/
+│   │       ├── frequency.rs
+│   │       ├── local_frequency.rs
+│   │       └── population.rs
+│   ├── recording.rs
 │   ├── simulation.rs
 │   └── simulation/
-│       ├── spatial_glv.rs
-│       ├── spatial_replicator.rs
-│       └── well_mixed_replicator.rs
+│       ├── mean_field_replicator.rs
+│       ├── spatial_general_lotka_volterra.rs
+│       └── spatial_replicator.rs
 └── tests/
     ├── engine.rs
     ├── fixtures/
     ├── interaction_matrix.rs
     ├── invariants.rs
+    ├── kernel_algorithms.rs
     ├── kernel_evolution.rs
     ├── legacy_baseline.rs
     ├── noise_plugins.rs
     ├── plugin_contracts.rs
+    ├── recording.rs
+    ├── simulations.rs
     └── state_schema.rs
 ```
 
@@ -270,7 +278,7 @@ pub struct Kernel<A> {
 }
 ```
 
-`A` is a deterministic algorithm such as `WellMixedReplicatorRk4`. The narrow
+`A` is a deterministic algorithm such as `MeanFieldReplicatorRk4`. The narrow
 algorithm contract receives validated kernel facilities and a read-only view
 of the authoritative abundance payloads. It computes one proposed transition
 into its own reusable scratch and never receives mutable Workflow state,
@@ -326,6 +334,39 @@ Matrix construction validates:
 - provenance sufficient to locate and verify the resolved artifact.
 
 No matrix is read or generated in a hot loop.
+
+### Deterministic algorithms
+
+Concrete numerical implementations live privately under
+`kernel/algorithms/`; `kernel` re-exports their public types so reorganizing
+implementation files does not leak into user imports. The corresponding
+concrete noise implementations live under `noise/algorithms/`, while invariant
+implementations use `invariant/policies/` because they enforce state policy
+rather than evolve it. Shared traits and wrappers remain in each subsystem's
+`core.rs`.
+
+`MeanFieldReplicatorRk4` owns four species-sized stage vectors, one temporary
+state, matrix-product and drift scratch, and one proposed output. Its right-hand
+side is the mean-field replicator equation
+`nu_i * (g_i + (V nu)_i - sum_j nu_j * (g_j + (V nu)_j))`. One step uses
+classical RK4 and proposes aggregate abundance only.
+
+Both spatial algorithms share a species-last `SpatialLayout`, checked
+row-major strides, `Diffusion`, and midpoint RK2 machinery. `Boundary` supports
+periodic wrapping and zero-flux Neumann edges. Grid spacing is validated once
+and cached as inverse squared spacing. Explicit diffusion steps expose and
+enforce the conservative bound
+`dt <= 1 / (2 * max(D) * sum_axis(1 / dx_axis^2))` when diffusion is nonzero.
+
+`SpatialReplicatorRk2` evolves local replicator reaction plus diffusion;
+`SpatialGeneralLotkaVolterraRk2` evolves local GLV population reaction plus
+diffusion. They own
+fixed-shape first-stage, midpoint, and proposed-output arrays, and propose only
+the spatial payload. The following invariant phase refreshes aggregate
+abundance and `total`. All inner sums, RK stages, neighbor visits, and final
+updates retain the legacy numerical operation order. Integration tests compare
+all three deterministic endpoints to the fixed legacy fixture at the common
+`1e-12` absolute and relative tolerance.
 
 ### Interaction sources
 
@@ -481,14 +522,14 @@ design review.
 
 The public `simulation` module contains the important final API:
 
-- `WellMixedReplicator`;
+- `MeanFieldReplicator`;
 - `SpatialReplicator`; and
-- `SpatialGlv`.
+- `SpatialGeneralLotkaVolterra`.
 
 `lib.rs` re-exports these types at the crate root so normal orchestration uses:
 
 ```rust,ignore
-use general_lotka_volterra_rs::WellMixedReplicator;
+use general_lotka_volterra_rs::MeanFieldReplicator;
 ```
 
 Concrete simulation modules contain only:
@@ -502,10 +543,51 @@ Concrete simulation modules contain only:
 They do not contain matrix loading logic, numerical kernel implementations,
 recording, progress reporting, or duplicated state lifecycle code.
 
-Default type parameters or builders may expose alternative compatible kernel
-and noise plugins without exposing the crate-internal engine as the primary
-user API. Illegal combinations must fail at construction, preferably through
-types and otherwise through descriptive validation errors.
+Each concrete type has defaulted kernel and noise parameters while fixing its
+invariant policy in the type itself:
+
+```rust,ignore
+pub struct MeanFieldReplicator<A = MeanFieldReplicatorRk4, N = NoNoise> {
+    engine: Engine<A, N, FrequencyInvariant>,
+}
+```
+
+`SpatialReplicator` similarly fixes `LocalFrequencyInvariant`, and
+`SpatialGeneralLotkaVolterra` fixes `PopulationInvariant`. Callers therefore
+cannot substitute
+an invariant belonging to a different abundance domain. `from_plugins`
+accepts alternate statically dispatched kernel and noise implementations; the
+shared engine validates their state domains before ownership is accepted.
+
+Typed `MeanFieldReplicatorConfig`, `SpatialReplicatorConfig`, and
+`SpatialGeneralLotkaVolterraConfig` values group immutable growth, layout,
+diffusion, cutoff, capacity, and `TimeStep` inputs. Resolved `InteractionMatrix` values remain
+separate because their provenance and content-addressed persistence belong to
+the shared kernel/input workflow rather than model-specific scalar
+configuration.
+
+Every concrete simulation provides:
+
+- `new(initial, interaction, config)`, which moves initial arrays into a
+  canonical iteration-zero Workflow state and wires the built-in deterministic
+  kernel with `NoNoise`;
+- `from_state`, which reconstructs built-in scratch around an existing
+  Workflow state and validates recorded representation metadata; and
+- immutable `state`, `time_step`, model-kind, representation, `step`, and
+  consuming `into_state` accessors.
+
+Spatial `new` constructors derive aggregate abundance and legacy-compatible
+`total` from the authoritative initial spatial allocation. Construction checks
+representation, space presence and exact shape, species dimensions, matrix
+dimension, plugin domain, invariant consistency, physical time, and the
+explicit diffusion stability limit before evolution. State insertion errors
+retain ownership of any rejected payload through typed Workflow
+`PayloadInsertError` variants.
+
+`SimulationKind` supplies stable `mean_field_replicator`,
+`spatial_replicator`, and `spatial_general_lotka_volterra` metadata values. The frozen legacy
+fixture continues to use its historical `well_mixed_replicator` identifier;
+the new public API provides no compatibility alias.
 
 ## Orchestration and recording
 
@@ -520,7 +602,7 @@ interaction source → resolved matrix → content-addressed input artifact
         ↓
 kernel + noise + invariant → concrete simulation
         ↓
-ExecutionScope task path → SystemStateWriter
+ExecutionScope task path → GlvRecording → SystemStateWriter
         ↓
 observe initial state
         ↓
@@ -531,8 +613,12 @@ terminal decision
 complete with final state and terminal metadata
 ```
 
-The writer owns sampling. Evolution code offers the initial state and every
-successfully evolved state unconditionally.
+`GlvRecording::start` creates exactly one Workflow writer and immediately
+offers the initial state. Orchestration calls `observe_state` after every
+successful simulation step without checking intervals. The Workflow writer
+owns all sampling decisions, borrowed encoding, bounded queues, chunk rollover,
+checksums, atomic metadata, and operational timing; GLV implements none of
+those mechanisms.
 
 Named streams are:
 
@@ -542,10 +628,28 @@ Named streams are:
 | `space` | `abundance`, `space`, `total` | Spatial analysis |
 | `checkpoint` | all three fields | Complete deterministic restart |
 
-Each stream owns an independent typed `SamplingInterval`. Completion records a
-non-aligned final state exactly once. Termination reason and completed
-iteration are terminal metadata in the Workflow recording; GLV creates no
-second metadata sidecar.
+Each stream owns an independent `StreamRecordingConfig` containing a typed
+`SamplingInterval`, nonzero chunk target, and nonzero queue-byte budget.
+`GlvRecordingConfig` requires all three streams. Non-spatial `space` and
+`checkpoint` records encode the populated `Option<ArrayD<f64>>::None` payload
+as JSON `null`.
+
+`GlvRecordingMetadata` combines stable `SimulationKind` and
+`AbundanceRepresentation` values, exact resolved `TaskParameters` plus
+`task_ordinal`, and the content-addressed `InteractionArtifactDescriptor` in
+Workflow creation-time `user_metadata`. Reserved-key collisions and a
+representation incompatible with the selected model fail before recording
+creation.
+
+Successful completion consumes the writer, records the final state exactly
+once through Workflow's terminal deduplication, and commits typed
+`TerminationReason` plus `completed_iteration` as terminal metadata. It returns
+`CompletedRecording` for Workflow-owned timing and stream record, chunk, and
+exact-byte summaries. Intentional simulation failures transition to failed
+metadata without recording an invalid state; dropping an interrupted
+`GlvRecording` invents no terminal result, leaving the Workflow recording
+running and recoverable. The recording directory contains Workflow's sole
+`metadata.json` and no GLV sidecar.
 
 ## Reconstruction and continuation
 

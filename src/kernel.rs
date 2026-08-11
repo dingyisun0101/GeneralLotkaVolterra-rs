@@ -5,10 +5,15 @@
 //! abundance payloads; they cannot replace the authoritative Workflow state or
 //! advance its simulation time.
 
+mod algorithms;
 pub mod artifact;
 pub mod core;
 pub mod source;
 
+pub use algorithms::{
+    Boundary, Diffusion, KernelAlgorithmError, MeanFieldReplicatorRk4,
+    SpatialGeneralLotkaVolterraRk2, SpatialLayout, SpatialReplicatorRk2,
+};
 pub use artifact::{
     ArtifactDisposition, INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactDescriptor,
     InteractionArtifactError, PersistedInteraction, persist_interaction_matrix,

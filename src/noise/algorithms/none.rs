@@ -4,7 +4,7 @@ use std::convert::Infallible;
 
 use crate::{AggregateAbundance, SpatialAbundance, TimeStep};
 
-use super::core::NoiseAlgorithm;
+use crate::noise::core::NoiseAlgorithm;
 
 /// Zero-sized deterministic default that performs no stochastic update.
 #[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]

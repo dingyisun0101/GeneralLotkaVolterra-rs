@@ -1,17 +1,19 @@
-//! Gaussian fluctuations scaled by the square root of local abundance.
+//! Gaussian fluctuations proportional to local abundance.
 
 use crate::{AggregateAbundance, SpatialAbundance, TimeStep};
 
-use super::core::{GaussianKind, GaussianWorkspace, NoiseAlgorithm, NoiseDomain, NoisePluginError};
+use crate::noise::core::{
+    GaussianKind, GaussianWorkspace, NoiseAlgorithm, NoiseDomain, NoisePluginError,
+};
 
-/// Seeded demographic Gaussian noise with fixed reusable scratch.
+/// Seeded proportional Gaussian noise with fixed reusable scratch.
 #[derive(Debug)]
-pub struct DemographicGaussian {
+pub struct ProportionalGaussian {
     workspace: GaussianWorkspace,
 }
 
-impl DemographicGaussian {
-    /// Creates a seeded demographic plugin for one fixed payload domain.
+impl ProportionalGaussian {
+    /// Creates a seeded proportional plugin for one fixed payload domain.
     pub fn new(sigma: f64, seed: u64, domain: NoiseDomain) -> Result<Self, NoisePluginError> {
         Ok(Self {
             workspace: GaussianWorkspace::new(sigma, seed, domain)?,
@@ -39,7 +41,7 @@ impl DemographicGaussian {
     }
 }
 
-impl NoiseAlgorithm for DemographicGaussian {
+impl NoiseAlgorithm for ProportionalGaussian {
     type Error = NoisePluginError;
 
     fn validate(
@@ -57,6 +59,6 @@ impl NoiseAlgorithm for DemographicGaussian {
         time_step: TimeStep,
     ) -> Result<(), Self::Error> {
         self.workspace
-            .apply(abundance, space, time_step, GaussianKind::Demographic)
+            .apply(abundance, space, time_step, GaussianKind::Proportional)
     }
 }
