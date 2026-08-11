@@ -1,26 +1,80 @@
-/*!
-General Lotka-Volterra crate root.
+//! General Lotka–Volterra and replicator model foundations.
+//!
+//! GLV uses one Scientific Workflow state schema for every model. Aggregate
+//! abundance and total-abundance payloads are always present. The space
+//! payload is always an [`Option`]: non-spatial models store `None`, while
+//! spatial models store `Some(`[`ArrayD`]`)`. Keeping the slot populated gives
+//! every model the same complete checkpoint contract.
 
-Purpose:
-    This crate provides state containers, non-spatial solver machinery, task
-    runners, and Cargo examples for ecological dynamical-system experiments.
+use std::path::Path;
 
-Current implementation boundary:
-    The ready solver path is replicator-form. GLV-named task modules are
-    placeholders until a dedicated GLV right-hand side and integrator are added.
-*/
+use ndarray::{Array1, ArrayD};
+use scientific_workflow::system_state::{StateError, SystemStateSchema};
+use serde::{Deserialize, Serialize};
 
-/// Target maximum JSON chunk size used by aggregate signal output writers.
-pub const SIGNAL_OUTPUT_FILE_SIZE: usize = 32 * 1024 * 1024;
+pub mod invariant;
+pub mod kernel;
+pub mod noise;
 
-/// Target maximum JSON chunk size used by full spatial snapshot output writers.
-pub const SPACE_OUTPUT_FILE_SIZE: usize = 1024 * 1024 * 1024;
+/// Canonical field containing aggregate species abundance.
+pub const ABUNDANCE_FIELD: &str = "abundance";
 
-pub mod io;
-pub mod prelude;
-pub mod solvers;
-pub mod system_state;
-pub mod tasks;
-pub mod utils;
+/// Canonical field containing optional spatial species abundance.
+pub const SPACE_FIELD: &str = "space";
 
-pub use system_state::{Mode, Scalar, SystemState};
+/// Canonical field containing total abundance.
+pub const TOTAL_FIELD: &str = "total";
+
+/// Canonical stream containing aggregate and total abundance.
+pub const SIGNAL_STREAM: &str = "signal";
+
+/// Canonical stream containing aggregate, spatial, and total abundance.
+pub const SPACE_STREAM: &str = "space";
+
+/// Canonical full-state stream used for deterministic continuation.
+pub const CHECKPOINT_STREAM: &str = "checkpoint";
+
+/// Aggregate species-abundance payload shared by every implemented model.
+pub type AggregateAbundance = Array1<f64>;
+
+/// Spatial payload shared by every model.
+///
+/// A populated workflow slot contains `None` for a non-spatial model and
+/// `Some(ArrayD<f64>)` for a spatial model.
+pub type SpatialAbundance = Option<ArrayD<f64>>;
+
+/// Total-abundance payload shared by every implemented model.
+pub type TotalAbundance = f64;
+
+/// Scientific interpretation of abundance values.
+///
+/// Representation is immutable model configuration and recording metadata. It
+/// is deliberately not repeated as a payload in every evolving state.
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AbundanceRepresentation {
+    /// Abundances are normalized relative frequencies.
+    RelativeFrequency,
+    /// Abundances are absolute population counts.
+    AbsoluteCount,
+}
+
+impl AbundanceRepresentation {
+    /// Returns the stable recording-metadata value.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::RelativeFrequency => "relative_frequency",
+            Self::AbsoluteCount => "absolute_count",
+        }
+    }
+}
+
+/// Returns the checked-in canonical state-schema path.
+pub fn state_schema_path() -> &'static Path {
+    Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/schemas/state.json"))
+}
+
+/// Loads and validates the canonical GLV state schema.
+pub fn load_state_schema() -> Result<SystemStateSchema, StateError> {
+    SystemStateSchema::load_json_template(state_schema_path())
+}

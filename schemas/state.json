@@ -1,0 +1,16 @@
+{
+  "fields": [
+    {
+      "name": "abundance",
+      "description": "Aggregate species abundance ordered by species index"
+    },
+    {
+      "name": "space",
+      "description": "Optional spatial species field; null for non-spatial models"
+    },
+    {
+      "name": "total",
+      "description": "Total abundance synchronized with aggregate species abundance"
+    }
+  ]
+}

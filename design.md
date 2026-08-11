@@ -1,0 +1,492 @@
+# GLV Scientific Workflow Design
+
+This document is the architectural authority for the clean-slate GLV
+implementation on `sw-version`. `todo.md` records execution status; it must not
+silently redefine this design.
+
+The old implementation is preserved beneath `legacy/` and on the read-only
+`legacy` branch. It is evidence for numerical and behavioral comparison, not a
+source tree to incrementally modernize.
+
+## Goals
+
+- Make Scientific Workflow the sole owner of generic scientific state,
+  simulation time, configuration, recording, reconstruction, execution scope,
+  and progress behavior.
+- Keep GLV responsible for ecological equations, numerical algorithms,
+  invariants, stochastic updates, validation, and model-specific assembly.
+- Provide concrete simulations as the primary user API while allowing kernels,
+  noise algorithms, invariant policies, and interaction-matrix sources to be
+  composed without changing the shared engine.
+- Preserve deterministic legacy numerics within explicit tolerances before
+  changing scientific behavior.
+- Make every resolved interaction matrix independently inspectable and exactly
+  reproducible.
+- Keep numerical loops allocation-aware and free of configuration parsing,
+  filesystem IO, recording decisions, and terminal rendering.
+
+## Non-goals
+
+- No compatibility aliases for the legacy GLV state, solver dispatcher, task
+  API, or recording format.
+- No second GLV storage, configuration, progress, or execution abstraction
+  beside Scientific Workflow.
+- No process-global runtime or writer manager.
+- No interaction matrix, representation label, or immutable model parameter in
+  the evolving Workflow state.
+- No exact stochastic-continuation claim until RNG state has an explicit,
+  serializable restart contract.
+
+## Toolchain and package layout
+
+The package uses Rust 2024 and Rust 1.97.1, the current stable toolchain when
+this design was approved on 2026-08-10:
+
+```toml
+[package]
+edition = "2024"
+rust-version = "1.97"
+```
+
+`rust-toolchain.toml` pins `1.97.1` with the `rustfmt` and `clippy` components.
+The pinned patch release makes local development and CI repeatable; the Cargo
+`rust-version` records the language-level minimum within the 1.97 release.
+
+The repository adopts Cargo's conventional package layout and Rust's modern
+file-plus-directory module layout. Nested modules use `kernel.rs` plus
+`kernel/*.rs`, never `kernel/mod.rs`.
+
+```text
+glv/
+├── Cargo.toml
+├── Cargo.lock
+├── rust-toolchain.toml
+├── design.md
+├── todo.md
+├── schemas/
+│   └── state.json
+├── src/
+│   ├── lib.rs
+│   ├── engine.rs
+│   ├── kernel.rs
+│   ├── kernel/
+│   │   ├── core.rs
+│   │   ├── source.rs
+│   │   ├── source/
+│   │   │   ├── generated.rs
+│   │   │   └── json.rs
+│   │   ├── spatial_glv_rk2.rs
+│   │   ├── spatial_replicator_rk2.rs
+│   │   └── well_mixed_replicator_rk4.rs
+│   ├── noise.rs
+│   ├── noise/
+│   │   ├── core.rs
+│   │   ├── demographic_gaussian.rs
+│   │   ├── none.rs
+│   │   └── proportional_gaussian.rs
+│   ├── invariant.rs
+│   ├── invariant/
+│   │   ├── core.rs
+│   │   ├── frequency.rs
+│   │   ├── local_frequency.rs
+│   │   └── population.rs
+│   ├── simulation.rs
+│   └── simulation/
+│       ├── spatial_glv.rs
+│       ├── spatial_replicator.rs
+│       └── well_mixed_replicator.rs
+└── tests/
+    ├── fixtures/
+    ├── legacy_baseline.rs
+    └── state_schema.rs
+```
+
+`legacy/` remains outside the package and is excluded from packaging and normal
+Cargo target discovery.
+
+## Dependency boundary
+
+Scientific Workflow owns:
+
+- `SystemState`, `SystemStateSchema`, and `SimulationTime`;
+- `ScientificProject`, `TaskConfig`, and project path resolution;
+- `ExecutionScope` and task recording paths;
+- `SystemStateWriter`, stream sampling, queues, chunking, checksums, and
+  recording lifecycle;
+- `StoredStateSeriesReader`, typed reconstruction, and state series;
+- creation-time and terminal recording metadata; and
+- `ProgressReporter` and `TaskProgress`.
+
+GLV owns:
+
+- engine composition and scientific step ordering;
+- interaction, growth, diffusion, cutoff, carrying-capacity, and stochastic
+  configuration;
+- deterministic kernels and their reusable scratch storage;
+- noise algorithms and RNG ownership;
+- frequency, local-frequency, and population invariant policies;
+- termination checks and model-specific outcomes;
+- concrete simulation constructors and validation; and
+- interaction-matrix resolution, validation, application, and provenance.
+
+Recording and reporting remain outside the engine. A simulation exposes its
+current state by immutable borrow; orchestration decides when to observe it.
+
+## Workflow state contract
+
+Every simulation uses the one canonical schema in `schemas/state.json`:
+
+| Field | Rust payload | Meaning |
+| --- | --- | --- |
+| `abundance` | `Array1<f64>` | Aggregate abundance ordered by species index |
+| `space` | `Option<ArrayD<f64>>` | Optional spatial abundance (`None` when non-spatial) |
+| `total` | `f64` | Total abundance synchronized by the invariant policy |
+
+All three slots are always populated. A non-spatial state stores a concrete
+`Option<ArrayD<f64>>::None` rather than leaving the `space` slot empty. A full
+checkpoint can therefore select every schema field and encode non-spatial
+space as JSON `null`.
+
+The immutable abundance representation is creation-time configuration and
+recording metadata:
+
+- `relative_frequency`; or
+- `absolute_count`.
+
+It is not repeated in every evolving state. Concrete simulations validate that
+their representation, space presence, dimensions, and invariant policy agree.
+
+## Shared engine
+
+`engine.rs` contains the crate-internal generic owner used by every concrete
+simulation. Conceptually:
+
+```rust,ignore
+pub(crate) struct Engine<A, N, I> {
+    state: scientific_workflow::SystemState,
+    kernel: Kernel<A>,
+    noise: Noise<N>,
+    invariant: I,
+    physical_time_increment: f64,
+}
+```
+
+The exact generic surface may evolve during implementation, but these
+ownership rules may not:
+
+- One engine owns exactly one authoritative Workflow state.
+- A kernel owns deterministic numerical scratch, not another complete state.
+- A noise plugin owns its RNG and stochastic scratch.
+- An invariant plugin synchronizes the three canonical payloads.
+- Immutable configuration is not copied into state payloads.
+- `state()` yields only an immutable borrow.
+- `into_state()` deliberately transfers the sole state owner.
+
+One successful step has this order:
+
+```text
+deterministic kernel
+        ↓
+enforce invariant
+        ↓
+apply noise
+        ↓
+enforce invariant
+        ↓
+advance iteration and physical time
+```
+
+The kernel and noise phases do not advance time. Time advances exactly once,
+only after all scientific payload mutations for the step succeed. Numerical
+algorithms must calculate fallible work into owned scratch before committing
+state mutations wherever partial failure would otherwise leave an invalid
+state.
+
+## Kernel subsystem
+
+The public `kernel` module is a plugin subsystem. `kernel/core.rs` contains the
+behavior shared by all kernels rather than duplicating matrix ownership,
+validation, or multiplication in each integration algorithm.
+
+### Kernel composition
+
+The intended shape is:
+
+```rust,ignore
+pub struct Kernel<A> {
+    core: KernelCore,
+    algorithm: A,
+}
+```
+
+`A` is a deterministic algorithm such as `WellMixedReplicatorRk4`. The narrow
+algorithm contract receives validated kernel facilities and the authoritative
+state, performs one deterministic transition using its own scratch, and never
+does configuration IO, stochastic updates, recording, progress reporting, or
+time advancement.
+
+`KernelCore` owns:
+
+- the resolved immutable interaction matrix;
+- its dimensions and validated species count;
+- its complete provenance descriptor; and
+- shared zero-allocation matrix application into caller-provided output.
+
+The interaction matrix is stored as an immutable `Arc<Array2<f64>>`. This lets
+independent task kernels share one large matrix without cloning its allocation,
+while generated per-task matrices retain the same ownership API.
+
+Matrix construction validates:
+
+- square shape;
+- exact agreement with the simulation's species dimension;
+- finite entries;
+- checked element counts and shape conversion; and
+- provenance sufficient to locate and verify the resolved artifact.
+
+No matrix is read or generated in a hot loop.
+
+### Interaction sources
+
+`kernel/source.rs` defines the source contract. A source is consumed to produce
+one resolved matrix and provenance:
+
+```rust,ignore
+pub trait InteractionSource {
+    fn resolve(self, species: usize) -> Result<ResolvedInteraction, KernelError>;
+}
+```
+
+Initial source families are:
+
+- JSON: exact inline values or a named JSON file resolved from project
+  configuration; and
+- generated: a typed generator with explicit algorithm identity, version,
+  parameters, and seed when stochastic.
+
+Scientific Workflow remains the configuration parser. `ScientificProject` and
+`TaskConfig` decode `fixed.json`, `sweep.json`, and `paths.json` into typed GLV
+source configuration. A kernel source consumes that resolved configuration; it
+does not independently parse the project files.
+
+Direct programmatic callers may supply an already-owned matrix through a
+checked in-memory source. Tests use this path without filesystem setup.
+
+### Resolved matrix persistence
+
+The exact resolved matrix is persisted once even when it originated inline in
+configuration or from a deterministic generator. Configuration describes the
+request; the artifact proves the exact coefficients used.
+
+The preferred location is a content-addressed execution input artifact:
+
+```text
+execution-.../
+├── inputs/
+│   └── interaction-<sha256>.json
+├── task-000000/
+└── task-000001/
+```
+
+The artifact format begins as versioned, row-major JSON:
+
+```json
+{
+  "format": "glv.interaction-matrix.v1",
+  "rows": 2,
+  "columns": 2,
+  "layout": "row_major",
+  "values": [-0.4, 0.1, 0.05, -0.3]
+}
+```
+
+The SHA-256 digest covers the exact artifact bytes. Atomic creation and a
+content-addressed filename allow tasks using the same matrix to reuse one
+artifact safely. Alternate encodings are deferred until JSON performance or
+size measurements justify them.
+
+Each task recording's creation-time metadata contains a compact matrix
+descriptor:
+
+- format version;
+- shape;
+- SHA-256 digest;
+- execution-relative artifact path;
+- source kind; and
+- for generators, generator identity, generator version, parameters, and
+  seed.
+
+The matrix is not a Workflow state field, is not repeated in checkpoints, and
+is not embedded in every task metadata document. The kernel exposes borrowed
+matrix values and provenance; execution orchestration persists the shared
+artifact and passes its descriptor to the Workflow writer. The kernel does not
+write into a recording directory.
+
+## Noise subsystem
+
+The public `noise` module contains interchangeable stochastic plugins.
+`noise/core.rs` defines their shared contract and validated configuration.
+Initial algorithms are:
+
+- `NoNoise`, a zero-sized deterministic default;
+- demographic Gaussian noise; and
+- proportional Gaussian noise.
+
+A noise plugin owns its RNG, distribution objects, and reusable scratch. It
+mutates only the relevant abundance payload, does not advance time, and does
+not enforce final invariants itself. The engine applies the configured
+invariant after noise.
+
+Stochastic checkpoint continuation is not exact until the noise subsystem
+defines a serializable RNG cursor or adopts an equivalently reproducible
+counter-based design. Until then, continuation tests and documentation are
+explicitly deterministic-only.
+
+## Invariant subsystem
+
+The public `invariant` module contains policies independent of integration
+algorithms:
+
+- aggregate frequency normalization;
+- per-cell local-frequency normalization plus aggregate refresh; and
+- spatial population feasibility, optional carrying-capacity enforcement,
+  aggregate refresh, and total synchronization.
+
+`invariant/core.rs` defines the narrow policy contract. Policies use typed
+Workflow tuple borrowing when `abundance`, `space`, and `total` must change
+together. They own cutoff and carrying-capacity configuration appropriate to
+their domain.
+
+Whether absolute population `total` preserves legacy rounding or becomes the
+exact sum is a scientific behavior decision. The legacy fixture records the
+current rounded result; implementation must not change it accidentally.
+
+## Concrete simulations
+
+The public `simulation` module contains the important final API:
+
+- `WellMixedReplicator`;
+- `SpatialReplicator`; and
+- `SpatialGlv`.
+
+`lib.rs` re-exports these types at the crate root so normal orchestration uses:
+
+```rust,ignore
+use general_lotka_volterra_rs::WellMixedReplicator;
+```
+
+Concrete simulation modules contain only:
+
+- typed model-specific configuration;
+- constructor and reconstruction validation;
+- legal kernel, noise, and invariant composition;
+- default plugin selections; and
+- model-specific convenience accessors.
+
+They do not contain matrix loading logic, numerical kernel implementations,
+recording, progress reporting, or duplicated state lifecycle code.
+
+Default type parameters or builders may expose alternative compatible kernel
+and noise plugins without exposing the crate-internal engine as the primary
+user API. Illegal combinations must fail at construction, preferably through
+types and otherwise through descriptive validation errors.
+
+## Orchestration and recording
+
+An application `main.rs` directly orchestrates concrete simulations:
+
+```text
+ScientificProject
+        ↓
+resolved TaskConfig
+        ↓
+interaction source → resolved matrix → content-addressed input artifact
+        ↓
+kernel + noise + invariant → concrete simulation
+        ↓
+ExecutionScope task path → SystemStateWriter
+        ↓
+observe initial state
+        ↓
+simulation.step → writer.observe_state → progress update
+        ↓
+terminal decision
+        ↓
+complete with final state and terminal metadata
+```
+
+The writer owns sampling. Evolution code offers the initial state and every
+successfully evolved state unconditionally.
+
+Named streams are:
+
+| Stream | Fields | Purpose |
+| --- | --- | --- |
+| `signal` | `abundance`, `total` | Frequent aggregate analysis |
+| `space` | `abundance`, `space`, `total` | Spatial analysis |
+| `checkpoint` | all three fields | Complete deterministic restart |
+
+Each stream owns an independent typed `SamplingInterval`. Completion records a
+non-aligned final state exactly once. Termination reason and completed
+iteration are terminal metadata in the Workflow recording; GLV creates no
+second metadata sidecar.
+
+## Reconstruction and continuation
+
+Readers register direct Serde decoders for:
+
+- `Array1<f64>` under `abundance`;
+- `Option<ArrayD<f64>>` under `space`; and
+- `f64` under `total`.
+
+A deterministic continuation requires:
+
+1. a verified complete checkpoint;
+2. the original resolved task configuration;
+3. the verified interaction-matrix artifact and descriptor;
+4. reconstruction through the matching concrete simulation constructor; and
+5. freshly allocated numerical scratch.
+
+The latest selected sealed checkpoint chunk must pass byte-count and SHA-256
+verification before reconstruction. Continuation appends to the same running
+recording and must produce the same final state as uninterrupted deterministic
+execution.
+
+## Error and validation principles
+
+- Public constructors return typed, contextual errors rather than relying on
+  debug assertions.
+- Ownership-preserving Workflow insertion errors are not flattened before the
+  rejected payload can be recovered or deliberately dropped.
+- Matrix source, artifact, kernel, noise, invariant, state, and recording
+  errors retain distinct context.
+- Invalid dimensions, non-finite configuration, zero sampling intervals, and
+  incompatible plugin combinations fail before evolution begins.
+- Numerical hot loops contain no repeated validation already guaranteed by
+  construction unless checking is required for scientific correctness.
+
+## Verification gates
+
+The fixed legacy reference is commit
+`5ad7cad1ade361e4ee40e540db72d602565e15e8`. The checked-in fixture covers
+well-mixed replicator, spatial replicator, spatial GLV, early termination, and
+legacy sampling coordinates.
+
+- Deterministic abundance and space comparisons use `1e-12` absolute and
+  relative tolerances unless a reviewed kernel-specific tolerance replaces
+  them.
+- Iterations, termination decisions, and interval-selected sample coordinates
+  are exact.
+- Workflow completion intentionally adds a non-aligned final state that legacy
+  max-step recording omitted.
+- Every production module receives integration-test coverage outside the
+  production source file.
+- Formatting, all targets, Clippy with warnings denied, rustdoc with warnings
+  denied, recording integrity, interruption, continuation, and package-content
+  checks are release gates.
+
+## Design-change rule
+
+Changes to ownership, module boundaries, step ordering, state fields, plugin
+contracts, matrix provenance, persistence layout, or continuation guarantees
+must update this document and `todo.md` in the same reviewed change.

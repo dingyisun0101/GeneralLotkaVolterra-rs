@@ -1,0 +1,36 @@
+[package]
+name = "general-lotka-volterra-rs"
+version = "0.2.8"
+edition = "2024"
+rust-version = "1.97"
+description = "General Lotka-Volterra and replicator models built on Scientific Workflow"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/"
+homepage = "https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/"
+documentation = "https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/"
+keywords = ["physics", "ecology", "math", "scientific", "sde"]
+categories = ["science"]
+include = [
+    "src/*.rs",
+    "src/**/*.rs",
+    "!src/target/**",
+    "schemas/*.json",
+    "tests/*.rs",
+    "tests/**/*.json",
+    "design.md",
+    "todo.md",
+]
+
+[dependencies]
+ndarray = { version = "0.17.2", features = ["rayon", "serde"] }
+scientific-workflow = { version = "0.1.4", path = "../workflow/dev" }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+
+[dev-dependencies]
+serde_json = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
