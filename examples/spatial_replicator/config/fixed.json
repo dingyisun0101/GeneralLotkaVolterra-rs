@@ -1,0 +1,16 @@
+{
+  "spatial_shape": [8, 8],
+  "initial_cell": [0.5, 0.3, 0.2],
+  "growth": [0.02, 0.016, 0.012],
+  "diffusion": [0.02, 0.015, 0.01],
+  "spacing": [1.0, 1.0],
+  "boundary": "periodic",
+  "cutoff": 1e-9,
+  "physical_time_increment": 0.003,
+  "maximum_iterations": 100,
+  "recording": {
+    "signal": {"sampling_interval": 10, "max_chunk_bytes": 65536, "queue_bytes": 262144},
+    "space": {"sampling_interval": 25, "max_chunk_bytes": 262144, "queue_bytes": 1048576},
+    "checkpoint": {"sampling_interval": 50, "max_chunk_bytes": 262144, "queue_bytes": 1048576}
+  }
+}

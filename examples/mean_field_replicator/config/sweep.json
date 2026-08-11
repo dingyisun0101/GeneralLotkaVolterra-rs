@@ -1,0 +1,9 @@
+{
+  "mode": "cartesian",
+  "axes": [
+    {
+      "name": "cutoff",
+      "values": [0.0, 1e-8]
+    }
+  ]
+}

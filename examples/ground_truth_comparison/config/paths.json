@@ -1,0 +1,6 @@
+{
+  "mean_field_matrix": "inputs/mean_field_matrix.json",
+  "spatial_no_diffusion_matrix": "inputs/spatial_no_diffusion_matrix.json",
+  "spatial_periodic_diffusion_matrix": "inputs/spatial_periodic_diffusion_matrix.json",
+  "reference_integrator": "reference.py"
+}

@@ -1,10 +1,4 @@
-//! General Lotka–Volterra and replicator model foundations.
-//!
-//! GLV uses one Scientific Workflow state schema for every model. Aggregate
-//! abundance and total-abundance payloads are always present. The space
-//! payload is always an [`Option`]: non-spatial models store `None`, while
-//! spatial models store `Some(`[`ArrayD`]`)`. Keeping the slot populated gives
-//! every model the same complete checkpoint contract.
+#![doc = include_str!("../README.md")]
 
 use std::path::Path;
 

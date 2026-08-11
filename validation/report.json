@@ -1,0 +1,28 @@
+{
+  "run": "20260811T083327Z-1784223",
+  "status": "passed",
+  "legacy_commit": "5ad7cad1ade361e4ee40e540db72d602565e15e8",
+  "legacy_tolerances": {
+    "absolute": 1e-12,
+    "relative": 1e-12
+  },
+  "legacy_maximum_errors": {
+    "mean_field_replicator": 0.0,
+    "spatial_replicator": 1.1102230246251565e-16,
+    "spatial_general_lotka_volterra": 0.0,
+    "demographic_gaussian": 2.7755575615628914e-17
+  },
+  "independent_reference_maximum_absolute_errors": {
+    "mean_field_replicator": 1.1657341758564144e-15,
+    "spatial_glv_no_diffusion": 2.0653256882496862e-11,
+    "spatial_glv_periodic_diffusion": 3.11169978672865e-11
+  },
+  "examples": {
+    "mean_field_replicator": "passed",
+    "mean_field_replicator_demographic": "passed",
+    "spatial_replicator": "passed",
+    "spatial_general_lotka_volterra": "passed",
+    "ground_truth_comparison": "passed"
+  },
+  "workflow_signal_csv_export": "passed"
+}

@@ -1,0 +1,13 @@
+{
+  "initial_abundance": [0.5, 0.3, 0.2],
+  "growth": [0.0, 0.0, 0.0],
+  "cutoff": 1e-8,
+  "sigma": 0.1,
+  "physical_time_increment": 0.005,
+  "maximum_iterations": 100,
+  "recording": {
+    "signal": {"sampling_interval": 10, "max_chunk_bytes": 65536, "queue_bytes": 262144},
+    "space": {"sampling_interval": 25, "max_chunk_bytes": 65536, "queue_bytes": 262144},
+    "checkpoint": {"sampling_interval": 50, "max_chunk_bytes": 65536, "queue_bytes": 262144}
+  }
+}

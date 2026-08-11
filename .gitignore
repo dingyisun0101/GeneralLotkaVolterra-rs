@@ -12,6 +12,11 @@ src/output/
 **/processed/
 **/plots/
 
+# Reconstructed read-only legacy source and immutable validation run outputs.
+validation/legacy-source/
+validation/legacy/
+validation/runs/
+
 # Python/runtime caches produced by examples or notebooks.
 __pycache__/
 *.py[cod]

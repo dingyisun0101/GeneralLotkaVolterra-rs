@@ -1,9 +1,11 @@
 [package]
 name = "general-lotka-volterra-rs"
-version = "0.2.8"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.97"
+autoexamples = false
 description = "General Lotka-Volterra and replicator models built on Scientific Workflow"
+readme = "README.md"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/"
 homepage = "https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/"
@@ -15,18 +17,21 @@ include = [
     "src/**/*.rs",
     "!src/target/**",
     "schemas/*.json",
-    "tests/*.rs",
-    "tests/**/*.json",
-    "design.md",
-    "todo.md",
+    "README.md",
+    "examples/*/main.rs",
+    "examples/support.rs",
+    "examples/*/config/*.json",
+    "examples/*/inputs/*.json",
+    "examples/*/*.py",
+    "tools/*.py",
 ]
 
 [dependencies]
-ndarray = { version = "0.17.2", features = ["rayon", "serde"] }
+ndarray = { version = "0.17.2", features = ["serde"] }
 rand = "0.10"
 rand_chacha = "0.10"
 rand_distr = "0.6"
-scientific-workflow = { version = "0.1.4", path = "../workflow/dev" }
+scientific-workflow = "0.1.5"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
@@ -36,3 +41,23 @@ thiserror = "2"
 opt-level = 3
 lto = true
 codegen-units = 1
+
+[[example]]
+name = "mean_field_replicator"
+path = "examples/mean_field_replicator/main.rs"
+
+[[example]]
+name = "mean_field_replicator_demographic"
+path = "examples/mean_field_replicator_demographic/main.rs"
+
+[[example]]
+name = "spatial_replicator"
+path = "examples/spatial_replicator/main.rs"
+
+[[example]]
+name = "spatial_general_lotka_volterra"
+path = "examples/spatial_general_lotka_volterra/main.rs"
+
+[[example]]
+name = "ground_truth_comparison"
+path = "examples/ground_truth_comparison/main.rs"

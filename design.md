@@ -1,8 +1,7 @@
 # GLV Scientific Workflow Design
 
-This document is the architectural authority for the clean-slate GLV
-implementation on `sw-version`. `todo.md` records execution status; it must not
-silently redefine this design.
+This document is the architectural authority for the completed clean-slate GLV
+implementation on `sw-version`.
 
 The old implementation is preserved beneath `legacy/` and on the read-only
 `legacy` branch. It is evidence for numerical and behavioral comparison, not a
@@ -54,17 +53,15 @@ The pinned patch release makes local development and CI repeatable; the Cargo
 
 The repository adopts Cargo's conventional package layout and Rust's modern
 file-plus-directory module layout. Nested modules use `kernel.rs` plus
-`kernel/*.rs`, never `kernel/mod.rs`. The tree below is the planned layout
-through the concrete-model stages; files beyond the completed stage may not
-exist yet.
+`kernel/*.rs`, never `kernel/mod.rs`. The production and publication layout is:
 
 ```text
 glv/
 ├── Cargo.toml
 ├── Cargo.lock
 ├── rust-toolchain.toml
+├── README.md
 ├── design.md
-├── todo.md
 ├── schemas/
 │   └── state.json
 ├── src/
@@ -105,6 +102,15 @@ glv/
 │       ├── mean_field_replicator.rs
 │       ├── spatial_general_lotka_volterra.rs
 │       └── spatial_replicator.rs
+├── examples/
+│   ├── support.rs
+│   ├── mean_field_replicator/
+│   ├── mean_field_replicator_demographic/
+│   ├── spatial_replicator/
+│   ├── spatial_general_lotka_volterra/
+│   └── ground_truth_comparison/
+├── tools/
+│   └── plot_workflow_recording.py
 └── tests/
     ├── continuation.rs
     ├── engine.rs
@@ -121,7 +127,7 @@ glv/
     └── state_schema.rs
 ```
 
-`legacy/` remains outside the package and is excluded from packaging and normal
+Legacy and validation material remain outside the published package and normal
 Cargo target discovery.
 
 ## Dependency boundary
@@ -626,6 +632,19 @@ terminal decision
 complete with final state and terminal metadata
 ```
 
+Every runnable model example supplies conventional
+`config/{fixed,sweep,paths,state}.json` inputs. Scientific parameters are
+decoded from `TaskConfig`; interaction files are resolved before construction
+and persisted once per execution scope. Examples iterate lazy task
+configurations sequentially and report through `ProgressReporter` and
+`TaskProgress`. No replacement GLV dispatcher exists.
+
+After completion, examples reopen the checkpoint stream through
+`StoredStateSeriesReader` and compare it with the in-memory final state. The
+plotting tool independently verifies chunk byte counts and SHA-256 digests
+before CSV export or optional rendering. Ground-truth comparison remains
+separate from persistence and steps concrete simulations directly.
+
 `GlvRecording::start` creates exactly one Workflow writer and immediately
 offers the initial state. Orchestration calls `observe_state` after every
 successful simulation step without checking intervals. The Workflow writer
@@ -747,6 +766,12 @@ The fixed legacy reference is commit
 well-mixed replicator, spatial replicator, spatial GLV, early termination, and
 legacy sampling coordinates.
 
+The publication validation harness also compiles that immutable legacy source
+and compares fresh results. Mean-field replicator and spatial GLV endpoints are
+bit-identical; spatial replicator differs by at most `1.11e-16`; eight
+same-ChaCha12-seed demographic updates differ by at most `2.78e-17`. All are
+inside the `1e-12` absolute and relative acceptance bounds.
+
 - Deterministic abundance and space comparisons use `1e-12` absolute and
   relative tolerances unless a reviewed kernel-specific tolerance replaces
   them.
@@ -764,4 +789,4 @@ legacy sampling coordinates.
 
 Changes to ownership, module boundaries, step ordering, state fields, plugin
 contracts, matrix provenance, persistence layout, or continuation guarantees
-must update this document and `todo.md` in the same reviewed change.
+must update this document in the same reviewed change.

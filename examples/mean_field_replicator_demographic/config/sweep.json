@@ -1,0 +1,6 @@
+{
+  "mode": "cartesian",
+  "axes": [
+    {"name": "seed", "values": [7, 11]}
+  ]
+}
