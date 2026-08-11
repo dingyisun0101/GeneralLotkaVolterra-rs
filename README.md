@@ -128,7 +128,9 @@ Matrices are immutable `Arc<Array2<f64>>` values. For recorded runs,
 `persist_interaction_matrix` writes canonical JSON once beneath the execution
 scope's `inputs/` directory. Its SHA-256 digest, shape, format, path, and source
 kind enter recording metadata; matrix values do not enter evolving states or
-checkpoints.
+checkpoints. Scientific Workflow now owns the generic atomic publication,
+content reuse, path containment, and digest-verification mechanics;
+`scientific-interaction` owns only the matrix document and provenance schema.
 
 ## Workflow project layout
 

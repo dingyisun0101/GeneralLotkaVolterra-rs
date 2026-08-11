@@ -401,6 +401,14 @@ fn resolve_file(
         path: path.clone(),
         source,
     })?;
+    resolve_json_bytes(bytes, path, species)
+}
+
+pub(crate) fn resolve_json_bytes(
+    bytes: Vec<u8>,
+    path: PathBuf,
+    species: usize,
+) -> Result<InteractionMatrix, InteractionSourceError> {
     let document: InteractionMatrixDocument =
         serde_json::from_slice(&bytes).map_err(|source| InteractionSourceError::Json {
             path: path.clone(),
