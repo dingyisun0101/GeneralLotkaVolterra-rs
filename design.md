@@ -54,7 +54,9 @@ The pinned patch release makes local development and CI repeatable; the Cargo
 
 The repository adopts Cargo's conventional package layout and Rust's modern
 file-plus-directory module layout. Nested modules use `kernel.rs` plus
-`kernel/*.rs`, never `kernel/mod.rs`.
+`kernel/*.rs`, never `kernel/mod.rs`. The tree below is the planned layout
+through the concrete-model stages; files beyond the completed stage may not
+exist yet.
 
 ```text
 glv/
@@ -67,9 +69,11 @@ glv/
 │   └── state.json
 ├── src/
 │   ├── lib.rs
+│   ├── core.rs
 │   ├── engine.rs
 │   ├── kernel.rs
 │   ├── kernel/
+│   │   ├── artifact.rs
 │   │   ├── core.rs
 │   │   ├── source.rs
 │   │   ├── source/
@@ -96,8 +100,14 @@ glv/
 │       ├── spatial_replicator.rs
 │       └── well_mixed_replicator.rs
 └── tests/
+    ├── engine.rs
     ├── fixtures/
+    ├── interaction_matrix.rs
+    ├── invariants.rs
+    ├── kernel_evolution.rs
     ├── legacy_baseline.rs
+    ├── noise_plugins.rs
+    ├── plugin_contracts.rs
     └── state_schema.rs
 ```
 
@@ -147,6 +157,28 @@ All three slots are always populated. A non-spatial state stores a concrete
 checkpoint can therefore select every schema field and encode non-spatial
 space as JSON `null`.
 
+### Authoritative state and numerical scratch
+
+The engine's `SystemState` is the only authoritative model state. Kernels and
+noise plugins never retain another semantic snapshot of `abundance`, `space`,
+`total`, or simulation time.
+
+Numerical algorithms do own reusable scratch arrays. Scratch is uncommitted
+working memory for Runge–Kutta stages, matrix products, random samples, and a
+proposed next value. It may have the same shape as one state payload, but it is
+not observable model history and is invalid as a state until its phase
+succeeds. A `KernelStateView` only borrows the authoritative payloads for one
+method call, and a `KernelUpdate` only borrows the algorithm's scratch until
+`Kernel::step` validates and commits it.
+
+Consequently, ordinary kernels do not duplicate every payload:
+
+- non-spatial kernels propose `abundance` only;
+- spatial kernels normally propose `space` only, after which an invariant
+  refreshes aggregate `abundance` and `total`; and
+- the coordinated `Both` update is reserved for algorithms that truly compute
+  both abundance representations together.
+
 The immutable abundance representation is creation-time configuration and
 recording metadata:
 
@@ -158,21 +190,27 @@ their representation, space presence, dimensions, and invariant policy agree.
 
 ## Shared engine
 
-`engine.rs` contains the crate-internal generic owner used by every concrete
-simulation. Conceptually:
+`engine.rs` contains the implementation-level generic owner used by every
+concrete simulation:
 
 ```rust,ignore
-pub(crate) struct Engine<A, N, I> {
+pub struct Engine<A, N, I> {
     state: scientific_workflow::SystemState,
     kernel: Kernel<A>,
     noise: Noise<N>,
     invariant: I,
-    physical_time_increment: f64,
+    time_step: TimeStep,
 }
 ```
 
-The exact generic surface may evolve during implementation, but these
-ownership rules may not:
+The module is hidden from generated public documentation while integration
+tests exercise it directly. Concrete simulations remain the intended user API;
+they will wrap this generic owner and can later permit its visibility to be
+tightened without changing model-facing behavior.
+
+`Engine::new` takes the state and all three plugins by value, validates their
+compatibility, and validates that the physical coordinate can advance. It is
+the only constructor. These ownership rules may not change:
 
 - One engine owns exactly one authoritative Workflow state.
 - A kernel owns deterministic numerical scratch, not another complete state.
@@ -202,6 +240,19 @@ algorithms must calculate fallible work into owned scratch before committing
 state mutations wherever partial failure would otherwise leave an invalid
 state.
 
+The engine does not clone the entire Workflow state to make a multi-phase step
+globally transactional. Each kernel, noise, and invariant phase is responsible
+for completing its fallible calculations before committing its own mutation.
+If a later phase fails, time is not advanced and no later phase runs, but an
+earlier successful phase is not rolled back. Orchestration treats that result
+as a failed simulation step and must not record it as a successful state.
+
+Before the kernel runs, the engine checks iteration overflow, physical-time
+presence, and finite physical-time addition without mutating the state. After
+all four scientific phases succeed, it delegates the actual single advance to
+`SystemState::advance_simulation_time`. Plugins never receive Workflow time, so
+the preflight result cannot be invalidated during the step.
+
 ## Kernel subsystem
 
 The public `kernel` module is a plugin subsystem. `kernel/core.rs` contains the
@@ -220,10 +271,40 @@ pub struct Kernel<A> {
 ```
 
 `A` is a deterministic algorithm such as `WellMixedReplicatorRk4`. The narrow
-algorithm contract receives validated kernel facilities and the authoritative
-state, performs one deterministic transition using its own scratch, and never
-does configuration IO, stochastic updates, recording, progress reporting, or
-time advancement.
+algorithm contract receives validated kernel facilities and a read-only view
+of the authoritative abundance payloads. It computes one proposed transition
+into its own reusable scratch and never receives mutable Workflow state,
+configuration IO, stochastic updates, recording, progress reporting, total
+abundance, or simulation time.
+
+The implemented evolution boundary is:
+
+```rust,ignore
+pub trait KernelAlgorithm {
+    type Error: Error + Send + Sync + 'static;
+
+    fn validate(
+        &self,
+        core: &KernelCore,
+        state: KernelStateView<'_>,
+    ) -> Result<(), Self::Error>;
+
+    fn compute<'algorithm>(
+        &'algorithm mut self,
+        core: &KernelCore,
+        state: KernelStateView<'_>,
+        time_step: TimeStep,
+    ) -> Result<KernelUpdate<'algorithm>, Self::Error>;
+}
+```
+
+`KernelUpdate` is an abundance-only, space-only, or coordinated update whose
+views borrow the algorithm's scratch. `Kernel::step` computes from immutable
+state, validates every proposed shape and finite value, and only then commits
+all selected payloads. A rejected computation or update therefore leaves the
+authoritative state unchanged. The kernel does not update `total` or advance
+Workflow time. `TimeStep` structurally guarantees a finite, strictly positive
+physical-time increment.
 
 `KernelCore` owns:
 
@@ -253,16 +334,19 @@ one resolved matrix and provenance:
 
 ```rust,ignore
 pub trait InteractionSource {
-    fn resolve(self, species: usize) -> Result<ResolvedInteraction, KernelError>;
+    fn resolve(self, species: usize)
+        -> Result<InteractionMatrix, InteractionSourceError>;
 }
 ```
 
-Initial source families are:
+Implemented source families are:
 
-- JSON: exact inline values or a named JSON file resolved from project
-  configuration; and
+- in-memory: an owned or already shared `Array2<f64>`;
+- JSON: exact inline rows decoded by Workflow or a versioned matrix file at an
+  already resolved project path; and
 - generated: a typed generator with explicit algorithm identity, version,
-  parameters, and seed when stochastic.
+  serializable parameters, and a randomness enum whose stochastic variant
+  structurally requires a seed.
 
 Scientific Workflow remains the configuration parser. `ScientificProject` and
 `TaskConfig` decode `fixed.json`, `sweep.json`, and `paths.json` into typed GLV
@@ -300,13 +384,15 @@ The artifact format begins as versioned, row-major JSON:
 }
 ```
 
-The SHA-256 digest covers the exact artifact bytes. Atomic creation and a
-content-addressed filename allow tasks using the same matrix to reuse one
-artifact safely. Alternate encodings are deferred until JSON performance or
-size measurements justify them.
+The SHA-256 digest covers the exact artifact bytes. Persistence writes and
+synchronizes a process-unique temporary file, then atomically publishes it as
+a hard link without overwriting an existing digest path. Existing artifacts
+are reused only when their exact bytes match; a mismatched digest-named file is
+a hard collision error. Alternate encodings are deferred until JSON
+performance or size measurements justify them.
 
-Each task recording's creation-time metadata contains a compact matrix
-descriptor:
+Stage 4 provides a compact descriptor intended for each task recording's
+creation-time metadata:
 
 - format version;
 - shape;
@@ -316,26 +402,43 @@ descriptor:
 - for generators, generator identity, generator version, parameters, and
   seed.
 
-The matrix is not a Workflow state field, is not repeated in checkpoints, and
-is not embedded in every task metadata document. The kernel exposes borrowed
-matrix values and provenance; execution orchestration persists the shared
-artifact and passes its descriptor to the Workflow writer. The kernel does not
-write into a recording directory.
+The matrix is not a Workflow state field and is not repeated in checkpoints.
+Its coefficients are also absent from task metadata; only the compact
+descriptor is inserted. The kernel exposes borrowed matrix values and
+provenance. Execution orchestration persists the shared artifact and, during
+the later recording-integration stage, inserts its descriptor under the stable
+`interaction_matrix` creation-metadata key before passing metadata to the
+Workflow writer. The kernel does not write into a task recording directory.
 
 ## Noise subsystem
 
 The public `noise` module contains interchangeable stochastic plugins.
 `noise/core.rs` defines their shared contract and validated configuration.
-Initial algorithms are:
+Noise receives the same validated `TimeStep` as the kernel and cannot receive
+a raw, zero, negative, or non-finite increment. A noise implementation must
+complete fallible sampling in its owned scratch before mutating authoritative
+payloads.
+Implemented algorithms are:
 
 - `NoNoise`, a zero-sized deterministic default;
 - demographic Gaussian noise; and
 - proportional Gaussian noise.
 
-A noise plugin owns its RNG, distribution objects, and reusable scratch. It
-mutates only the relevant abundance payload, does not advance time, and does
-not enforce final invariants itself. The engine applies the configured
-invariant after noise.
+A Gaussian plugin owns a seeded `ChaCha12Rng`, its standard-normal
+distribution, one species-sized normal-sample buffer, and one target-sized
+proposal buffer. Its aggregate or exact spatial domain is fixed at
+construction, so stepping neither resizes nor allocates scratch. It validates
+the complete input and sampling scale before advancing the RNG, computes every
+cell into the proposal buffer, and commits only after the complete proposal
+succeeds.
+
+Proportional noise applies the legacy mass-projected update proportional to
+local abundance. Demographic noise scales fluctuations by square-root local
+abundance and removes the weighted Gaussian mean. Both clamp nonpositive or
+non-finite proposed values to zero and leave final feasibility restoration to
+the following invariant phase. A noise plugin mutates only its selected
+abundance payload, does not update `total`, does not advance time, and does not
+enforce final invariants itself.
 
 Stochastic checkpoint continuation is not exact until the noise subsystem
 defines a serializable RNG cursor or adopts an equivalently reproducible
@@ -354,12 +457,25 @@ algorithms:
 
 `invariant/core.rs` defines the narrow policy contract. Policies use typed
 Workflow tuple borrowing when `abundance`, `space`, and `total` must change
-together. They own cutoff and carrying-capacity configuration appropriate to
-their domain.
+together. Configuration fixes species count, a finite nonnegative cutoff, and
+an optional finite nonnegative carrying capacity before evolution. Spatial
+policies require standard contiguous species-last storage and own fixed
+species-sized aggregation scratch.
 
-Whether absolute population `total` preserves legacy rounding or becomes the
-exact sum is a scientific behavior decision. The legacy fixture records the
-current rounded result; implementation must not change it accidentally.
+Aggregate frequency enforcement removes non-finite, nonpositive, and
+below-cutoff entries, normalizes the remainder, and falls back to a uniform
+simplex when nothing remains. Local-frequency enforcement performs the same
+operation independently in every spatial cell, then stores the cell-average
+species frequency in `abundance` and sets `total` to one. Population
+enforcement treats spatial storage as authoritative, sanitizes it, applies an
+optional global capacity scale, refreshes per-species aggregate abundance, and
+synchronizes `total`.
+
+Absolute population `total` explicitly preserves the legacy rounded-sum
+convention. Spatial values and per-species aggregate abundance remain exact
+floating-point sums; only `total` is `round(exact_sum).max(0)`. Changing this
+to an exact sum is a future scientific-behavior change requiring fixture and
+design review.
 
 ## Concrete simulations
 

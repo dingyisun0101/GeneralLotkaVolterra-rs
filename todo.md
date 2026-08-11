@@ -87,76 +87,79 @@ order and completion status for the clean-slate GLV crate on `sw-version`.
 
 ## Stage 4: implement interaction-matrix resolution and provenance
 
-- [ ] Define `InteractionMatrix` as a validated immutable
+- [x] Define `InteractionMatrix` as a validated immutable
   `Arc<Array2<f64>>` plus provenance.
-- [ ] Define `KernelCore` ownership of the resolved matrix, species dimension,
+- [x] Define `KernelCore` ownership of the resolved matrix, species dimension,
   and provenance descriptor.
-- [ ] Validate square shape, species dimension, checked element count, and
+- [x] Validate square shape, species dimension, checked element count, and
   finite entries at construction.
 - [x] Implement shared zero-allocation matrix application into caller-provided
   output storage.
-- [ ] Add `kernel/source.rs` and the consuming `InteractionSource` contract.
-- [ ] Add a checked in-memory source for direct callers and tests.
-- [ ] Add a JSON source for inline values or a named file resolved from
+- [x] Define the kernel evolution API around immutable `KernelStateView`,
+  scratch-backed `KernelUpdate`, and a validated positive `TimeStep`.
+- [x] Validate every proposed update before atomically committing any payload.
+- [x] Add `kernel/source.rs` and the consuming `InteractionSource` contract.
+- [x] Add a checked in-memory source for direct callers and tests.
+- [x] Add a JSON source for inline values or a named file resolved from
   Scientific Workflow project configuration.
-- [ ] Add a typed generated source contract with generator identity, version,
+- [x] Add a typed generated source contract with generator identity, version,
   parameters, and explicit seed when stochastic.
-- [ ] Ensure `ScientificProject` and `TaskConfig` remain the only parsers of
+- [x] Ensure `ScientificProject` and `TaskConfig` remain the only parsers of
   `fixed.json`, `sweep.json`, and `paths.json`; kernel sources consume resolved
   typed configuration.
-- [ ] Define versioned `glv.interaction-matrix.v1` row-major JSON artifacts.
-- [ ] Compute SHA-256 over exact artifact bytes and name artifacts by digest.
-- [ ] Persist each resolved matrix once beneath the execution scope's
+- [x] Define versioned `glv.interaction-matrix.v1` row-major JSON artifacts.
+- [x] Compute SHA-256 over exact artifact bytes and name artifacts by digest.
+- [x] Persist each resolved matrix once beneath the execution scope's
   `inputs/` directory using atomic, collision-safe creation.
-- [ ] Reuse one artifact when multiple tasks resolve the same matrix.
-- [ ] Record format, shape, digest, execution-relative path, source kind, and
+- [x] Reuse one artifact when multiple tasks resolve the same matrix.
+- [x] Record format, shape, digest, execution-relative path, source kind, and
   generator provenance in task creation metadata.
-- [ ] Keep matrix values out of Workflow state payloads, checkpoints, and
+- [x] Keep matrix values out of Workflow state payloads, checkpoints, and
   repeated task metadata.
-- [ ] Test inline, file, generated, shared, malformed, non-finite, wrong-shape,
+- [x] Test inline, file, generated, shared, malformed, non-finite, wrong-shape,
   digest, and artifact-collision cases.
 
 ## Stage 5: implement the shared engine
 
-- [ ] Add top-level `engine.rs`; do not add `model.rs` or `core.rs` at the
-  crate root.
-- [ ] Make the engine the sole owner of one authoritative Workflow
+- [x] Add top-level `engine.rs`; retain the agreed root `core.rs` for shared
+  primitives and do not add `model.rs`.
+- [x] Make the engine the sole owner of one authoritative Workflow
   `SystemState`.
-- [ ] Compose one kernel, one noise plugin, and one invariant policy through
+- [x] Compose one kernel, one noise plugin, and one invariant policy through
   static generic dispatch.
-- [ ] Store the validated physical-time increment outside state payloads.
-- [ ] Expose immutable `state()` access and deliberate consuming
+- [x] Store the validated physical-time increment outside state payloads.
+- [x] Expose immutable `state()` access and deliberate consuming
   `into_state()` transfer internally to concrete simulations.
-- [ ] Implement the shared step order: kernel, invariant, noise, invariant,
+- [x] Implement the shared step order: kernel, invariant, noise, invariant,
   then time advancement.
-- [ ] Advance iteration and physical time exactly once and only after all
+- [x] Advance iteration and physical time exactly once and only after all
   scientific mutations succeed.
-- [ ] Require fallible numerical work to complete in scratch before committing
+- [x] Require fallible numerical work to complete in scratch before committing
   mutations that cannot be rolled back safely.
-- [ ] Add integration tests with minimal fake plugins that prove exact call
+- [x] Add integration tests with minimal fake plugins that prove exact call
   order, single time advancement, error behavior, and sole state ownership.
 
 ## Stage 6: implement invariant and noise plugins
 
-- [ ] Implement aggregate frequency cutoff and normalization.
-- [ ] Implement per-cell local-frequency cutoff and normalization plus
+- [x] Implement aggregate frequency cutoff and normalization.
+- [x] Implement per-cell local-frequency cutoff and normalization plus
   aggregate refresh.
-- [ ] Implement population feasibility, optional carrying-capacity enforcement,
+- [x] Implement population feasibility, optional carrying-capacity enforcement,
   aggregate refresh, and total synchronization.
-- [ ] Use tuple mutable borrowing whenever an invariant coordinates
+- [x] Use tuple mutable borrowing whenever an invariant coordinates
   `abundance`, `space`, and `total`.
-- [ ] Decide explicitly whether absolute population `total` preserves legacy
+- [x] Decide explicitly whether absolute population `total` preserves legacy
   rounding or becomes the exact aggregate sum; update `design.md` and fixtures
   if scientific behavior changes.
-- [ ] Implement zero-sized `NoNoise` as the deterministic default.
-- [ ] Implement demographic Gaussian noise with owned RNG and reusable scratch.
-- [ ] Implement proportional Gaussian noise with owned RNG and reusable
+- [x] Implement zero-sized `NoNoise` as the deterministic default.
+- [x] Implement demographic Gaussian noise with owned RNG and reusable scratch.
+- [x] Implement proportional Gaussian noise with owned RNG and reusable
   scratch.
-- [ ] Keep noise independent from final invariant enforcement and time
+- [x] Keep noise independent from final invariant enforcement and time
   advancement.
-- [ ] Test invariant boundaries, non-finite inputs, cutoff, capacity, local
+- [x] Test invariant boundaries, non-finite inputs, cutoff, capacity, local
   simplex behavior, seeded noise reproducibility, and allocation reuse.
-- [ ] Keep exact stochastic continuation explicitly unsupported until a
+- [x] Keep exact stochastic continuation explicitly unsupported until a
   serializable RNG cursor or equivalent counter-based design is approved.
 
 ## Stage 7: implement deterministic kernel algorithms

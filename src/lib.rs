@@ -12,9 +12,14 @@ use ndarray::{Array1, ArrayD};
 use scientific_workflow::system_state::{StateError, SystemStateSchema};
 use serde::{Deserialize, Serialize};
 
+pub mod core;
+#[doc(hidden)]
+pub mod engine;
 pub mod invariant;
 pub mod kernel;
 pub mod noise;
+
+pub use core::{TimeStep, TimeStepError};
 
 /// Canonical field containing aggregate species abundance.
 pub const ABUNDANCE_FIELD: &str = "abundance";
