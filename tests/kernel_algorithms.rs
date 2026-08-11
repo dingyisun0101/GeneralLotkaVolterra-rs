@@ -1,11 +1,12 @@
 use general_lotka_volterra_rs::kernel::{
-    Boundary, Diffusion, InMemorySource, InteractionSource, Kernel, KernelAlgorithmError,
-    KernelCore, SpatialGeneralLotkaVolterraRk2, SpatialLayout, SpatialReplicatorRk2,
+    BoundaryCondition, Diffusion, InMemorySource, InteractionSource, Kernel, KernelAlgorithmError,
+    KernelCore, SpatialGeneralLotkaVolterraRk2, SpatialReplicatorRk2,
 };
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, load_state_schema,
 };
 use ndarray::{Array1, Array2, ArrayD, IxDyn};
+use physics_in_parallel::space::discrete::square_lattice::SquareLatticeConfig;
 use scientific_workflow::system_state::{SimulationTime, SystemState};
 
 fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemState {
@@ -21,26 +22,20 @@ fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemStat
 
 #[test]
 fn spatial_facilities_validate_layout_diffusion_and_stability() {
-    let layout = SpatialLayout::new(vec![2, 3, 4]).unwrap();
-    assert_eq!(layout.shape(), [2, 3, 4]);
-    assert_eq!(layout.spatial_dimensions(), 2);
-    assert_eq!(layout.species(), 4);
-    assert_eq!(layout.cells(), 6);
-    assert_eq!(layout.elements(), 24);
+    let space = SquareLatticeConfig::new(&[2], BoundaryCondition::Neumann, None);
     assert!(matches!(
-        SpatialLayout::new(vec![4]),
-        Err(KernelAlgorithmError::SpatialRank)
-    ));
-    assert!(matches!(
-        Diffusion::new(Array1::from_vec(vec![-0.1]), vec![1.0], Boundary::Neumann),
+        Diffusion::new(Array1::from_vec(vec![-0.1]), space.clone()),
         Err(KernelAlgorithmError::InvalidDiffusion { .. })
     ));
 
-    let diffusion =
-        Diffusion::new(Array1::from_vec(vec![0.5]), vec![1.0], Boundary::Neumann).unwrap();
-    assert_eq!(diffusion.boundary(), Boundary::Neumann);
-    let algorithm =
-        SpatialGeneralLotkaVolterraRk2::new(vec![2, 1], Array1::zeros(1), diffusion).unwrap();
+    let diffusion = Diffusion::new(Array1::from_vec(vec![0.5]), space).unwrap();
+    assert_eq!(
+        diffusion.space_config().boundary(),
+        BoundaryCondition::Neumann
+    );
+    let algorithm = SpatialGeneralLotkaVolterraRk2::new(Array1::zeros(1), diffusion).unwrap();
+    assert_eq!(algorithm.shape(), [2, 1]);
+    assert_eq!(algorithm.species(), 1);
     algorithm
         .validate_time_step(general_lotka_volterra_rs::TimeStep::new(1.0).unwrap())
         .unwrap();
@@ -65,9 +60,8 @@ fn spatial_kernel_rejects_non_contiguous_storage() {
         .resolve(3)
         .unwrap();
     let algorithm = SpatialReplicatorRk2::new(
-        shape,
         Array1::zeros(3),
-        Diffusion::unit_spacing(Array1::zeros(3), 2, Boundary::Periodic).unwrap(),
+        Diffusion::unit_spacing(Array1::zeros(3), &[2, 2], BoundaryCondition::Periodic).unwrap(),
     )
     .unwrap();
     let kernel = Kernel::new(KernelCore::new(interaction), algorithm);

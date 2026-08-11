@@ -9,6 +9,7 @@ use general_lotka_volterra_rs::{
     TotalAbundance, load_state_schema,
 };
 use ndarray::{Array1, ArrayD, IxDyn};
+use physics_in_parallel::rng::RngConfig;
 use scientific_workflow::system_state::{SimulationTime, SystemState};
 
 fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemState {
@@ -25,6 +26,10 @@ fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemStat
 
 fn spatial(values: Vec<f64>) -> SpatialAbundance {
     Some(ArrayD::from_shape_vec(IxDyn(&[2, 3]), values).unwrap())
+}
+
+fn rng(seed: u64) -> RngConfig {
+    RngConfig::new(Some(seed), None, None)
 }
 
 #[test]
@@ -53,17 +58,18 @@ fn no_noise_is_zero_sized_and_changes_nothing() {
 #[test]
 fn demographic_noise_is_seeded_reproducible_and_reuses_scratch() {
     let domain = NoiseDomain::aggregate(3).unwrap();
-    let algorithm_a = DemographicGaussian::new(0.2, 17, domain.clone()).unwrap();
-    let algorithm_b = DemographicGaussian::new(0.2, 17, domain).unwrap();
+    let algorithm_a = DemographicGaussian::new(0.2, rng(17), domain.clone()).unwrap();
+    let algorithm_b = DemographicGaussian::new(0.2, rng(17), domain).unwrap();
     let capacities = algorithm_a.scratch_capacities();
     let mut noise_a = Noise::new(algorithm_a);
     let mut noise_b = Noise::new(algorithm_b);
     let record = noise_a.rng_record().unwrap();
     assert_eq!(record.namespace(), DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE);
     assert_eq!(record.method(), "chacha12+standard_normal");
-    assert_eq!(record.version(), "rand_chacha-0.10+rand_distr-0.6");
-    assert_eq!(record.key_encoding(), "u64_be_hex");
-    assert_eq!(record.key(), "0000000000000011");
+    assert_eq!(record.version(), "rand_chacha-0.10");
+    assert_eq!(record.key_encoding(), "u64_decimal");
+    assert_eq!(record.key(), "17");
+    assert_eq!(record.parameters()["parallel_streams"], 1);
     let mut state_a = state(vec![4.0, 9.0, 16.0], None, 29.0);
     let mut state_b = state(vec![4.0, 9.0, 16.0], None, 29.0);
     let initial_time = state_a.simulation_time();
@@ -101,8 +107,8 @@ fn demographic_noise_is_seeded_reproducible_and_reuses_scratch() {
 #[test]
 fn proportional_spatial_noise_updates_only_space_reproducibly() {
     let domain = NoiseDomain::spatial(vec![2, 3]).unwrap();
-    let mut noise_a = Noise::new(ProportionalGaussian::new(0.05, 99, domain.clone()).unwrap());
-    let mut noise_b = Noise::new(ProportionalGaussian::new(0.05, 99, domain).unwrap());
+    let mut noise_a = Noise::new(ProportionalGaussian::new(0.05, rng(99), domain.clone()).unwrap());
+    let mut noise_b = Noise::new(ProportionalGaussian::new(0.05, rng(99), domain).unwrap());
     assert_eq!(
         noise_a.rng_record().unwrap().namespace(),
         PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE
@@ -151,7 +157,7 @@ fn proportional_spatial_noise_updates_only_space_reproducibly() {
 #[test]
 fn invalid_noise_configuration_and_inputs_fail_before_mutation() {
     assert!(matches!(
-        DemographicGaussian::new(-0.1, 1, NoiseDomain::aggregate(2).unwrap()),
+        DemographicGaussian::new(-0.1, rng(1), NoiseDomain::aggregate(2).unwrap()),
         Err(NoisePluginError::InvalidSigma { .. })
     ));
     assert!(matches!(
@@ -159,8 +165,9 @@ fn invalid_noise_configuration_and_inputs_fail_before_mutation() {
         Err(NoisePluginError::MissingSpeciesAxis)
     ));
 
-    let mut noise =
-        Noise::new(ProportionalGaussian::new(0.1, 5, NoiseDomain::aggregate(2).unwrap()).unwrap());
+    let mut noise = Noise::new(
+        ProportionalGaussian::new(0.1, rng(5), NoiseDomain::aggregate(2).unwrap()).unwrap(),
+    );
     let mut state = state(vec![f64::NAN, 1.0], None, 1.0);
     let before = state
         .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
@@ -190,7 +197,8 @@ fn spatial_noise_rejects_non_contiguous_storage() {
 
     let state = state(vec![0.25, 0.35, 0.4], Some(values), 1.0);
     let noise = Noise::new(
-        ProportionalGaussian::new(0.1, 5, NoiseDomain::spatial(vec![2, 2, 3]).unwrap()).unwrap(),
+        ProportionalGaussian::new(0.1, rng(5), NoiseDomain::spatial(vec![2, 2, 3]).unwrap())
+            .unwrap(),
     );
 
     assert!(matches!(

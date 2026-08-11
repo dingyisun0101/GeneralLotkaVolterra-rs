@@ -4,13 +4,12 @@
 //! does not implement sampling, serialization, queues, chunks, checksums,
 //! timing, or filesystem layout; those remain owned by `SystemStateWriter`.
 
-use std::num::NonZeroU64;
 use std::path::Path;
 
 use scientific_workflow::configuration::TaskParameters;
 use scientific_workflow::rng_record::{RNG_RECORDS_METADATA_KEY, RngRecord, RngRecordError};
 use scientific_workflow::storage::{
-    CompletedRecording, SamplingInterval, StateStreamConfig, StorageError, SystemStateWriter,
+    CompletedRecording, StateStreamConfig, StorageError, SystemStateWriter,
     SystemStateWriterBuilder, TimeAxisMetadata,
 };
 use scientific_workflow::system_state::{StateError, SystemState};
@@ -21,10 +20,7 @@ use thiserror::Error;
 use crate::kernel::{INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactDescriptor};
 use crate::reading::glv_json_decoders;
 use crate::simulation::SimulationKind;
-use crate::{
-    ABUNDANCE_FIELD, AbundanceRepresentation, CHECKPOINT_STREAM, SIGNAL_STREAM, SPACE_FIELD,
-    SPACE_STREAM, TOTAL_FIELD, load_state_schema,
-};
+use crate::{AbundanceRepresentation, CHECKPOINT_STREAM, load_state_schema};
 
 /// Creation-metadata key containing the concrete model identity.
 pub const MODEL_KIND_METADATA_KEY: &str = "model_kind";
@@ -48,84 +44,6 @@ const RESERVED_CREATION_KEYS: [&str; 5] = [
     TASK_ORDINAL_METADATA_KEY,
     RNG_RECORDS_METADATA_KEY,
 ];
-
-/// Nonzero storage bounds for one independently sampled stream.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct StreamRecordingConfig {
-    sampling_interval: SamplingInterval,
-    max_chunk_bytes: NonZeroU64,
-    queue_bytes: NonZeroU64,
-}
-
-impl StreamRecordingConfig {
-    /// Creates a stream configuration whose invalid zero values are unrepresentable.
-    pub const fn new(
-        sampling_interval: SamplingInterval,
-        max_chunk_bytes: NonZeroU64,
-        queue_bytes: NonZeroU64,
-    ) -> Self {
-        Self {
-            sampling_interval,
-            max_chunk_bytes,
-            queue_bytes,
-        }
-    }
-
-    /// Returns the writer-owned sampling interval.
-    pub const fn sampling_interval(self) -> SamplingInterval {
-        self.sampling_interval
-    }
-
-    /// Returns the rollover target for immutable chunk files.
-    pub const fn max_chunk_bytes(self) -> NonZeroU64 {
-        self.max_chunk_bytes
-    }
-
-    /// Returns the strict encoded-byte queue budget.
-    pub const fn queue_bytes(self) -> NonZeroU64 {
-        self.queue_bytes
-    }
-}
-
-/// Independent signal, space, and checkpoint stream configuration.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(deny_unknown_fields)]
-pub struct GlvRecordingConfig {
-    signal: StreamRecordingConfig,
-    space: StreamRecordingConfig,
-    checkpoint: StreamRecordingConfig,
-}
-
-impl GlvRecordingConfig {
-    /// Creates one mandatory configuration for each canonical stream.
-    pub const fn new(
-        signal: StreamRecordingConfig,
-        space: StreamRecordingConfig,
-        checkpoint: StreamRecordingConfig,
-    ) -> Self {
-        Self {
-            signal,
-            space,
-            checkpoint,
-        }
-    }
-
-    /// Returns aggregate signal-stream configuration.
-    pub const fn signal(self) -> StreamRecordingConfig {
-        self.signal
-    }
-
-    /// Returns spatial analysis-stream configuration.
-    pub const fn space(self) -> StreamRecordingConfig {
-        self.space
-    }
-
-    /// Returns deterministic checkpoint-stream configuration.
-    pub const fn checkpoint(self) -> StreamRecordingConfig {
-        self.checkpoint
-    }
-}
 
 /// Fully assembled immutable creation metadata for one simulation recording.
 #[derive(Clone, Debug)]
@@ -297,12 +215,12 @@ impl GlvRecording {
     /// inferred by this layer.
     pub fn start(
         directory: impl AsRef<Path>,
-        config: GlvRecordingConfig,
+        streams: Vec<StateStreamConfig>,
         metadata: GlvRecordingMetadata,
         initial_state: &SystemState,
     ) -> Result<Self, GlvRecordingError> {
         let schema = load_state_schema().map_err(GlvRecordingError::StateSchema)?;
-        let mut writer = recording_builder(directory.as_ref(), &schema, config, metadata)
+        let mut writer = recording_builder(directory.as_ref(), &schema, streams, metadata)
             .create_new_recording()?;
         writer.observe_state(initial_state)?;
         Ok(Self { writer })
@@ -317,11 +235,11 @@ impl GlvRecording {
     /// subsequently successful evolution steps.
     pub fn continue_from_latest_checkpoint(
         directory: impl AsRef<Path>,
-        config: GlvRecordingConfig,
+        streams: Vec<StateStreamConfig>,
         metadata: GlvRecordingMetadata,
     ) -> Result<(Self, SystemState), GlvRecordingError> {
         let schema = load_state_schema().map_err(GlvRecordingError::StateSchema)?;
-        let (writer, state) = recording_builder(directory.as_ref(), &schema, config, metadata)
+        let (writer, state) = recording_builder(directory.as_ref(), &schema, streams, metadata)
             .continue_recording_from_latest_checkpoint(CHECKPOINT_STREAM, glv_json_decoders()?)?;
         Ok((Self { writer }, state))
     }
@@ -380,41 +298,16 @@ impl GlvRecording {
 fn recording_builder(
     directory: &Path,
     schema: &scientific_workflow::system_state::SystemStateSchema,
-    config: GlvRecordingConfig,
+    streams: Vec<StateStreamConfig>,
     metadata: GlvRecordingMetadata,
 ) -> SystemStateWriterBuilder {
-    SystemStateWriter::builder(directory, schema)
+    let mut builder = SystemStateWriter::builder(directory, schema)
         .with_time_axis_metadata(
             TimeAxisMetadata::new("iteration").with_physical_time_name("physical_time"),
         )
-        .with_user_metadata(metadata.into_values())
-        .add_state_stream(state_stream(
-            SIGNAL_STREAM,
-            [ABUNDANCE_FIELD, TOTAL_FIELD],
-            config.signal(),
-        ))
-        .add_state_stream(state_stream(
-            SPACE_STREAM,
-            [ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD],
-            config.space(),
-        ))
-        .add_state_stream(state_stream(
-            CHECKPOINT_STREAM,
-            [ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD],
-            config.checkpoint(),
-        ))
-}
-
-fn state_stream<const FIELDS: usize>(
-    name: &'static str,
-    fields: [&'static str; FIELDS],
-    config: StreamRecordingConfig,
-) -> StateStreamConfig {
-    StateStreamConfig::new(
-        name,
-        fields,
-        config.sampling_interval(),
-        config.max_chunk_bytes(),
-        config.queue_bytes(),
-    )
+        .with_user_metadata(metadata.into_values());
+    for stream in streams {
+        builder = builder.add_state_stream(stream);
+    }
+    builder
 }

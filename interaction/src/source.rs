@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use ndarray::Array2;
+use physics_in_parallel::rng::RngConfig;
 use scientific_workflow::rng_record::{RngRecord, RngRecordError};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -19,9 +20,6 @@ pub const INTERACTION_MATRIX_LAYOUT: &str = "row_major";
 
 /// Workflow metadata namespace for stochastic matrix generation.
 pub const INTERACTION_GENERATOR_RNG_NAMESPACE: &str = "scientific_interaction.generator";
-
-/// Stable persisted seed representation.
-pub const INTERACTION_GENERATOR_KEY_ENCODING: &str = "u64-lower-hex";
 
 /// A validated immutable interaction matrix and its resolution provenance.
 #[derive(Clone, Debug)]
@@ -146,7 +144,7 @@ pub struct GeneratorProvenance {
     identity: String,
     version: String,
     parameters: Value,
-    seed: Option<u64>,
+    rng_config: Option<RngConfig>,
 }
 
 impl GeneratorProvenance {
@@ -165,41 +163,34 @@ impl GeneratorProvenance {
         &self.parameters
     }
 
-    /// Returns the explicit stochastic seed, or `None` for deterministic generation.
-    pub const fn seed(&self) -> Option<u64> {
-        self.seed
+    /// Returns resolved RNG provenance, or `None` for deterministic generation.
+    pub const fn rng_config(&self) -> Option<RngConfig> {
+        self.rng_config
     }
 
-    /// Converts a stochastic seed into Workflow's lightweight provenance record.
+    /// Converts resolved stochastic configuration into Workflow's lightweight provenance record.
     pub fn rng_record(&self) -> Result<Option<RngRecord>, RngRecordError> {
-        let Some(seed) = self.seed else {
+        let Some(rng) = self.rng_config else {
             return Ok(None);
         };
+        let method = rng
+            .method()
+            .expect("generated sources validate resolved RNG methods");
         let mut parameters = Map::new();
         parameters.insert("generator_parameters".to_owned(), self.parameters.clone());
-        Ok(Some(
-            RngRecord::new(
-                INTERACTION_GENERATOR_RNG_NAMESPACE,
-                &self.identity,
-                &self.version,
-                INTERACTION_GENERATOR_KEY_ENCODING,
-                format!("{seed:016x}"),
-            )?
-            .with_parameters(parameters),
-        ))
+        if let Some(streams) = rng.parallel_streams() {
+            parameters.insert("parallel_streams".to_owned(), Value::from(streams.get()));
+        }
+        Ok(Some(RngRecord::new(
+            INTERACTION_GENERATOR_RNG_NAMESPACE,
+            format!("{}+{}", self.identity, method.name()),
+            format!("{}+{}", self.version, method.version()),
+            method.seed_encoding(),
+            rng.encode_seed()
+                .expect("generated sources validate resolved RNG seeds"),
+            Some(parameters),
+        )?))
     }
-}
-
-/// Randomness contract for a typed interaction generator.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum GeneratorRandomness {
-    /// Generation is fully determined by species and parameters.
-    Deterministic,
-    /// Generation is stochastic and therefore carries a mandatory seed.
-    Stochastic {
-        /// Seed used for this exact resolution.
-        seed: u64,
-    },
 }
 
 /// A consumed source that resolves one exact interaction matrix.
@@ -301,8 +292,8 @@ pub trait InteractionGenerator: Sized {
     /// Borrows the exact parameters controlling generation.
     fn parameters(&self) -> &Self::Parameters;
 
-    /// Declares deterministic generation or carries the mandatory stochastic seed.
-    fn randomness(&self) -> GeneratorRandomness;
+    /// Returns the resolved universal RNG configuration, or `None` for deterministic generation.
+    fn rng_config(&self) -> Option<RngConfig>;
 
     /// Consumes the configured generator and creates one matrix.
     fn generate(self, species: usize) -> Result<Array2<f64>, Self::Error>;
@@ -334,10 +325,14 @@ where
                 source,
             }
         })?;
-        let seed = match self.generator.randomness() {
-            GeneratorRandomness::Deterministic => None,
-            GeneratorRandomness::Stochastic { seed } => Some(seed),
-        };
+        let rng_config = self.generator.rng_config();
+        if let Some(rng) = rng_config
+            && (rng.seed().is_none() || rng.method().is_none())
+        {
+            return Err(InteractionSourceError::UnresolvedGeneratorRngConfig {
+                identity: G::IDENTITY.to_owned(),
+            });
+        }
         let values = self.generator.generate(species).map_err(|source| {
             InteractionSourceError::Generator {
                 identity: G::IDENTITY.to_owned(),
@@ -352,7 +347,7 @@ where
                     identity: G::IDENTITY.to_owned(),
                     version: G::VERSION.to_owned(),
                     parameters,
-                    seed,
+                    rng_config,
                 },
             },
         )
@@ -505,6 +500,12 @@ fn validate_generator_label(
 #[derive(Debug, ThisError)]
 #[non_exhaustive]
 pub enum InteractionSourceError {
+    /// Stochastic generator provenance must contain its actual seed and method.
+    #[error("interaction generator `{identity}` returned unresolved RNG configuration")]
+    UnresolvedGeneratorRngConfig {
+        /// Generator identity.
+        identity: String,
+    },
     /// Models require at least one species.
     #[error("interaction matrix species dimension must be greater than zero")]
     EmptySpecies,

@@ -76,8 +76,8 @@ construction. Sources can be:
 - an in-memory `Array2<f64>`;
 - inline JSON already decoded by `TaskConfig`;
 - a versioned JSON file resolved through project paths; or
-- a typed generator with identity, version, parameters, and an explicit seed
-  when stochastic.
+- a typed generator with identity, version, parameters, and a resolved PiP
+  `RngConfig` when stochastic.
 
 Matrices are immutable `Arc<Array2<f64>>` values. For recorded runs,
 `persist_interaction_matrix` writes canonical JSON once beneath the execution
@@ -112,6 +112,12 @@ directly into standard or GLV domain types before numerical construction. User
 code does not need mirror task, boundary, or recording configuration structs.
 Relative paths are resolved against that example's project root.
 
+Spatial models use PiP's `SquareLatticeConfig` as the sole owner of shape,
+boundary condition, spacing, neighbor lookup, and Laplacian behavior. GLV's
+`Diffusion` adds only the model-specific per-species coefficients. The
+species-last ndarray state shape is derived from that lattice configuration and
+the growth-vector length.
+
 Each run creates a new collision-resistant `ExecutionScope`; existing output
 is never deleted or overwritten. Examples execute tasks sequentially to make
 the orchestration lifecycle explicit. Task-level parallelism can later consume
@@ -138,8 +144,9 @@ any example binary.
 
 ## Recording and reading
 
-`GlvRecording` configures one Scientific Workflow writer with three independent
-streams:
+`GlvRecording` consumes Workflow's `Vec<StateStreamConfig>` directly. The
+checked-in projects configure three independent streams without a GLV mirror
+configuration type:
 
 | Stream | Fields | Intended use |
 | --- | --- | --- |
@@ -171,9 +178,11 @@ Python standard library and refuses to overwrite an existing destination.
 ## Noise and reproducibility
 
 Built-in plugins are `NoNoise`, `DemographicGaussian`, and
-`ProportionalGaussian`. Gaussian plugins own a ChaCha12 RNG and reusable
-scratch. Their method, implementation version, key encoding, and exact seed
-are written once as namespaced Workflow RNG-record metadata.
+`ProportionalGaussian`. Gaussian constructors accept only PiP's `RngConfig`.
+They use PiP's `TensorRandFiller`, defaulting to ChaCha12 and one stream, and
+retain reusable GLV proposal scratch. The fully resolved method, implementation
+version, stream count, key encoding, and exact seed are written once as
+namespaced Workflow `RngRecord` metadata.
 
 Workflow records RNG provenance but does not generate random values. Exact
 stochastic continuation is deliberately unsupported because checkpoints do

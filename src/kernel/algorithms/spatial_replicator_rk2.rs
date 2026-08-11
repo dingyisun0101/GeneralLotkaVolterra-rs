@@ -6,7 +6,7 @@ use crate::TimeStep;
 use crate::kernel::core::{KernelAlgorithm, KernelCore, KernelStateView, KernelUpdate};
 
 use super::KernelAlgorithmError;
-use super::spatial::{Diffusion, SpatialDynamics, SpatialLayout, SpatialRk2};
+use super::spatial::{Diffusion, SpatialDynamics, SpatialRk2};
 
 /// Midpoint RK2 integration of local replicator reaction-diffusion dynamics.
 #[derive(Debug)]
@@ -15,20 +15,21 @@ pub struct SpatialReplicatorRk2 {
 }
 
 impl SpatialReplicatorRk2 {
-    /// Creates fixed configuration and scratch for one species-last shape.
-    pub fn new(
-        shape: Vec<usize>,
-        growth: Array1<f64>,
-        diffusion: Diffusion,
-    ) -> Result<Self, KernelAlgorithmError> {
+    /// Creates fixed configuration and scratch from PiP lattice geometry.
+    pub fn new(growth: Array1<f64>, diffusion: Diffusion) -> Result<Self, KernelAlgorithmError> {
         Ok(Self {
-            inner: SpatialRk2::new(shape, growth, diffusion)?,
+            inner: SpatialRk2::new(growth, diffusion)?,
         })
     }
 
-    /// Borrows the validated spatial layout.
-    pub const fn layout(&self) -> &SpatialLayout {
-        self.inner.layout()
+    /// Borrows the expected species-last state shape.
+    pub fn shape(&self) -> &[usize] {
+        self.inner.shape()
+    }
+
+    /// Returns the fixed species dimension.
+    pub const fn species(&self) -> usize {
+        self.inner.species()
     }
 
     /// Borrows the immutable growth vector.

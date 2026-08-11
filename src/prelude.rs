@@ -32,15 +32,15 @@ pub use crate::invariant::{
     LocalFrequencyInvariant, PopulationInvariant, enforce_state, validate_state,
 };
 pub use crate::kernel::{
-    ArtifactDisposition, Boundary, Diffusion, GeneratedSource, GeneratorProvenance,
-    GeneratorRandomness, INTERACTION_MATRIX_FORMAT, INTERACTION_MATRIX_LAYOUT,
-    INTERACTION_MATRIX_METADATA_KEY, InMemorySource, InteractionArtifactDescriptor,
-    InteractionArtifactError, InteractionArtifactLoadError, InteractionGenerator,
-    InteractionMatrix, InteractionProvenance, InteractionSource, InteractionSourceError,
-    InteractionSourceKind, JsonInteractionSource, Kernel, KernelAlgorithm, KernelAlgorithmError,
-    KernelCore, KernelCoreError, KernelStateView, KernelStepError, KernelUpdate, KernelUpdateError,
-    MeanFieldReplicatorRk4, PersistedInteraction, SpatialGeneralLotkaVolterraRk2, SpatialLayout,
-    SpatialReplicatorRk2, load_verified_interaction_matrix, persist_interaction_matrix,
+    ArtifactDisposition, BoundaryCondition, Diffusion, GeneratedSource, GeneratorProvenance,
+    INTERACTION_MATRIX_FORMAT, INTERACTION_MATRIX_LAYOUT, INTERACTION_MATRIX_METADATA_KEY,
+    InMemorySource, InteractionArtifactDescriptor, InteractionArtifactError,
+    InteractionArtifactLoadError, InteractionGenerator, InteractionMatrix, InteractionProvenance,
+    InteractionSource, InteractionSourceError, InteractionSourceKind, JsonInteractionSource,
+    Kernel, KernelAlgorithm, KernelAlgorithmError, KernelCore, KernelCoreError, KernelStateView,
+    KernelStepError, KernelUpdate, KernelUpdateError, MeanFieldReplicatorRk4, PersistedInteraction,
+    SpatialGeneralLotkaVolterraRk2, SpatialReplicatorRk2, load_verified_interaction_matrix,
+    persist_interaction_matrix,
 };
 pub use crate::noise::{
     DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE, DemographicGaussian, NoNoise, Noise, NoiseAlgorithm,
@@ -54,9 +54,8 @@ pub use crate::reading::{
 };
 pub use crate::recording::{
     ABUNDANCE_REPRESENTATION_METADATA_KEY, COMPLETED_ITERATION_METADATA_KEY, GlvRecording,
-    GlvRecordingConfig, GlvRecordingError, GlvRecordingMetadata, MODEL_KIND_METADATA_KEY,
-    RecordingMetadataError, StreamRecordingConfig, TASK_ORDINAL_METADATA_KEY,
-    TERMINATION_REASON_METADATA_KEY, TerminationReason,
+    GlvRecordingError, GlvRecordingMetadata, MODEL_KIND_METADATA_KEY, RecordingMetadataError,
+    TASK_ORDINAL_METADATA_KEY, TERMINATION_REASON_METADATA_KEY, TerminationReason,
 };
 pub use crate::simulation::{
     DefaultSimulationBuildError, MeanFieldReplicator, MeanFieldReplicatorConfig,
@@ -73,6 +72,8 @@ pub use crate::{
 // These are the collection types that appear in constructors and state
 // payloads, plus the common array literals used to define small matrices.
 pub use ndarray::{Array1, Array2, ArrayD, Axis, IxDyn, ShapeError, arr1, arr2};
+pub use physics_in_parallel::rng::{RngConfig, RngMethod};
+pub use physics_in_parallel::space::discrete::square_lattice::SquareLatticeConfig;
 
 // GLV delegates orchestration, time, state, and storage to Scientific
 // Workflow. Re-exporting its supported prelude lets applications opt into one

@@ -10,7 +10,8 @@ use thiserror::Error;
 use super::core::KernelCoreError;
 
 pub use mean_field_replicator_rk4::MeanFieldReplicatorRk4;
-pub use spatial::{Boundary, Diffusion, SpatialLayout};
+pub use physics_in_parallel::space::discrete::square_lattice::BoundaryCondition;
+pub use spatial::Diffusion;
 pub use spatial_general_lotka_volterra_rk2::SpatialGeneralLotkaVolterraRk2;
 pub use spatial_replicator_rk2::SpatialReplicatorRk2;
 
@@ -37,14 +38,6 @@ pub enum KernelAlgorithmError {
         /// State dimension.
         actual: usize,
     },
-    /// Growth configuration has the wrong species dimension.
-    #[error("growth length {actual} does not match species count {expected}")]
-    GrowthLength {
-        /// Species dimension.
-        expected: usize,
-        /// Growth-vector dimension.
-        actual: usize,
-    },
     /// Growth coefficients must be finite.
     #[error("growth coefficient {index} is not finite: {value}")]
     NonFiniteGrowth {
@@ -59,15 +52,6 @@ pub enum KernelAlgorithmError {
     /// A spatial algorithm received no spatial payload.
     #[error("spatial kernel requires populated `space`")]
     SpaceRequired,
-    /// Spatial shape requires at least one spatial axis and one species axis.
-    #[error("spatial shape must contain at least one spatial axis and one species axis")]
-    SpatialRank,
-    /// Every configured axis must be nonempty.
-    #[error("spatial axis {axis} must be greater than zero")]
-    EmptySpatialAxis {
-        /// Zero-based axis index.
-        axis: usize,
-    },
     /// Checked spatial element or stride arithmetic overflowed.
     #[error("spatial shape {shape:?} overflows its element count or strides")]
     SpatialShapeOverflow {
@@ -121,22 +105,11 @@ pub enum KernelAlgorithmError {
         /// Rejected coefficient.
         value: f64,
     },
-    /// Grid spacing has the wrong number of spatial axes.
-    #[error("spacing length {actual} does not match spatial rank {expected}")]
-    SpacingLength {
-        /// Spatial rank.
-        expected: usize,
-        /// Spacing count.
-        actual: usize,
-    },
-    /// Grid spacing must be finite and strictly positive.
-    #[error("spacing value {index} must be finite and positive, found {value}")]
-    InvalidSpacing {
-        /// Spatial axis.
-        index: usize,
-        /// Rejected spacing.
-        value: f64,
-    },
+    /// PiP rejected lattice geometry or finite-difference layout.
+    #[error("invalid lattice configuration: {0}")]
+    SpaceConfig(
+        #[from] physics_in_parallel::space::discrete::square_lattice::SquareLatticeConfigError,
+    ),
     /// Explicit diffusion would exceed the conservative stability limit.
     #[error("time step {actual} exceeds explicit diffusion stability limit {maximum}")]
     UnstableTimeStep {

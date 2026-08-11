@@ -63,7 +63,10 @@ where
         invariant: I,
         time_step: TimeStep,
     ) -> EngineBuildResult<A, N, I> {
-        validate_next_time(&state, time_step).map_err(EngineBuildError::Time)?;
+        state
+            .simulation_time()
+            .checked_advance(Some(time_step.get()))
+            .map_err(EngineBuildError::Time)?;
         kernel
             .validate_state(&state)
             .map_err(EngineBuildError::Kernel)?;
@@ -108,7 +111,10 @@ where
     /// responsible for their documented phase-level commit guarantees; the
     /// engine does not clone the full state for global rollback.
     pub fn step(&mut self) -> EngineStepResult<A, N, I> {
-        validate_next_time(&self.state, self.time_step).map_err(EngineStepError::Time)?;
+        self.state
+            .simulation_time()
+            .checked_advance(Some(self.time_step.get()))
+            .map_err(EngineStepError::Time)?;
         self.kernel
             .step(&mut self.state, self.time_step)
             .map_err(EngineStepError::Kernel)?;
@@ -123,29 +129,6 @@ where
             .advance_simulation_time(Some(self.time_step.get()))
             .map_err(EngineStepError::Time)
     }
-}
-
-fn validate_next_time(state: &SystemState, time_step: TimeStep) -> Result<(), StateError> {
-    let current = state.simulation_time();
-    current
-        .iteration()
-        .checked_add(1)
-        .ok_or(StateError::IterationOverflow {
-            iteration: current.iteration(),
-        })?;
-    let physical_time = current
-        .physical_time()
-        .ok_or(StateError::MissingPhysicalTime {
-            iteration: current.iteration(),
-        })?;
-    let delta = time_step.get();
-    if !(physical_time + delta).is_finite() {
-        return Err(StateError::InvalidPhysicalAdvance {
-            current: physical_time,
-            delta,
-        });
-    }
-    Ok(())
 }
 
 /// Failure while validating an engine composition before evolution.

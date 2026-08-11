@@ -2,8 +2,8 @@ use std::convert::Infallible;
 
 use general_lotka_volterra_rs::invariant::FrequencyInvariant;
 use general_lotka_volterra_rs::kernel::{
-    Boundary, Diffusion, InMemorySource, InteractionSource, Kernel, KernelAlgorithm, KernelCore,
-    KernelStateView, KernelUpdate,
+    BoundaryCondition, Diffusion, InMemorySource, InteractionSource, Kernel, KernelAlgorithm,
+    KernelCore, KernelStateView, KernelUpdate,
 };
 use general_lotka_volterra_rs::noise::{Noise, NoiseDomain, ProportionalGaussian};
 use general_lotka_volterra_rs::simulation::{
@@ -16,6 +16,7 @@ use general_lotka_volterra_rs::{
     TimeStep, TotalAbundance,
 };
 use ndarray::{Array1, Array2, ArrayD, IxDyn};
+use physics_in_parallel::rng::RngConfig;
 
 fn interaction(species: usize) -> general_lotka_volterra_rs::kernel::InteractionMatrix {
     InMemorySource::new(Array2::zeros((species, species)))
@@ -34,10 +35,13 @@ fn mean_field_config(species: usize) -> MeanFieldReplicatorConfig {
 fn spatial_replicator_config(shape: &[usize]) -> SpatialReplicatorConfig {
     let species = *shape.last().unwrap();
     SpatialReplicatorConfig::new(
-        shape.to_vec(),
         Array1::zeros(species),
-        Diffusion::unit_spacing(Array1::zeros(species), shape.len() - 1, Boundary::Periodic)
-            .unwrap(),
+        Diffusion::unit_spacing(
+            Array1::zeros(species),
+            &shape[..shape.len() - 1],
+            BoundaryCondition::Periodic,
+        )
+        .unwrap(),
         0.0,
         time_step(),
     )
@@ -46,10 +50,13 @@ fn spatial_replicator_config(shape: &[usize]) -> SpatialReplicatorConfig {
 fn spatial_general_lotka_volterra_config(shape: &[usize]) -> SpatialGeneralLotkaVolterraConfig {
     let species = *shape.last().unwrap();
     SpatialGeneralLotkaVolterraConfig::new(
-        shape.to_vec(),
         Array1::zeros(species),
-        Diffusion::unit_spacing(Array1::zeros(species), shape.len() - 1, Boundary::Neumann)
-            .unwrap(),
+        Diffusion::unit_spacing(
+            Array1::zeros(species),
+            &shape[..shape.len() - 1],
+            BoundaryCondition::Neumann,
+        )
+        .unwrap(),
         0.0,
         None,
         time_step(),
@@ -270,7 +277,12 @@ fn mean_field_accepts_compatible_custom_kernel_and_noise_plugins() {
     let algorithm = IdentityAggregate {
         output: Array1::zeros(2),
     };
-    let noise = ProportionalGaussian::new(0.0, 42, NoiseDomain::aggregate(2).unwrap()).unwrap();
+    let noise = ProportionalGaussian::new(
+        0.0,
+        RngConfig::new(Some(42), None, None),
+        NoiseDomain::aggregate(2).unwrap(),
+    )
+    .unwrap();
     let mut simulation = MeanFieldReplicator::from_plugins(
         state,
         AbundanceRepresentation::RelativeFrequency,

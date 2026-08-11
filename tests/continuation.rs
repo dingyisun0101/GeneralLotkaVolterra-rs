@@ -7,10 +7,7 @@ use general_lotka_volterra_rs::kernel::{
     InMemorySource, InteractionSource, load_verified_interaction_matrix, persist_interaction_matrix,
 };
 use general_lotka_volterra_rs::reading::open_completed_glv_recording;
-use general_lotka_volterra_rs::recording::{
-    GlvRecording, GlvRecordingConfig, GlvRecordingMetadata, StreamRecordingConfig,
-    TerminationReason,
-};
+use general_lotka_volterra_rs::recording::{GlvRecording, GlvRecordingMetadata, TerminationReason};
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, CHECKPOINT_STREAM, MeanFieldReplicator,
     MeanFieldReplicatorConfig, SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM, SpatialAbundance,
@@ -19,7 +16,7 @@ use general_lotka_volterra_rs::{
 use ndarray::{Array1, arr2};
 use scientific_workflow::configuration::{ParameterSpace, TaskParameters};
 use scientific_workflow::execution::ExecutionScope;
-use scientific_workflow::storage::SamplingInterval;
+use scientific_workflow::storage::{SamplingInterval, StateStreamConfig};
 use scientific_workflow::system_state::SystemState;
 use scientific_workflow::time_series::StateSeries;
 
@@ -65,16 +62,32 @@ impl Drop for Workspace {
     }
 }
 
-fn stream(interval: u64) -> StreamRecordingConfig {
-    StreamRecordingConfig::new(
+fn stream(name: &str, fields: &[&str], interval: u64) -> StateStreamConfig {
+    StateStreamConfig::new(
+        name,
+        fields.iter().copied(),
         SamplingInterval::iterations(interval).unwrap(),
-        NonZeroU64::new(1_024).unwrap(),
-        NonZeroU64::new(8_192).unwrap(),
+        Some((
+            NonZeroU64::new(1_024).unwrap(),
+            NonZeroU64::new(8_192).unwrap(),
+        )),
     )
 }
 
-fn recording_config() -> GlvRecordingConfig {
-    GlvRecordingConfig::new(stream(2), stream(3), stream(1))
+fn recording_config() -> Vec<StateStreamConfig> {
+    vec![
+        stream(SIGNAL_STREAM, &[ABUNDANCE_FIELD, TOTAL_FIELD], 2),
+        stream(
+            SPACE_STREAM,
+            &[ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD],
+            3,
+        ),
+        stream(
+            CHECKPOINT_STREAM,
+            &[ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD],
+            1,
+        ),
+    ]
 }
 
 fn simulation_config() -> MeanFieldReplicatorConfig {

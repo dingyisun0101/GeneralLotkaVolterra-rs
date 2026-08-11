@@ -9,9 +9,9 @@
   "carrying_capacity": 40000.0,
   "physical_time_increment": 0.003,
   "maximum_iterations": 100,
-  "recording": {
-    "signal": {"sampling_interval": 10, "max_chunk_bytes": 65536, "queue_bytes": 262144},
-    "space": {"sampling_interval": 25, "max_chunk_bytes": 262144, "queue_bytes": 1048576},
-    "checkpoint": {"sampling_interval": 50, "max_chunk_bytes": 262144, "queue_bytes": 1048576}
-  }
+  "recording": [
+    {"name": "signal", "sampling_interval": 10, "fields": ["abundance", "total"], "storage_limits": [65536, 262144]},
+    {"name": "space", "sampling_interval": 25, "fields": ["abundance", "space", "total"], "storage_limits": [262144, 1048576]},
+    {"name": "checkpoint", "sampling_interval": 50, "fields": ["abundance", "space", "total"], "storage_limits": [262144, 1048576]}
+  ]
 }

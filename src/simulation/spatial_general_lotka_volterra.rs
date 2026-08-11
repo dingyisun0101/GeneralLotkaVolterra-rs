@@ -21,7 +21,6 @@ use super::{
 /// Immutable inputs that distinguish one spatial General Lotka–Volterra simulation.
 #[derive(Clone, Debug)]
 pub struct SpatialGeneralLotkaVolterraConfig {
-    shape: Vec<usize>,
     growth: Array1<f64>,
     diffusion: Diffusion,
     cutoff: f64,
@@ -30,9 +29,8 @@ pub struct SpatialGeneralLotkaVolterraConfig {
 }
 
 impl SpatialGeneralLotkaVolterraConfig {
-    /// Collects a species-last layout and typed population configuration.
+    /// Collects typed population configuration around PiP-owned lattice geometry.
     pub const fn new(
-        shape: Vec<usize>,
         growth: Array1<f64>,
         diffusion: Diffusion,
         cutoff: f64,
@@ -40,18 +38,12 @@ impl SpatialGeneralLotkaVolterraConfig {
         time_step: TimeStep,
     ) -> Self {
         Self {
-            shape,
             growth,
             diffusion,
             cutoff,
             carrying_capacity,
             time_step,
         }
-    }
-
-    /// Borrows the exact species-last shape.
-    pub fn shape(&self) -> &[usize] {
-        &self.shape
     }
 
     /// Borrows intrinsic per-species growth rates.
@@ -93,26 +85,25 @@ impl SpatialGeneralLotkaVolterra {
         interaction: InteractionMatrix,
         config: SpatialGeneralLotkaVolterraConfig,
     ) -> Result<Self, DefaultSimulationBuildError> {
-        if initial_space.shape() != config.shape() {
-            return Err(DefaultSimulationBuildError::InitialSpaceShapeMismatch {
-                expected: config.shape().to_vec(),
-                actual: initial_space.shape().to_vec(),
-            });
-        }
         let SpatialGeneralLotkaVolterraConfig {
-            shape,
             growth,
             diffusion,
             cutoff,
             carrying_capacity,
             time_step,
         } = config;
-        let algorithm = SpatialGeneralLotkaVolterraRk2::new(shape, growth, diffusion)
+        let algorithm = SpatialGeneralLotkaVolterraRk2::new(growth, diffusion)
             .map_err(DefaultSimulationBuildError::Kernel)?;
+        if initial_space.shape() != algorithm.shape() {
+            return Err(DefaultSimulationBuildError::InitialSpaceShapeMismatch {
+                expected: algorithm.shape().to_vec(),
+                actual: initial_space.shape().to_vec(),
+            });
+        }
         algorithm
             .validate_time_step(time_step)
             .map_err(DefaultSimulationBuildError::Kernel)?;
-        let species = algorithm.layout().species();
+        let species = algorithm.species();
         let abundance = aggregate_spatial(&initial_space, species, false)?;
         let total = abundance.sum().round().max(0.0);
         let state = assemble_initial_state(abundance, Some(initial_space), total)?;
@@ -137,21 +128,19 @@ impl SpatialGeneralLotkaVolterra {
         config: SpatialGeneralLotkaVolterraConfig,
     ) -> Result<Self, DefaultSimulationBuildError> {
         let SpatialGeneralLotkaVolterraConfig {
-            shape,
             growth,
             diffusion,
             cutoff,
             carrying_capacity,
             time_step,
         } = config;
-        let algorithm = SpatialGeneralLotkaVolterraRk2::new(shape, growth, diffusion)
+        let algorithm = SpatialGeneralLotkaVolterraRk2::new(growth, diffusion)
             .map_err(DefaultSimulationBuildError::Kernel)?;
         algorithm
             .validate_time_step(time_step)
             .map_err(DefaultSimulationBuildError::Kernel)?;
-        let invariant =
-            PopulationInvariant::new(algorithm.layout().species(), cutoff, carrying_capacity)
-                .map_err(DefaultSimulationBuildError::Invariant)?;
+        let invariant = PopulationInvariant::new(algorithm.species(), cutoff, carrying_capacity)
+            .map_err(DefaultSimulationBuildError::Invariant)?;
         Self::from_plugins(
             state,
             representation,

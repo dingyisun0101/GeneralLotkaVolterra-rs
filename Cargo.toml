@@ -34,10 +34,8 @@ resolver = "3"
 
 [dependencies]
 ndarray = { version = "0.17.2", features = ["serde"] }
-rand = "0.10"
-rand_chacha = "0.10"
-rand_distr = "0.6"
-scientific-workflow = { git = "https://github.com/dingyisun0101/Scientific-Workflow", rev = "10755a7ab5f1f2158e0bdbbe3fc8c570084f0293", version = "0.1.6" }
+physics_in_parallel = { path = "../pip", version = "3.2.0" }
+scientific-workflow = { path = "../workflow/dev", version = "0.2.0" }
 scientific-interaction = { path = "interaction", version = "0.1.0" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

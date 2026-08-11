@@ -35,14 +35,14 @@ fn run_task(
     task: TaskConfig,
 ) -> Result<(), Box<dyn Error>> {
     // Decode every required value before creating task artifacts or evolving
-    // state. Domain types such as `GlvRecordingConfig` decode directly, so an
+    // state. Workflow's own stream configurations decode directly, so an
     // application does not need a mirror configuration struct.
     let initial_abundance = Array1::from_vec(task.decode_value("initial_abundance")?);
     let growth = Array1::from_vec(task.decode_value("growth")?);
     let cutoff = task.decode_value("cutoff")?;
     let time_step = TimeStep::new(task.decode_value("physical_time_increment")?)?;
     let maximum_iterations = task.decode_value("maximum_iterations")?;
-    let recording_config: GlvRecordingConfig = task.decode_value("recording")?;
+    let recording_config: Vec<StateStreamConfig> = task.decode_value("recording")?;
 
     let progress = reporter.start_task(&task, 0, Some(maximum_iterations))?;
     progress.set_phase("resolving interaction matrix");
@@ -83,6 +83,6 @@ fn run_task(
     progress.set_phase("validating recording");
     recording.complete(simulation.state(), TerminationReason::MaximumIterations)?;
     verify_completed_glv_checkpoint(recording_directory, simulation.state())?;
-    progress.complete()?;
+    progress.complete(None)?;
     Ok(())
 }

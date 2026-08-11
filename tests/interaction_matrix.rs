@@ -4,13 +4,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use general_lotka_volterra_rs::kernel::{
-    ArtifactDisposition, GeneratedSource, GeneratorRandomness, INTERACTION_MATRIX_FORMAT,
+    ArtifactDisposition, GeneratedSource, INTERACTION_MATRIX_FORMAT,
     INTERACTION_MATRIX_METADATA_KEY, InMemorySource, InteractionArtifactError,
     InteractionGenerator, InteractionProvenance, InteractionSource, InteractionSourceError,
     InteractionSourceKind, JsonInteractionSource, load_verified_interaction_matrix,
     persist_interaction_matrix,
 };
 use ndarray::{Array2, arr2};
+use physics_in_parallel::rng::{RngConfig, RngMethod};
 use scientific_workflow::execution::ExecutionScope;
 use scientific_workflow::project::ScientificProject;
 use serde::Serialize;
@@ -57,7 +58,7 @@ struct GeneratorError;
 #[derive(Debug)]
 struct DiagonalGenerator {
     parameters: GeneratorParameters,
-    randomness: GeneratorRandomness,
+    rng_config: Option<RngConfig>,
 }
 
 impl InteractionGenerator for DiagonalGenerator {
@@ -71,8 +72,8 @@ impl InteractionGenerator for DiagonalGenerator {
         &self.parameters
     }
 
-    fn randomness(&self) -> GeneratorRandomness {
-        self.randomness
+    fn rng_config(&self) -> Option<RngConfig> {
+        self.rng_config
     }
 
     fn generate(self, species: usize) -> Result<Array2<f64>, Self::Error> {
@@ -125,7 +126,11 @@ fn in_memory_and_inline_sources_validate_the_complete_domain() {
 fn generated_sources_record_typed_parameters_version_and_seed() {
     let resolved = GeneratedSource::new(DiagonalGenerator {
         parameters: GeneratorParameters { diagonal: -0.25 },
-        randomness: GeneratorRandomness::Stochastic { seed: 42 },
+        rng_config: Some(RngConfig::new(
+            Some(42),
+            Some(RngMethod::SmallRng),
+            std::num::NonZeroUsize::new(1),
+        )),
     })
     .resolve(3)
     .unwrap();
@@ -137,15 +142,15 @@ fn generated_sources_record_typed_parameters_version_and_seed() {
     assert_eq!(generator.identity(), "test.diagonal");
     assert_eq!(generator.version(), "1");
     assert_eq!(generator.parameters()["diagonal"], -0.25);
-    assert_eq!(generator.seed(), Some(42));
+    assert_eq!(generator.rng_config().unwrap().seed(), Some(42));
     let rng = resolved
         .generator_rng_record()
         .unwrap()
         .expect("stochastic generator RNG record");
     assert_eq!(rng.namespace(), "scientific_interaction.generator");
-    assert_eq!(rng.method(), "test.diagonal");
-    assert_eq!(rng.version(), "1");
-    assert_eq!(rng.key(), "000000000000002a");
+    assert_eq!(rng.method(), "test.diagonal+small_rng");
+    assert_eq!(rng.version(), "1+rand-0.10.1");
+    assert_eq!(rng.key(), "42");
     assert_eq!(rng.parameters()["generator_parameters"]["diagonal"], -0.25);
 }
 
@@ -253,7 +258,7 @@ fn persisted_artifact_is_a_checked_json_file_source() {
     let scope = ExecutionScope::create_named(directory.path(), "execution").unwrap();
     let original = GeneratedSource::new(DiagonalGenerator {
         parameters: GeneratorParameters { diagonal: -0.5 },
-        randomness: GeneratorRandomness::Deterministic,
+        rng_config: None,
     })
     .resolve(2)
     .unwrap();
@@ -287,7 +292,7 @@ fn persisted_artifact_is_a_checked_json_file_source() {
         "generated"
     );
     assert_eq!(
-        metadata[INTERACTION_MATRIX_METADATA_KEY]["generator"]["seed"],
+        metadata[INTERACTION_MATRIX_METADATA_KEY]["generator"]["rng_config"],
         serde_json::Value::Null
     );
 }

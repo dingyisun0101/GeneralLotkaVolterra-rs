@@ -359,11 +359,11 @@ side is the mean-field replicator equation
 `nu_i * (g_i + (V nu)_i - sum_j nu_j * (g_j + (V nu)_j))`. One step uses
 classical RK4 and proposes aggregate abundance only.
 
-Both spatial algorithms share a species-last `SpatialLayout`, checked
-row-major strides, `Diffusion`, and midpoint RK2 machinery. `Boundary` supports
-periodic wrapping and zero-flux Neumann edges. Grid spacing is validated once
-and cached as inverse squared spacing. Explicit diffusion steps expose and
-enforce the conservative bound
+Both spatial algorithms share species-last midpoint RK2 machinery. PiP's
+`SquareLatticeConfig` is the only owner of spatial shape, checked row-major
+strides, boundary behavior, spacing, neighbor lookup, and the interleaved
+component Laplacian. GLV's `Diffusion` adds only per-species diffusion
+coefficients. Explicit diffusion steps expose and enforce the conservative bound
 `dt <= 1 / (2 * max(D) * sum_axis(1 / dx_axis^2))` when diffusion is nonzero.
 
 `SpatialReplicatorRk2` evolves local replicator reaction plus diffusion;
@@ -473,9 +473,10 @@ Implemented algorithms are:
 - demographic Gaussian noise; and
 - proportional Gaussian noise.
 
-A Gaussian plugin owns a seeded `ChaCha12Rng`, its standard-normal
-distribution, one species-sized normal-sample buffer, and one target-sized
-proposal buffer. Its aggregate or exact spatial domain is fixed at
+A Gaussian plugin owns a PiP `TensorRandFiller`, one species-sized normal-sample
+buffer, and one target-sized proposal buffer. Its constructor accepts the same
+universal `RngConfig` as every other public PiP stochastic API; missing values
+default to ChaCha12 and one stream. Its aggregate or exact spatial domain is fixed at
 construction, so stepping neither resizes nor allocates scratch. It validates
 the complete input and sampling scale before advancing the RNG, computes every
 cell into the proposal buffer, and commits only after the complete proposal
@@ -485,10 +486,10 @@ Every `NoiseAlgorithm` explicitly returns either an immutable Workflow
 `RngRecord` or `None` for deterministic behavior. Workflow provides only
 the validated record format and metadata insertion/read interface; it contains
 no RNG implementation. The built-in Gaussian plugins record distinct GLV
-namespaces, method `chacha12+standard_normal`, implementation version
-`rand_chacha-0.10+rand_distr-0.6`, key encoding `u64_be_hex`, and the exact
-fixed-width seed value. Concrete simulations expose the selected plugin's
-record to orchestration.
+namespaces and translate the fully resolved PiP method, version, decimal seed
+encoding, seed, stream count, and standard-normal distribution into one
+`RngRecord`. Concrete simulations expose the selected plugin's record to
+orchestration.
 
 Proportional noise applies a mass-projected update proportional to local
 abundance. Demographic noise scales fluctuations by square-root local
@@ -656,11 +657,12 @@ Named streams are:
 | `space` | `abundance`, `space`, `total` | Spatial analysis |
 | `checkpoint` | all three fields | Complete deterministic restart |
 
-Each stream owns an independent `StreamRecordingConfig` containing a typed
-`SamplingInterval`, nonzero chunk target, and nonzero queue-byte budget.
-`GlvRecordingConfig` requires all three streams. Non-spatial `space` and
-`checkpoint` records encode the populated `Option<ArrayD<f64>>::None` payload
-as JSON `null`.
+Orchestration decodes and passes Workflow's `Vec<StateStreamConfig>` directly;
+GLV defines no parallel recording-configuration structs. Each stream therefore
+uses Workflow's typed `SamplingInterval`, optional nonzero storage limits,
+field selection, and validation. The standard projects declare all three
+streams. Non-spatial `space` and `checkpoint` records encode the populated
+`Option<ArrayD<f64>>::None` payload as JSON `null`.
 
 `GlvRecordingMetadata` combines stable `SimulationKind` and
 `AbundanceRepresentation` values, exact resolved `TaskParameters` plus

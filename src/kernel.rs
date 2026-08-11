@@ -9,16 +9,15 @@ mod algorithms;
 pub mod core;
 
 pub use algorithms::{
-    Boundary, Diffusion, KernelAlgorithmError, MeanFieldReplicatorRk4,
-    SpatialGeneralLotkaVolterraRk2, SpatialLayout, SpatialReplicatorRk2,
+    BoundaryCondition, Diffusion, KernelAlgorithmError, MeanFieldReplicatorRk4,
+    SpatialGeneralLotkaVolterraRk2, SpatialReplicatorRk2,
 };
 pub use core::{
     Kernel, KernelAlgorithm, KernelCore, KernelCoreError, KernelStateView, KernelStepError,
     KernelUpdate, KernelUpdateError,
 };
 pub use scientific_interaction::{
-    ArtifactDisposition, GeneratedSource, GeneratorProvenance, GeneratorRandomness,
-    INTERACTION_GENERATOR_KEY_ENCODING, INTERACTION_GENERATOR_RNG_NAMESPACE,
+    ArtifactDisposition, GeneratedSource, GeneratorProvenance, INTERACTION_GENERATOR_RNG_NAMESPACE,
     INTERACTION_MATRIX_FORMAT, INTERACTION_MATRIX_LAYOUT, INTERACTION_MATRIX_METADATA_KEY,
     InMemorySource, InteractionArtifactDescriptor, InteractionArtifactError,
     InteractionArtifactLoadError, InteractionGenerator, InteractionMatrix, InteractionProvenance,

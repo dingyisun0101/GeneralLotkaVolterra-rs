@@ -36,12 +36,12 @@ fn run_task(
     let initial_cell: Vec<f64> = task.decode_value("initial_cell")?;
     let growth = Array1::from_vec(task.decode_value("growth")?);
     let diffusion_coefficients = Array1::from_vec(task.decode_value("diffusion")?);
-    let spacing = task.decode_value("spacing")?;
-    let boundary: Boundary = task.decode_value("boundary")?;
+    let spacing: Vec<f64> = task.decode_value("spacing")?;
+    let boundary: BoundaryCondition = task.decode_value("boundary")?;
     let cutoff = task.decode_value("cutoff")?;
     let time_step = TimeStep::new(task.decode_value("physical_time_increment")?)?;
     let maximum_iterations = task.decode_value("maximum_iterations")?;
-    let recording_config: GlvRecordingConfig = task.decode_value("recording")?;
+    let recording_config: Vec<StateStreamConfig> = task.decode_value("recording")?;
 
     let progress = reporter.start_task(&task, 0, Some(maximum_iterations))?;
     progress.set_phase("resolving interaction matrix");
@@ -54,11 +54,12 @@ fn run_task(
     // Spatial payloads are standard-contiguous and species-last. Repeating one
     // cell initializes every grid point with the same local composition.
     let cells = spatial_shape.iter().product::<usize>();
-    let mut shape = spatial_shape;
+    let mut shape = spatial_shape.clone();
     shape.push(species);
     let initial_space = ArrayD::from_shape_vec(IxDyn(&shape), initial_cell.repeat(cells))?;
-    let diffusion = Diffusion::new(diffusion_coefficients, spacing, boundary)?;
-    let config = SpatialReplicatorConfig::new(shape, growth, diffusion, cutoff, time_step);
+    let space_config = SquareLatticeConfig::try_new(&spatial_shape, boundary, Some(&spacing))?;
+    let diffusion = Diffusion::new(diffusion_coefficients, space_config)?;
+    let config = SpatialReplicatorConfig::new(growth, diffusion, cutoff, time_step);
     let mut simulation = SpatialReplicator::new(initial_space, interaction, config)?;
 
     let metadata = GlvRecordingMetadata::new(
@@ -86,6 +87,6 @@ fn run_task(
     progress.set_phase("validating recording");
     recording.complete(simulation.state(), TerminationReason::MaximumIterations)?;
     verify_completed_glv_checkpoint(recording_directory, simulation.state())?;
-    progress.complete()?;
+    progress.complete(None)?;
     Ok(())
 }

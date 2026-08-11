@@ -2,10 +2,10 @@
 
 use std::error::Error;
 use std::fmt;
+use std::num::NonZeroUsize;
 
-use rand::SeedableRng;
-use rand_chacha::ChaCha12Rng;
-use rand_distr::{Distribution, StandardNormal};
+use physics_in_parallel::math::tensor::{RandType, TensorRandError, TensorRandFiller};
+use physics_in_parallel::rng::{RngConfig, RngConfigError, RngMethod};
 use scientific_workflow::rng_record::{RngRecord, RngRecordError};
 use scientific_workflow::system_state::{StateError, SystemState};
 use thiserror::Error as ThisError;
@@ -96,10 +96,8 @@ pub(crate) enum GaussianKind {
 pub(crate) struct GaussianWorkspace {
     domain: NoiseDomain,
     sigma: f64,
-    seed: u64,
     rng_record: RngRecord,
-    rng: ChaCha12Rng,
-    normal: StandardNormal,
+    filler: TensorRandFiller,
     eta: Vec<f64>,
     proposed: Vec<f64>,
 }
@@ -110,7 +108,7 @@ impl fmt::Debug for GaussianWorkspace {
             .debug_struct("GaussianWorkspace")
             .field("domain", &self.domain)
             .field("sigma", &self.sigma)
-            .field("seed", &self.seed)
+            .field("rng", &self.filler.rng_config())
             .field("eta_len", &self.eta.len())
             .field("proposed_len", &self.proposed.len())
             .finish_non_exhaustive()
@@ -120,7 +118,7 @@ impl fmt::Debug for GaussianWorkspace {
 impl GaussianWorkspace {
     pub(crate) fn new(
         sigma: f64,
-        seed: u64,
+        rng: RngConfig,
         domain: NoiseDomain,
         namespace: &'static str,
     ) -> Result<Self, NoisePluginError> {
@@ -129,21 +127,58 @@ impl GaussianWorkspace {
         }
         let species = domain.species();
         let elements = domain.elements();
+        let rng = rng
+            .resolve_for(
+                namespace,
+                RngMethod::ChaCha12,
+                &[
+                    RngMethod::Pcg64,
+                    RngMethod::Pcg64Mcg,
+                    RngMethod::SmallRng,
+                    RngMethod::ChaCha8,
+                    RngMethod::ChaCha12,
+                    RngMethod::ChaCha20,
+                ],
+                NonZeroUsize::new(1),
+            )
+            .map_err(NoisePluginError::RngConfig)?;
+        let filler = TensorRandFiller::try_new(
+            RandType::Normal {
+                mean: 0.0,
+                std: 1.0,
+            },
+            rng,
+        )
+        .map_err(NoisePluginError::TensorRng)?;
+        let rng = filler.rng_config();
+        let method = rng.method().expect("PiP resolves the noise RNG method");
+        let mut parameters = serde_json::Map::new();
+        parameters.insert(
+            "parallel_streams".to_owned(),
+            serde_json::Value::from(
+                rng.parallel_streams()
+                    .expect("PiP resolves the noise stream count")
+                    .get(),
+            ),
+        );
+        parameters.insert(
+            "distribution".to_owned(),
+            serde_json::Value::from("standard_normal"),
+        );
         let rng_record = RngRecord::new(
             namespace,
-            "chacha12+standard_normal",
-            "rand_chacha-0.10+rand_distr-0.6",
-            "u64_be_hex",
-            format!("{seed:016x}"),
+            format!("{}+standard_normal", method.name()),
+            method.version(),
+            method.seed_encoding(),
+            rng.encode_seed().expect("PiP resolves the noise seed"),
+            Some(parameters),
         )
         .map_err(NoisePluginError::RngRecord)?;
         Ok(Self {
             domain,
             sigma,
-            seed,
             rng_record,
-            rng: ChaCha12Rng::seed_from_u64(seed),
-            normal: StandardNormal,
+            filler,
             eta: vec![0.0; species],
             proposed: vec![0.0; elements],
         })
@@ -153,8 +188,8 @@ impl GaussianWorkspace {
         self.sigma
     }
 
-    pub(crate) const fn seed(&self) -> u64 {
-        self.seed
+    pub(crate) fn rng_config(&self) -> RngConfig {
+        self.filler.rng_config()
     }
 
     pub(crate) const fn domain(&self) -> &NoiseDomain {
@@ -220,9 +255,9 @@ impl GaussianWorkspace {
             preflight_cell(cell, kind, cell_index)?;
         }
         for cell in self.proposed.chunks_exact_mut(self.domain.species()) {
-            for eta in &mut self.eta {
-                *eta = self.normal.sample(&mut self.rng);
-            }
+            self.filler
+                .try_fill_slice(&mut self.eta)
+                .map_err(NoisePluginError::TensorRng)?;
             match kind {
                 GaussianKind::Demographic => {
                     apply_demographic(cell, &self.eta, scale);
@@ -361,6 +396,12 @@ fn validate_noise_values(
 #[derive(Debug, ThisError)]
 #[non_exhaustive]
 pub enum NoisePluginError {
+    /// Universal RNG settings were incompatible with Gaussian noise.
+    #[error("invalid noise RNG configuration: {0}")]
+    RngConfig(#[source] RngConfigError),
+    /// PiP rejected random filling or distribution configuration.
+    #[error("noise random sampling failed: {0}")]
+    TensorRng(#[source] TensorRandError),
     /// Workflow rejected the immutable RNG provenance declaration.
     #[error("invalid noise RNG record: {0}")]
     RngRecord(#[source] RngRecordError),

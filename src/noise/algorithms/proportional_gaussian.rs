@@ -1,6 +1,7 @@
 //! Gaussian fluctuations proportional to local abundance.
 
 use crate::{AggregateAbundance, SpatialAbundance, TimeStep};
+use physics_in_parallel::rng::RngConfig;
 
 use crate::noise::core::{
     GaussianKind, GaussianWorkspace, NoiseAlgorithm, NoiseDomain, NoisePluginError,
@@ -18,11 +19,11 @@ pub struct ProportionalGaussian {
 
 impl ProportionalGaussian {
     /// Creates a seeded proportional plugin for one fixed payload domain.
-    pub fn new(sigma: f64, seed: u64, domain: NoiseDomain) -> Result<Self, NoisePluginError> {
+    pub fn new(sigma: f64, rng: RngConfig, domain: NoiseDomain) -> Result<Self, NoisePluginError> {
         Ok(Self {
             workspace: GaussianWorkspace::new(
                 sigma,
-                seed,
+                rng,
                 domain,
                 PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE,
             )?,
@@ -34,9 +35,9 @@ impl ProportionalGaussian {
         self.workspace.sigma()
     }
 
-    /// Returns the seed used to initialize the owned RNG.
-    pub const fn seed(&self) -> u64 {
-        self.workspace.seed()
+    /// Returns the fully resolved PiP RNG configuration.
+    pub fn rng_config(&self) -> RngConfig {
+        self.workspace.rng_config()
     }
 
     /// Borrows the fixed aggregate or spatial domain.

@@ -20,7 +20,6 @@ use super::{
 /// Immutable inputs that distinguish one spatial replicator simulation.
 #[derive(Clone, Debug)]
 pub struct SpatialReplicatorConfig {
-    shape: Vec<usize>,
     growth: Array1<f64>,
     diffusion: Diffusion,
     cutoff: f64,
@@ -28,26 +27,19 @@ pub struct SpatialReplicatorConfig {
 }
 
 impl SpatialReplicatorConfig {
-    /// Collects a species-last layout and typed numerical configuration.
+    /// Collects typed numerical configuration around PiP-owned lattice geometry.
     pub const fn new(
-        shape: Vec<usize>,
         growth: Array1<f64>,
         diffusion: Diffusion,
         cutoff: f64,
         time_step: TimeStep,
     ) -> Self {
         Self {
-            shape,
             growth,
             diffusion,
             cutoff,
             time_step,
         }
-    }
-
-    /// Borrows the exact species-last shape.
-    pub fn shape(&self) -> &[usize] {
-        &self.shape
     }
 
     /// Borrows intrinsic per-species growth rates.
@@ -84,25 +76,24 @@ impl SpatialReplicator {
         interaction: InteractionMatrix,
         config: SpatialReplicatorConfig,
     ) -> Result<Self, DefaultSimulationBuildError> {
-        if initial_space.shape() != config.shape() {
-            return Err(DefaultSimulationBuildError::InitialSpaceShapeMismatch {
-                expected: config.shape().to_vec(),
-                actual: initial_space.shape().to_vec(),
-            });
-        }
         let SpatialReplicatorConfig {
-            shape,
             growth,
             diffusion,
             cutoff,
             time_step,
         } = config;
-        let algorithm = SpatialReplicatorRk2::new(shape, growth, diffusion)
+        let algorithm = SpatialReplicatorRk2::new(growth, diffusion)
             .map_err(DefaultSimulationBuildError::Kernel)?;
+        if initial_space.shape() != algorithm.shape() {
+            return Err(DefaultSimulationBuildError::InitialSpaceShapeMismatch {
+                expected: algorithm.shape().to_vec(),
+                actual: initial_space.shape().to_vec(),
+            });
+        }
         algorithm
             .validate_time_step(time_step)
             .map_err(DefaultSimulationBuildError::Kernel)?;
-        let species = algorithm.layout().species();
+        let species = algorithm.species();
         let abundance = aggregate_spatial(&initial_space, species, true)?;
         let state = assemble_initial_state(abundance, Some(initial_space), 1.0)?;
         let invariant = LocalFrequencyInvariant::new(species, cutoff)
@@ -126,18 +117,17 @@ impl SpatialReplicator {
         config: SpatialReplicatorConfig,
     ) -> Result<Self, DefaultSimulationBuildError> {
         let SpatialReplicatorConfig {
-            shape,
             growth,
             diffusion,
             cutoff,
             time_step,
         } = config;
-        let algorithm = SpatialReplicatorRk2::new(shape, growth, diffusion)
+        let algorithm = SpatialReplicatorRk2::new(growth, diffusion)
             .map_err(DefaultSimulationBuildError::Kernel)?;
         algorithm
             .validate_time_step(time_step)
             .map_err(DefaultSimulationBuildError::Kernel)?;
-        let invariant = LocalFrequencyInvariant::new(algorithm.layout().species(), cutoff)
+        let invariant = LocalFrequencyInvariant::new(algorithm.species(), cutoff)
             .map_err(DefaultSimulationBuildError::Invariant)?;
         Self::from_plugins(
             state,

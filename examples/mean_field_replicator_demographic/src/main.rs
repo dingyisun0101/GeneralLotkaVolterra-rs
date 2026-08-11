@@ -40,7 +40,7 @@ fn run_task(
     let seed = task.decode_value("seed")?;
     let time_step = TimeStep::new(task.decode_value("physical_time_increment")?)?;
     let maximum_iterations = task.decode_value("maximum_iterations")?;
-    let recording_config: GlvRecordingConfig = task.decode_value("recording")?;
+    let recording_config: Vec<StateStreamConfig> = task.decode_value("recording")?;
 
     let progress = reporter.start_task(&task, 0, Some(maximum_iterations))?;
     progress.set_phase("resolving interaction matrix");
@@ -65,7 +65,7 @@ fn run_task(
     );
     let noise = Noise::new(DemographicGaussian::new(
         sigma,
-        seed,
+        RngConfig::new(Some(seed), None, None),
         NoiseDomain::aggregate(species)?,
     )?);
     let invariant = FrequencyInvariant::new(species, cutoff)?;
@@ -105,6 +105,6 @@ fn run_task(
     progress.set_phase("validating recording");
     recording.complete(simulation.state(), TerminationReason::MaximumIterations)?;
     verify_completed_glv_checkpoint(recording_directory, simulation.state())?;
-    progress.complete()?;
+    progress.complete(None)?;
     Ok(())
 }

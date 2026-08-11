@@ -81,10 +81,10 @@ fn spatial_glv_matches_independent_ground_truth_with_and_without_diffusion() {
         let interaction = InMemorySource::new(matrix).resolve(species).unwrap();
         let initial =
             ArrayD::from_shape_vec(IxDyn(&shape), values(&case["initial_space"])).unwrap();
-        let boundary: Boundary = serde_json::from_value(case["boundary"].clone()).unwrap();
+        let boundary: BoundaryCondition = serde_json::from_value(case["boundary"].clone()).unwrap();
         let diffusion = Diffusion::unit_spacing(
             Array1::from_vec(values(&case["diffusion"])),
-            shape.len() - 1,
+            &shape[..shape.len() - 1],
             boundary,
         )
         .unwrap();
@@ -92,7 +92,6 @@ fn spatial_glv_matches_independent_ground_truth_with_and_without_diffusion() {
             initial,
             interaction,
             SpatialGeneralLotkaVolterraConfig::new(
-                shape,
                 Array1::from_vec(values(&case["growth"])),
                 diffusion,
                 case["cutoff"].as_f64().unwrap(),

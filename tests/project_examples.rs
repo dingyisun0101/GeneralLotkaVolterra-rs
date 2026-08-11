@@ -1,10 +1,11 @@
 use std::path::PathBuf;
 
-use general_lotka_volterra_rs::kernel::{Boundary, InteractionSource, JsonInteractionSource};
+use general_lotka_volterra_rs::kernel::{
+    BoundaryCondition, InteractionSource, JsonInteractionSource,
+};
 use general_lotka_volterra_rs::project::load_glv_project;
-use general_lotka_volterra_rs::recording::GlvRecordingConfig;
 use general_lotka_volterra_rs::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD};
-use scientific_workflow::prelude::SamplingInterval;
+use scientific_workflow::prelude::{SamplingInterval, StateStreamConfig};
 
 fn example_root(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -49,18 +50,18 @@ fn mean_field_example_is_a_complete_lazy_workflow_project() {
         );
         assert_eq!(task.decode_value::<u64>("maximum_iterations").unwrap(), 100);
         let recording = task
-            .decode_value::<GlvRecordingConfig>("recording")
+            .decode_value::<Vec<StateStreamConfig>>("recording")
             .unwrap();
         assert_eq!(
-            recording.signal().sampling_interval(),
+            recording[0].sampling_interval(),
             SamplingInterval::iterations(10).unwrap()
         );
         assert_eq!(
-            recording.space().sampling_interval(),
+            recording[1].sampling_interval(),
             SamplingInterval::iterations(25).unwrap()
         );
         assert_eq!(
-            recording.checkpoint().sampling_interval(),
+            recording[2].sampling_interval(),
             SamplingInterval::iterations(50).unwrap()
         );
 
@@ -92,7 +93,7 @@ fn every_user_example_is_an_independent_glv_crate_and_project() {
         let project = load_glv_project(&root).unwrap();
         assert!(project.task_count() > 0, "{name} has at least one task");
         for task in project.task_configs() {
-            task.decode_value::<GlvRecordingConfig>("recording")
+            task.decode_value::<Vec<StateStreamConfig>>("recording")
                 .unwrap();
             assert!(task.resolve_path("interaction_matrix").unwrap().is_file());
         }
@@ -102,11 +103,11 @@ fn every_user_example_is_an_independent_glv_crate_and_project() {
 #[test]
 fn domain_configuration_decodes_without_application_mirror_types() {
     assert_eq!(
-        serde_json::from_str::<Boundary>("\"periodic\"").unwrap(),
-        Boundary::Periodic
+        serde_json::from_str::<BoundaryCondition>("\"periodic\"").unwrap(),
+        BoundaryCondition::Periodic
     );
     assert_eq!(
-        serde_json::from_str::<Boundary>("\"neumann\"").unwrap(),
-        Boundary::Neumann
+        serde_json::from_str::<BoundaryCondition>("\"neumann\"").unwrap(),
+        BoundaryCondition::Neumann
     );
 }

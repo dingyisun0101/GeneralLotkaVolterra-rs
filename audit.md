@@ -11,6 +11,16 @@ Summary
   `Engine`, deterministic `Kernel` then `Invariant` then stochastic `Noise` ordering,
   and strict validation at boundaries.
 
+Resolution (2026-08-11)
+- Removed `GlvRecordingConfig` and `StreamRecordingConfig`; GLV now consumes
+  Workflow `StateStreamConfig` values directly.
+- Replaced GLV boundary, spacing, stride, neighbor, and Laplacian ownership with
+  PiP `SquareLatticeConfig`.
+- Replaced private RNG implementations and raw-seed constructors with PiP
+  `RngConfig` and `TensorRandFiller`; Workflow remains provenance-only.
+- Replaced GLV's duplicate next-time validation with Workflow
+  `SimulationTime::checked_advance`.
+
 Simplification opportunities
 - Remove thin wrapper duplication: `GlvRecordingConfig` / `StreamRecordingConfig`
   largely mirror `scientific_workflow::storage::StateStreamConfig`. Provide a small

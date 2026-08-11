@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use general_lotka_volterra_rs::invariant::FrequencyInvariant;
 use general_lotka_volterra_rs::kernel::{
-    Boundary, Diffusion, InMemorySource, InteractionSource, Kernel, KernelCore,
+    BoundaryCondition, Diffusion, InMemorySource, InteractionSource, Kernel, KernelCore,
     MeanFieldReplicatorRk4, persist_interaction_matrix,
 };
 use general_lotka_volterra_rs::noise::{
@@ -15,9 +15,8 @@ use general_lotka_volterra_rs::noise::{
 use general_lotka_volterra_rs::reading::open_completed_glv_recording;
 use general_lotka_volterra_rs::recording::{
     ABUNDANCE_REPRESENTATION_METADATA_KEY, COMPLETED_ITERATION_METADATA_KEY, GlvRecording,
-    GlvRecordingConfig, GlvRecordingError, GlvRecordingMetadata, MODEL_KIND_METADATA_KEY,
-    RecordingMetadataError, StreamRecordingConfig, TASK_ORDINAL_METADATA_KEY,
-    TERMINATION_REASON_METADATA_KEY, TerminationReason,
+    GlvRecordingError, GlvRecordingMetadata, MODEL_KIND_METADATA_KEY, RecordingMetadataError,
+    TASK_ORDINAL_METADATA_KEY, TERMINATION_REASON_METADATA_KEY, TerminationReason,
 };
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AbundanceRepresentation, AggregateAbundance, CHECKPOINT_STREAM,
@@ -26,10 +25,11 @@ use general_lotka_volterra_rs::{
     TotalAbundance,
 };
 use ndarray::{Array1, Array2, ArrayD, IxDyn};
+use physics_in_parallel::rng::RngConfig;
 use scientific_workflow::configuration::{ParameterSpace, TaskParameters};
 use scientific_workflow::execution::ExecutionScope;
 use scientific_workflow::rng_record::{RNG_RECORDS_METADATA_KEY, RngRecord};
-use scientific_workflow::storage::{SamplingInterval, StorageError};
+use scientific_workflow::storage::{SamplingInterval, StateStreamConfig, StorageError};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -74,20 +74,48 @@ impl Drop for Workspace {
     }
 }
 
-fn stream(interval: u64, max_chunk_bytes: u64, queue_bytes: u64) -> StreamRecordingConfig {
-    StreamRecordingConfig::new(
+fn stream(
+    name: &str,
+    fields: &[&str],
+    interval: u64,
+    max_chunk_bytes: u64,
+    queue_bytes: u64,
+) -> StateStreamConfig {
+    StateStreamConfig::new(
+        name,
+        fields.iter().copied(),
         SamplingInterval::iterations(interval).unwrap(),
-        NonZeroU64::new(max_chunk_bytes).unwrap(),
-        NonZeroU64::new(queue_bytes).unwrap(),
+        Some((
+            NonZeroU64::new(max_chunk_bytes).unwrap(),
+            NonZeroU64::new(queue_bytes).unwrap(),
+        )),
     )
 }
 
-fn recording_config(queue_bytes: u64) -> GlvRecordingConfig {
-    GlvRecordingConfig::new(
-        stream(2, 128, queue_bytes),
-        stream(3, 160, queue_bytes),
-        stream(4, 192, queue_bytes),
-    )
+fn recording_config(queue_bytes: u64) -> Vec<StateStreamConfig> {
+    vec![
+        stream(
+            SIGNAL_STREAM,
+            &[ABUNDANCE_FIELD, TOTAL_FIELD],
+            2,
+            128,
+            queue_bytes,
+        ),
+        stream(
+            SPACE_STREAM,
+            &[ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD],
+            3,
+            160,
+            queue_bytes,
+        ),
+        stream(
+            CHECKPOINT_STREAM,
+            &[ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD],
+            4,
+            192,
+            queue_bytes,
+        ),
+    ]
 }
 
 fn make_simulation(
@@ -119,7 +147,14 @@ fn make_stochastic_simulation(
             KernelCore::new(interaction),
             MeanFieldReplicatorRk4::new(Array1::zeros(2)).unwrap(),
         ),
-        Noise::new(DemographicGaussian::new(0.05, 42, NoiseDomain::aggregate(2).unwrap()).unwrap()),
+        Noise::new(
+            DemographicGaussian::new(
+                0.05,
+                RngConfig::new(Some(42), None, None),
+                NoiseDomain::aggregate(2).unwrap(),
+            )
+            .unwrap(),
+        ),
         FrequencyInvariant::new(2, 0.0).unwrap(),
         time_step,
     )
@@ -458,16 +493,16 @@ fn stochastic_noise_identity_is_written_once_in_creation_metadata() {
     let record =
         &document["user_metadata"][RNG_RECORDS_METADATA_KEY][DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE];
     assert_eq!(record["method"], "chacha12+standard_normal");
-    assert_eq!(record["version"], "rand_chacha-0.10+rand_distr-0.6");
-    assert_eq!(record["key_encoding"], "u64_be_hex");
-    assert_eq!(record["key"], "000000000000002a");
+    assert_eq!(record["version"], "rand_chacha-0.10");
+    assert_eq!(record["key_encoding"], "u64_decimal");
+    assert_eq!(record["key"], "42");
     let decoded = RngRecord::from_metadata(
         document["user_metadata"].as_object().unwrap(),
         DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE,
     )
     .unwrap()
     .unwrap();
-    assert_eq!(decoded.key(), "000000000000002a");
+    assert_eq!(decoded.key(), "42");
     assert!(
         document["streams"]
             .as_array()
@@ -599,9 +634,8 @@ fn completed_reader_round_trips_populated_spatial_payload_and_exact_time() {
         initial_space.clone(),
         interaction,
         SpatialReplicatorConfig::new(
-            vec![1, 2],
             Array1::zeros(2),
-            Diffusion::unit_spacing(Array1::zeros(2), 1, Boundary::Periodic).unwrap(),
+            Diffusion::unit_spacing(Array1::zeros(2), &[1], BoundaryCondition::Periodic).unwrap(),
             0.0,
             TimeStep::new(0.1).unwrap(),
         ),
@@ -616,11 +650,29 @@ fn completed_reader_round_trips_populated_spatial_payload_and_exact_time() {
     )
     .unwrap();
     let recording_directory = scope.task_recording_directory(0);
-    let all_iterations = GlvRecordingConfig::new(
-        stream(1, 1_024, 8_192),
-        stream(1, 1_024, 8_192),
-        stream(1, 1_024, 8_192),
-    );
+    let all_iterations = vec![
+        stream(
+            SIGNAL_STREAM,
+            &[ABUNDANCE_FIELD, TOTAL_FIELD],
+            1,
+            1_024,
+            8_192,
+        ),
+        stream(
+            SPACE_STREAM,
+            &[ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD],
+            1,
+            1_024,
+            8_192,
+        ),
+        stream(
+            CHECKPOINT_STREAM,
+            &[ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD],
+            1,
+            1_024,
+            8_192,
+        ),
+    ];
     let mut recording = GlvRecording::start(
         &recording_directory,
         all_iterations,

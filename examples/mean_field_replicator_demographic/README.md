@@ -19,8 +19,9 @@ then applies the extinction cutoff and renormalizes the community to unit mass.
 The `sqrt(x_i)` amplitude makes fluctuations relatively stronger for rare
 species, as expected for demographic rather than proportional noise.
 
-The plugin owns a ChaCha12 random-number generator. Workflow records its
-method, implementation version, key encoding, and exact configured `seed` as
+The plugin accepts PiP's universal `RngConfig` and uses PiP's random filler,
+defaulting here to ChaCha12 with one stream. Workflow records the resolved
+method, implementation version, stream count, key encoding, and exact `seed` as
 provenance; Workflow does not generate random numbers itself.
 
 ## Run and sweep seeds
