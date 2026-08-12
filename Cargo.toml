@@ -34,7 +34,7 @@ resolver = "3"
 [dependencies]
 ndarray = { version = "0.17.2", features = ["serde"] }
 physics_in_parallel = { path = "../pip", version = "3.2.2" }
-scientific-workflow = { path = "../workflow/dev", version = "0.2.2" }
+ scientific-workflow = "0.2.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"

@@ -542,6 +542,8 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 [[package]]
 name = "scientific-workflow"
 version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d9dfc26c3420eeb9c1616dae9b8a3d67a11eb3cef3b8e4e0050f1a664e163f96"
 dependencies = [
  "console",
  "erased-serde",
