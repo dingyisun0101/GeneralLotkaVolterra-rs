@@ -46,6 +46,11 @@ Each task receives its own recording directory. Signal, spatial, and checkpoint
 streams have independent sampling intervals and storage budgets. The final
 checkpoint is integrity-checked and compared with the final in-memory state.
 
+The configuration shows both automatic-termination toggles explicitly set to
+`false`. Deterministic fixed-point and oscillation classification is
+intentionally disabled for this noisy model; every successful run still
+publishes GLV's canonical trailing terminal-state estimate.
+
 Checkpoints currently preserve state but not the RNG cursor, so exact
 stochastic continuation is intentionally unsupported.
 

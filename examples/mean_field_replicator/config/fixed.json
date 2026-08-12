@@ -3,7 +3,7 @@
   "growth": [0.0, 0.0, 0.0],
   "physical_time_increment": 0.005,
   "maximum_iterations": 100,
-  "termination": {"fixed_point": true, "oscillation": false},
+  "termination": {"fixed_point": true, "oscillation": true},
   "recording": [
     {"name": "signal", "sampling_interval": 10, "fields": ["abundance", "total"], "storage_limits": [65536, 262144]},
     {"name": "space", "sampling_interval": 25, "fields": ["abundance", "space", "total"], "storage_limits": [65536, 262144]},

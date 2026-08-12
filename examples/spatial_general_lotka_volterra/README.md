@@ -41,6 +41,10 @@ Important values in `config/fixed.json` are:
 - `carrying_capacity`: a positive total capacity or `null`; and
 - `physical_time_increment`: RK2 time increment.
 
+Both deterministic automatic-termination detectors are enabled: fixed-point
+convergence and nontrivial recurrent oscillation. Their evidence policy is
+internal to GLV.
+
 The binary selects `GlvTemplate::SpatialGeneralLotkaVolterra` and contains no
 model assembly or recording code. Pass another compatible Workflow `config`
 folder as the optional first argument.

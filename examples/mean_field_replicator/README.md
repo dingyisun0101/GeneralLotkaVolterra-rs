@@ -46,6 +46,10 @@ parameters, `config/sweep.json` varies `cutoff`, and `config/paths.json` names
 the interaction matrix and output root. The matrix file uses rows as affected
 species and columns as contributing species.
 
+The checked-in deterministic configuration enables both automatic detectors:
+fixed-point convergence and nontrivial recurrent oscillation. GLV owns their
+internal evidence windows and publishes the resulting termination reason.
+
 ## Outputs
 
 Every invocation creates a new collision-resistant execution directory beneath
