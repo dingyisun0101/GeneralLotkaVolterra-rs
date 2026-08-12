@@ -190,7 +190,7 @@ dependencies = [
 
 [[package]]
 name = "general-lotka-volterra-rs"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "ndarray",
  "physics_in_parallel",
@@ -541,7 +541,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "scientific-workflow"
-version = "0.2.0"
+version = "0.2.3"
 dependencies = [
  "console",
  "erased-serde",
