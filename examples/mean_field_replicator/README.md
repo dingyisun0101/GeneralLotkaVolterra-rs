@@ -46,6 +46,15 @@ parameters, `config/sweep.json` varies `cutoff`, and `config/paths.json` names
 the interaction matrix and output root. The matrix file uses rows as affected
 species and columns as contributing species.
 
+The main values to edit are:
+
+- `initial_abundance`: starting species frequencies, normalized by the model;
+- `growth`: intrinsic fitness contribution for each species;
+- `physical_time_increment`: RK4 time increment;
+- `maximum_iterations`: hard iteration cap;
+- `termination`: automatic fixed-point and oscillation toggles; and
+- `recording`: sampling cadence, fields, and chunk-size limits per stream.
+
 The checked-in deterministic configuration enables both automatic detectors:
 fixed-point convergence and nontrivial recurrent oscillation. GLV owns their
 internal evidence windows and publishes the resulting termination reason.
@@ -61,6 +70,8 @@ Every invocation creates a new collision-resistant execution directory beneath
 
 Sampling and storage limits are configured independently under `recording`.
 The program verifies the final checkpoint before reporting success.
+Every successful task also records a classified terminal composition: an exact
+accepted fixed point or a trailing estimate when the run ended otherwise.
 
 See the [GLV `sw-version` branch](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version)
 for the model API and additional complete examples.

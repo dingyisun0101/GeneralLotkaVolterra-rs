@@ -51,6 +51,8 @@ cargo run --release -- /path/to/project/config
 Outputs are written to a fresh execution scope. The `space` stream retains the
 full field, while the smaller `signal` stream is suited to aggregate analysis.
 The `checkpoint` stream supports deterministic continuation.
+Every successful task also records a classified terminal composition: an exact
+accepted fixed point or a trailing estimate when the run ended otherwise.
 
 See the [GLV `sw-version` branch](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version)
 for the numerical API and additional complete examples.

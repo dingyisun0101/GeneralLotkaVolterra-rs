@@ -50,6 +50,9 @@ model assembly or recording code. Pass another compatible Workflow `config`
 folder as the optional first argument.
 Every invocation creates new output and records aggregate, spatial, and
 checkpoint streams. The program verifies the final checkpoint before success.
+Every successful task also records a classified terminal composition. For
+population GLV, single-species support alone is not accepted as a fixed point;
+the population RHS and ordinary convergence evidence must pass.
 
 See the [GLV `sw-version` branch](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version)
 for the model API and additional complete examples.

@@ -1,26 +1,28 @@
 # General Lotka–Volterra for Rust
 
-`general-lotka-volterra-rs` provides concrete, composable implementations of:
+`general-lotka-volterra-rs` runs ecological simulations from a configuration
+folder. Choose a built-in model, call one function, and GLV handles task
+expansion, evolution, progress, recording, terminal-state production, and
+final integrity checks.
+
+The included models are:
 
 - mean-field replicator dynamics with RK4;
 - spatial local-frequency replicator reaction–diffusion with RK2; and
 - spatial General Lotka–Volterra population reaction–diffusion with RK2.
 
-Scientific Workflow owns the schema representation, simulation time, project
-configuration, execution scopes, progress reporting, recording, integrity
-checks, and reconstruction. This crate owns its canonical schema content, the
-ecological equations, interaction matrices, deterministic kernels, noise
-plugins, and invariants.
+## Quick start
 
-The minimum supported toolchain is Rust 1.97 with edition 2024.
+Add the crate:
 
-The current Workflow-native implementation and documentation live on the
-[`sw-version` GitHub branch](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version).
+```toml
+[dependencies]
+general-lotka-volterra-rs = "0.5.0"
+```
 
-## Ordinary users: one entry point
-
-Ordinary applications import a deliberately two-item prelude, select a built-in
-template, and point it at a conventional Workflow `config` directory:
+Copy the configuration, inputs, and small `main.rs` from the example closest
+to your study. Ordinary applications then select a built-in template and point
+it at the project's `config` directory:
 
 ```rust,no_run
 use general_lotka_volterra_rs::prelude::*;
@@ -35,12 +37,14 @@ println!("results: {}", execution.directory().display());
 # }
 ```
 
-The ordinary prelude exports only `run` and `GlvTemplate`. `run` loads the
-Workflow project whose root contains that configuration folder, supplies GLV's
-crate-owned canonical state schema, expands every task, creates a
-collision-resistant output scope,
-constructs the selected model, evolves it, records it, verifies its final
-checkpoint, and completes progress reporting.
+The ordinary prelude deliberately exports only `run` and `GlvTemplate`.
+`run` returns the completed execution scope, which identifies the newly
+created output directory. Paths, model parameters, sweeps, and recording
+settings live in the project files rather than in Rust code.
+
+The minimum supported toolchain is Rust 1.97 with edition 2024.
+
+## Choose a model
 
 Built-in templates are:
 
@@ -51,6 +55,27 @@ Built-in templates are:
 | `SpatialReplicator` | local-frequency reaction–diffusion with midpoint RK2 |
 | `SpatialGeneralLotkaVolterra` | absolute-population reaction–diffusion with midpoint RK2 |
 
+Start from one of the complete runnable examples:
+
+- [mean-field replicator](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version/examples/mean_field_replicator)
+- [mean-field replicator with demographic noise](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version/examples/mean_field_replicator_demographic)
+- [spatial replicator reaction–diffusion](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version/examples/spatial_replicator)
+- [spatial General Lotka–Volterra populations](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version/examples/spatial_general_lotka_volterra)
+
+Each example is an independent crate and complete project. Run one from its
+directory:
+
+```sh
+cd examples/mean_field_replicator
+cargo run --release
+```
+
+Pass another compatible configuration directory as the optional argument:
+
+```sh
+cargo run --release -- /path/to/my-study/config
+```
+
 Spatial templates consume categorical ecological lattices through the public
 `ecological-initial-state` crate. GLV owns only their explicit conversion to a
 species-last continuous field: spatial replicator sites become one-hot
@@ -58,54 +83,35 @@ frequency cells, while population GLV requires `initial_population_per_site`.
 An initialization may be generated from shared configuration or loaded from a
 verified content-addressed artifact produced by an earlier execution.
 
-All scientific values and output locations remain in the Workflow project
-documents. There is no separate output-path argument and therefore no second
-path authority outside `config/paths.json`.
+## Project configuration
 
-## Advanced users: custom templates
+A runnable project has this layout:
 
-Authors who need a new scientific composition use the explicitly separate
-advanced layer:
-
-```rust,ignore
-use general_lotka_volterra_rs::advanced::prelude::*;
-
-struct MyTemplate;
-
-impl GlvProjectTemplate for MyTemplate {
-    fn name(&self) -> &str {
-        "my_template"
-    }
-
-    fn run_task(
-        &mut self,
-        scope: &ExecutionScope,
-        reporter: &ProgressReporter,
-        task: TaskConfig,
-    ) -> Result<(), TemplateTaskError> {
-        // Decode the task, compose model/kernel/noise/invariant building
-        // blocks, and use Workflow recording and progress directly.
-        todo!()
-    }
-}
-
-run(MyTemplate, "path/to/project/config")?;
+```text
+my-study/
+├── config/
+│   ├── fixed.json
+│   ├── sweep.json
+│   └── paths.json
+└── inputs/
+    └── interaction.json
 ```
 
-`advanced::prelude` exposes the concrete models, kernels, noise plugins,
-invariants, interaction matrices, recording adapter, ndarray boundary types,
-PiP matrix/spatial/RNG configuration, Workflow prelude, and the
-`GlvProjectTemplate` contract. Built-in templates are assembled from these same
-components; they have no privileged model API.
+- `fixed.json` contains common model, termination, and recording settings.
+- `sweep.json` defines task-varying parameter values.
+- `paths.json` names the interaction input and recording output root.
+- `interaction.json` is the versioned PiP interaction matrix.
 
-The outer `run` function always owns project loading, task iteration, execution
-scope creation, and the project-level reporter. A custom template owns only its
-per-task scientific composition: it decodes the supplied `TaskConfig`, starts
-and completes that task's `TaskProgress`, resolves scientific inputs, constructs
-and steps the model, and delegates recording to `GlvRecording`. It should not
-create another project, scope, reporter, task wrapper, or output-path system.
+The examples are the configuration reference for their respective models.
+Their READMEs explain every model-specific field. Common fields include
+`maximum_iterations`, `physical_time_increment`, `termination`, and
+`recording`. Spatial examples additionally show lattice shape,
+initialization, diffusion, spacing, and boundary conditions.
 
-### Deterministic termination monitoring
+Relative paths are resolved from the project root. There is no separate output
+argument: `config/paths.json` is the sole path authority.
+
+### Automatic termination
 
 Built-in templates expose automatic termination as detector toggles:
 
@@ -116,11 +122,11 @@ Built-in templates expose automatic termination as detector toggles:
 }
 ```
 
-The `termination` object is optional, and either detector may be toggled
-independently. Omitting it, or setting both values to `false`, runs to
-`maximum_iterations`. Deterministic detectors cannot be enabled for a
-stochastic task because noisy trajectories do not have the same convergence
-semantics.
+The `termination` object is optional. Either detector may be toggled
+independently; the deterministic examples enable both. Omitting the object, or
+setting both values to `false`, runs to `maximum_iterations`. The stochastic
+demographic example explicitly disables both because deterministic convergence
+classification does not apply to noisy trajectories.
 
 GLV owns the detector's sampling cadence, bounded windows, tolerances, and
 confirmation schedule. These are intentionally not ordinary project settings.
@@ -151,81 +157,57 @@ trailing samples and is marked `trailing_average`. The classification is the
 authoritative distinction; downstream code must not infer fixed-point status
 from the vector alone.
 
-Advanced template authors can use the no-I/O, bounded-history
-`TerminationMonitor` and `TerminalStateMonitor` directly when composing a
-custom runner. Built-in templates deliberately keep those mechanisms behind
-the two detector toggles.
+The internal details are recorded for auditability but are not project
+parameters. End users choose which outcomes to detect; GLV defines and applies
+their evidence policy consistently.
 
-## Supported public API
+## Outputs and terminal states
 
-This is the exhaustive GLV API allowlist. Ordinary users may use only `run`
-and `GlvTemplate`, both exported by `prelude`. Advanced template authors may
-also use the items below through `advanced::prelude`. Their public enum
-variants and documented public methods are part of the same supported surface;
-other compiler-visible implementation paths are not compatibility promises.
+Every invocation creates a collision-resistant execution directory beneath the
+configured recording root. Each task has three independently configured state
+streams:
 
-- State: `ABUNDANCE_FIELD`, `SPACE_FIELD`, `TOTAL_FIELD`, `SIGNAL_STREAM`,
-  `SPACE_STREAM`, `CHECKPOINT_STREAM`, `AbundanceRepresentation`,
-  `AggregateAbundance`, `SpatialAbundance`, `TotalAbundance`, `TimeStep`,
-  `TimeStepError`, `load_state_schema`, and `state_schema_path`.
-- Interaction: `InteractionMatrix`, `InteractionMatrixError`,
-  `InteractionProvenance`, `InteractionSourceKind`, `GeneratorProvenance`,
-  `InteractionArtifactDescriptor`, `InteractionArtifactError`,
-  `InteractionArtifactLoadError`, `PersistedInteraction`,
-  `ArtifactDisposition`, `INTERACTION_MATRIX_FORMAT`,
-  `INTERACTION_MATRIX_METADATA_KEY`, `INTERACTION_GENERATOR_RNG_NAMESPACE`,
-  `persist_interaction_matrix`, and `load_verified_interaction_matrix`.
-- Spatial initialization: `SpatialInitialStateSource`,
-  `ResolvedSpatialInitialState`, `SpatialInitializationError`, and
-  `categorical_to_species_field`, plus the curated
-  `ecological-initial-state` types reexported by `advanced::prelude`.
-- Kernels: `Kernel`, `KernelAlgorithm`, `KernelCore`, `KernelResidual`,
-  `KernelResidualError`, `KernelStateView`,
-  `KernelUpdate`, `KernelCoreError`, `KernelStepError`, `KernelUpdateError`,
-  `KernelAlgorithmError`, `MeanFieldReplicatorRk4`, `Diffusion`,
-  `BoundaryCondition`, `SpatialReplicatorRk2`, and
-  `SpatialGeneralLotkaVolterraRk2`.
-- Noise: `Noise`, `NoiseAlgorithm`, `NoiseDomain`, `NoNoise`,
-  `DemographicGaussian`, `ProportionalGaussian`, `NoisePluginError`,
-  `NoiseStepError`, `DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE`, and
-  `PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE`.
-- Invariants: `InvariantPolicy`, `InvariantError`, `InvariantPolicyError`,
-  `FrequencyInvariant`, `LocalFrequencyInvariant`, `PopulationInvariant`,
-  `INVARIANT_TOLERANCE`, `validate_state`, and `enforce_state`.
-- Models: `MeanFieldReplicator`, `MeanFieldReplicatorConfig`,
-  `SpatialReplicator`, `SpatialReplicatorConfig`,
-  `SpatialGeneralLotkaVolterra`, `SpatialGeneralLotkaVolterraConfig`,
-  `SimulationKind`, `SimulationBuildError`, `DefaultSimulationBuildError`,
-  and `StateAssemblyError`.
-- Project execution: `GlvProjectTemplate`, `TemplateTaskError`, `GlvRunError`,
-  `GlvProjectError`, `load_glv_project`, and `validate_glv_project`.
-- Recording and reading: `GlvRecording`, `GlvRecordingError`,
-  `GlvRecordingMetadata`, `RecordingMetadataError`, `TerminationReason`,
-  `GlvCheckpointVerificationError`, `glv_json_decoders`,
-  `open_completed_glv_recording`, `verify_completed_glv_checkpoint`,
-  `open_accepted_fixed_point`, `AcceptedFixedPoint`,
-  `AcceptedFixedPointError`, `ACCEPTED_FIXED_POINT_FORMAT`,
-  `open_terminal_state`, `TerminalState`, `TerminalStateClassification`,
-  `TerminalStatePolicy`, `TerminalStateMonitor`, `TerminalStateError`,
-  `TERMINAL_STATE_FORMAT`, `TERMINAL_STATE_METADATA_KEY`,
-  `ABUNDANCE_REPRESENTATION_METADATA_KEY`,
-  `COMPLETED_ITERATION_METADATA_KEY`, `MODEL_KIND_METADATA_KEY`,
-  `TASK_ORDINAL_METADATA_KEY`, `TERMINATION_REASON_METADATA_KEY`, and
-  `TERMINATION_DIAGNOSTICS_METADATA_KEY`.
-- Termination: `TerminationPolicy`, `TerminationMonitor`,
-  `TerminationObservable`, `FixedPointTerminationConfig`,
-  `OscillationTerminationConfig`, `ResidualTolerance`, `ConvergenceReason`,
-  `FixedPointDiagnostics`, `OscillationDiagnostics`, `TerminationError`, and
-  `jensen_shannon_distance`.
-- Deliberate upstream reexports: ndarray's `Array1`, `Array2`, `ArrayD`,
-  `Axis`, `IxDyn`, `ShapeError`, `arr1`, and `arr2`; PiP's `DenseMatrix`,
-  `RngConfig`, `RngMethod`, and `SquareLatticeConfig`; and the complete
-  `scientific_workflow::prelude` allowlist documented by Workflow.
+| Stream | Intended use |
+| --- | --- |
+| `signal` | frequent aggregate abundance and total |
+| `space` | full spatial state for analysis |
+| `checkpoint` | complete state for integrity checks and deterministic restart |
 
-Generated crate documentation is the exact signature reference for every item
-in this list.
+Every successful task also publishes a canonical terminal composition. Read it
+through GLV's public API:
 
-## Canonical state
+```rust,no_run
+use general_lotka_volterra_rs::{
+    TerminalStateClassification,
+    open_terminal_state,
+};
+
+# fn inspect() -> Result<(), Box<dyn std::error::Error>> {
+let terminal = open_terminal_state("path/to/task-recording")?;
+println!("composition: {:?}", terminal.composition());
+
+match terminal.classification() {
+    TerminalStateClassification::AcceptedFixedPoint => {
+        println!("GLV accepted a fixed point");
+    }
+    TerminalStateClassification::TrailingAverage => {
+        println!("terminal vector is a trailing estimate");
+    }
+}
+# Ok(())
+# }
+```
+
+An accepted fixed point contains the exact normalized final composition. Any
+other successful completion contains a bounded trailing average, including an
+iteration cap, detected orbit, requested stop, or stochastic run. Always check
+the classification; do not infer fixed-point status from the vector alone.
+
+Use `open_accepted_fixed_point` when a downstream study must reject anything
+except a GLV-accepted fixed point. Use `open_completed_glv_recording` for the
+verified state streams.
+
+## Model data
 
 Every model uses the schema in `schemas/state.json`:
 
@@ -235,9 +217,7 @@ Every model uses the schema in `schemas/state.json`:
 | `space` | `Option<ArrayD<f64>>` | `None` for mean-field models; a species-last array for spatial models |
 | `total` | `f64` | Total abundance; frequency models use `1.0` |
 
-The state also carries `SimulationTime`: an integer iteration and continuous
-physical time. A successful `step()` advances each coordinate exactly once,
-after kernel, invariant, noise, and final-invariant work succeeds.
+The state also carries an integer iteration and continuous physical time.
 
 Spatial population `total` preserves the historical rounded aggregate
 convention. Spatial and aggregate arrays retain full floating-point values.
@@ -246,103 +226,12 @@ state contract. Workflow embeds the resolved schema in every recording.
 
 ## Interaction matrices
 
-An interaction matrix is resolved and validated before simulation
-construction. It can be constructed from:
-
-- an in-memory PiP `DenseMatrix<f64>` or ndarray `Array2<f64>`;
-- inline JSON already decoded by `TaskConfig`;
-- a versioned JSON file resolved through project paths; or
-- externally generated coefficients with explicit identity, version,
-  parameters, and a resolved PiP `RngConfig` when stochastic.
-
-Matrices are immutable `Arc<DenseMatrix<f64>>` values and use PiP's standard
-versioned matrix JSON. For recorded runs,
-`persist_interaction_matrix` writes canonical JSON once beneath the execution
-scope's `inputs/` directory. Its SHA-256 digest, shape, format, path, and source
-kind enter recording metadata; matrix values do not enter evolving states or
-checkpoints. Scientific Workflow now owns the generic atomic publication,
-content reuse, path containment, and digest-verification mechanics. GLV's
-`interaction` module owns only ecological validation and provenance.
-
-## Workflow project layout
-
-Runnable simulation examples use the conventional project structure:
-
-```text
-examples/<model>/
-├── Cargo.toml
-├── README.md
-├── config/
-│   ├── fixed.json
-│   ├── sweep.json
-│   └── paths.json
-├── inputs/
-│   └── interaction.json
-└── src/
-    └── main.rs
-```
-
-Each directory is a complete crate and Workflow project that can be copied and
-run independently. Its `main.rs` selects one `GlvTemplate` and passes its
-`config` directory to `run`; it contains no model construction, task loop,
-recording code, or custom configuration struct. Relative paths are resolved
-against that example's project root.
-
-## Dispatcher handoff
-
-Dispatcher should treat GLV as an opaque project runner. Its adapter selects a
-`GlvTemplate`, passes the stage's `config` directory to `run`, and retains the
-returned `ExecutionScope` as the source of verified task recordings. It does
-not supply a state schema, assemble models, interpret checkpoint internals, or
-create another output path. Advanced GLV composition remains available through
-`advanced::prelude`, but it is not part of the ordinary Dispatcher path.
-
-Spatial models use PiP's `SquareLatticeConfig` as the sole owner of shape,
-boundary condition, spacing, neighbor lookup, and Laplacian behavior. GLV's
-`Diffusion` adds only the model-specific per-species coefficients. The
-species-last ndarray state shape is derived from that lattice configuration and
-the growth-vector length.
-
-Each run creates a new collision-resistant `ExecutionScope`; existing output
-is never deleted or overwritten. Built-in templates execute tasks sequentially.
-Task-level parallelism can later consume the same lazy task iterator without
-changing simulation internals.
-
-The example READMEs focus on the governing equations, parameter meanings,
-state interpretation, and usage:
-
-- [mean-field replicator](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version/examples/mean_field_replicator)
-- [mean-field replicator with demographic noise](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version/examples/mean_field_replicator_demographic)
-- [spatial replicator reaction–diffusion](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version/examples/spatial_replicator)
-- [spatial General Lotka–Volterra populations](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version/examples/spatial_general_lotka_volterra)
-
-Run any copied example from its own directory:
-
-```sh
-cd examples/mean_field_replicator
-cargo run --release
-```
-
-Within this repository, all examples can be checked together with
-`cargo check --workspace`. Pass another compatible `config` directory as the
-first argument to any example binary.
+Interaction matrices use PiP's standard versioned matrix JSON. Rows are
+affected species and columns are contributing species. GLV validates the shape
+and values before evolving a task, preserves the resolved matrix as a verified
+input artifact, and records its identity and digest with the output.
 
 ## Recording and reading
-
-`GlvRecording` consumes Workflow's `Vec<StateStreamConfig>` directly. The
-checked-in projects configure three independent streams without a GLV mirror
-configuration type:
-
-| Stream | Fields | Intended use |
-| --- | --- | --- |
-| `signal` | `abundance`, `total` | Frequent aggregate analysis |
-| `space` | all canonical fields | Spatial analysis |
-| `checkpoint` | all canonical fields | Deterministic restart |
-
-Orchestration observes the initial state and every successful step. Workflow
-owns sampling intervals, bounded queues, exact-byte chunk rollover, JSONL
-encoding, checksums, timing, and lifecycle metadata. Completion records the
-final state exactly once, even when it is not aligned with an interval.
 
 Use `open_completed_glv_recording` to obtain a verified
 `StoredStateSeriesReader`. It can reconstruct an entire stream or only its
@@ -371,6 +260,19 @@ Workflow's official reader with GLV-owned NumPy decoders. It validates the
 versioned ndarray representation, model identity, abundance interpretation,
 rank, shape, finiteness, and nonnegativity before exposing contiguous arrays.
 Its payload fixture is serialized by a Rust conformance test.
+
+## Advanced composition
+
+Most users should stay with `prelude::{run, GlvTemplate}` and copy a complete
+example. Researchers who genuinely need a new model composition can import
+`advanced::prelude` and implement `GlvProjectTemplate` using the same concrete
+models, kernels, noise plugins, invariants, interaction facilities, recording
+adapter, and Workflow types used by the built-in templates.
+
+The advanced API also exposes the no-I/O `TerminationMonitor` and
+`TerminalStateMonitor` for custom synchronous runners. Generated crate
+documentation is the signature reference for this larger API; it is kept out
+of the quick-start path intentionally.
 
 ## Noise and reproducibility
 
