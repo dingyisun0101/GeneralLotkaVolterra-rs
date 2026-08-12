@@ -3,7 +3,9 @@
 use ndarray::Array1;
 
 use crate::TimeStep;
-use crate::kernel::core::{KernelAlgorithm, KernelCore, KernelStateView, KernelUpdate};
+use crate::kernel::core::{
+    KernelAlgorithm, KernelCore, KernelResidual, KernelStateView, KernelUpdate,
+};
 
 use super::KernelAlgorithmError;
 use super::spatial::{Diffusion, SpatialDynamics, SpatialRk2};
@@ -69,5 +71,15 @@ impl KernelAlgorithm for SpatialGeneralLotkaVolterraRk2 {
         self.inner
             .compute(core, state, time_step, SpatialDynamics::Glv)
             .map(KernelUpdate::space)
+    }
+
+    fn residual<'algorithm>(
+        &'algorithm mut self,
+        core: &KernelCore,
+        state: KernelStateView<'_>,
+    ) -> Result<Option<KernelResidual<'algorithm>>, Self::Error> {
+        self.inner
+            .residual(core, state, SpatialDynamics::Glv)
+            .map(|values| Some(KernelResidual::Space(values)))
     }
 }

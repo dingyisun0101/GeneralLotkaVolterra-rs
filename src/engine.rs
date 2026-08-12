@@ -98,6 +98,16 @@ where
         self.noise.rng_record()
     }
 
+    /// Returns the authoritative deterministic RHS residual in configured units.
+    pub fn maximum_scaled_residual(
+        &mut self,
+        absolute_tolerance: f64,
+        relative_tolerance: f64,
+    ) -> Result<Option<f64>, KernelStepError<A::Error>> {
+        self.kernel
+            .maximum_scaled_residual(&self.state, absolute_tolerance, relative_tolerance)
+    }
+
     /// Deliberately transfers ownership of the authoritative Workflow state.
     pub fn into_state(self) -> SystemState {
         self.state

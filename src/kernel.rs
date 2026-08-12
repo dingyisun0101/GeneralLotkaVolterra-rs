@@ -13,6 +13,6 @@ pub use algorithms::{
     SpatialGeneralLotkaVolterraRk2, SpatialReplicatorRk2,
 };
 pub use core::{
-    Kernel, KernelAlgorithm, KernelCore, KernelCoreError, KernelStateView, KernelStepError,
-    KernelUpdate, KernelUpdateError,
+    Kernel, KernelAlgorithm, KernelCore, KernelCoreError, KernelResidual, KernelResidualError,
+    KernelStateView, KernelStepError, KernelUpdate, KernelUpdateError,
 };

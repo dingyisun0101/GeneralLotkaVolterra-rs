@@ -7,7 +7,9 @@ use scientific_workflow::system_state::{SimulationTime, SystemState};
 use crate::engine::{Engine, EngineStepError};
 use crate::interaction::InteractionMatrix;
 use crate::invariant::{InvariantPolicyError, LocalFrequencyInvariant};
-use crate::kernel::{Diffusion, Kernel, KernelAlgorithm, KernelCore, SpatialReplicatorRk2};
+use crate::kernel::{
+    Diffusion, Kernel, KernelAlgorithm, KernelCore, KernelStepError, SpatialReplicatorRk2,
+};
 use crate::noise::{NoNoise, Noise, NoiseAlgorithm};
 use crate::{AbundanceRepresentation, TimeStep};
 
@@ -183,6 +185,16 @@ where
     /// Returns immutable RNG provenance declared by the selected noise plugin.
     pub fn rng_record(&self) -> Option<&RngRecord> {
         self.engine.rng_record()
+    }
+
+    /// Computes the maximum component-wise scaled deterministic RHS residual.
+    pub fn maximum_scaled_residual(
+        &mut self,
+        absolute_tolerance: f64,
+        relative_tolerance: f64,
+    ) -> Result<Option<f64>, KernelStepError<A::Error>> {
+        self.engine
+            .maximum_scaled_residual(absolute_tolerance, relative_tolerance)
     }
 
     /// Performs one complete shared-engine step.

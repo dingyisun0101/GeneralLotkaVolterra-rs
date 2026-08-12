@@ -28,10 +28,13 @@ Copy this complete directory and run:
 cargo run --release
 ```
 
-The default `fixed.json` initializes every grid cell from `initial_cell`.
+The default `fixed.json` uses `ecological-initial-state` to sample one
+categorical taxon per site, then converts each site to a one-hot frequency
+cell. Its explicit PiP RNG configuration is recorded as provenance.
 Change `spatial_shape`, per-species `diffusion`, per-axis `spacing`, or
 `boundary` to define another lattice. The final array axis is inferred from the
-length of `initial_cell`; the interaction matrix must have the same dimension.
+length of `growth`; the interaction matrix and initialization distribution
+must have the same dimension.
 
 The binary selects `GlvTemplate::SpatialReplicator`; all construction and
 Workflow orchestration are supplied by that built-in template. An optional

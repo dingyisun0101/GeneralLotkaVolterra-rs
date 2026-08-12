@@ -51,6 +51,13 @@ Built-in templates are:
 | `SpatialReplicator` | local-frequency reaction–diffusion with midpoint RK2 |
 | `SpatialGeneralLotkaVolterra` | absolute-population reaction–diffusion with midpoint RK2 |
 
+Spatial templates consume categorical ecological lattices through the public
+`ecological-initial-state` crate. GLV owns only their explicit conversion to a
+species-last continuous field: spatial replicator sites become one-hot
+frequency cells, while population GLV requires `initial_population_per_site`.
+An initialization may be generated from shared configuration or loaded from a
+verified content-addressed artifact produced by an earlier execution.
+
 All scientific values and output locations remain in the Workflow project
 documents. There is no separate output-path argument and therefore no second
 path authority outside `config/paths.json`.
@@ -98,6 +105,49 @@ and completes that task's `TaskProgress`, resolves scientific inputs, constructs
 and steps the model, and delegates recording to `GlvRecording`. It should not
 create another project, scope, reporter, task wrapper, or output-path system.
 
+### Deterministic termination monitoring
+
+Deterministic tasks may opt into synchronous early termination with a
+`termination` object in `fixed.json` or `sweep.json`. The checker samples after
+completed solver steps and is independent of recording cadence. It accepts a
+fixed point only when every sample in each configured, non-overlapping
+confirmation window has stable support, confined Jensen–Shannon composition,
+optional stable mass, and an authoritative model RHS residual within the
+configured absolute/state-relative scale. A separate optional detector can
+classify a recurrent orbit only after multiple matching cycles with a
+nontrivial within-cycle amplitude.
+
+```json
+"termination": {
+  "start_after_iteration": 1000,
+  "sample_interval_iterations": 10,
+  "observable": "global_state",
+  "fixed_point": {
+    "base_window_samples": 16,
+    "confirmation_window_multipliers": [1, 2, 4],
+    "composition_tolerance": 1e-7,
+    "relative_mass_tolerance": 1e-7,
+    "mass_floor": 1e-12,
+    "support_threshold": 1e-10,
+    "residual_tolerance": {"absolute": 1e-10, "relative": 1e-8}
+  },
+  "oscillation": {
+    "minimum_period_samples": 2,
+    "maximum_period_samples": 128,
+    "repeated_cycles": 3,
+    "recurrence_tolerance": 1e-6,
+    "minimum_cycle_amplitude": 1e-4
+  }
+}
+```
+
+Either detector may be omitted, but at least one is required. The observable
+may be `global_state` or `spatial_field`. Monitoring stochastic simulations is
+rejected rather than assigning deterministic convergence semantics to noise.
+The public `termination` submodule contains the same no-I/O, bounded-history
+`TerminationMonitor` used by the built-in runner, so downstream runners can use
+the identical decision rule synchronously in their own step loop.
+
 ## Supported public API
 
 This is the exhaustive GLV API allowlist. Ordinary users may use only `run`
@@ -117,7 +167,12 @@ other compiler-visible implementation paths are not compatibility promises.
   `ArtifactDisposition`, `INTERACTION_MATRIX_FORMAT`,
   `INTERACTION_MATRIX_METADATA_KEY`, `INTERACTION_GENERATOR_RNG_NAMESPACE`,
   `persist_interaction_matrix`, and `load_verified_interaction_matrix`.
-- Kernels: `Kernel`, `KernelAlgorithm`, `KernelCore`, `KernelStateView`,
+- Spatial initialization: `SpatialInitialStateSource`,
+  `ResolvedSpatialInitialState`, `SpatialInitializationError`, and
+  `categorical_to_species_field`, plus the curated
+  `ecological-initial-state` types reexported by `advanced::prelude`.
+- Kernels: `Kernel`, `KernelAlgorithm`, `KernelCore`, `KernelResidual`,
+  `KernelResidualError`, `KernelStateView`,
   `KernelUpdate`, `KernelCoreError`, `KernelStepError`, `KernelUpdateError`,
   `KernelAlgorithmError`, `MeanFieldReplicatorRk4`, `Diffusion`,
   `BoundaryCondition`, `SpatialReplicatorRk2`, and
@@ -142,7 +197,13 @@ other compiler-visible implementation paths are not compatibility promises.
   `open_completed_glv_recording`, `verify_completed_glv_checkpoint`,
   `ABUNDANCE_REPRESENTATION_METADATA_KEY`,
   `COMPLETED_ITERATION_METADATA_KEY`, `MODEL_KIND_METADATA_KEY`,
-  `TASK_ORDINAL_METADATA_KEY`, and `TERMINATION_REASON_METADATA_KEY`.
+  `TASK_ORDINAL_METADATA_KEY`, `TERMINATION_REASON_METADATA_KEY`, and
+  `TERMINATION_DIAGNOSTICS_METADATA_KEY`.
+- Termination: `TerminationPolicy`, `TerminationMonitor`,
+  `TerminationObservable`, `FixedPointTerminationConfig`,
+  `OscillationTerminationConfig`, `ResidualTolerance`, `ConvergenceReason`,
+  `FixedPointDiagnostics`, `OscillationDiagnostics`, `TerminationError`, and
+  `jensen_shannon_distance`.
 - Deliberate upstream reexports: ndarray's `Array1`, `Array2`, `ArrayD`,
   `Axis`, `IxDyn`, `ShapeError`, `arr1`, and `arr2`; PiP's `DenseMatrix`,
   `RngConfig`, `RngMethod`, and `SquareLatticeConfig`; and the complete

@@ -32,7 +32,9 @@ cargo run --release
 Important values in `config/fixed.json` are:
 
 - `spatial_shape`: grid axes, excluding species;
-- `initial_cell`: initial count of each species in every cell;
+- `initialization`: shared categorical ecological initial-state source;
+- `initial_population_per_site`: explicit population assigned to the selected
+  taxon at each categorical site;
 - `growth` and `diffusion`: one value per species;
 - `spacing`: one value per spatial axis;
 - `boundary`: `periodic` or `neumann`;

@@ -2,7 +2,9 @@
 
 use ndarray::Array1;
 
-use crate::kernel::core::{KernelAlgorithm, KernelCore, KernelStateView, KernelUpdate};
+use crate::kernel::core::{
+    KernelAlgorithm, KernelCore, KernelResidual, KernelStateView, KernelUpdate,
+};
 use crate::{ABUNDANCE_FIELD, TimeStep};
 
 use super::{KernelAlgorithmError, validate_values};
@@ -167,6 +169,23 @@ impl KernelAlgorithm for MeanFieldReplicatorRk4 {
             };
         }
         Ok(KernelUpdate::abundance(self.output.view()))
+    }
+
+    fn residual<'algorithm>(
+        &'algorithm mut self,
+        core: &KernelCore,
+        state: KernelStateView<'_>,
+    ) -> Result<Option<KernelResidual<'algorithm>>, Self::Error> {
+        self.validate(core, state)?;
+        rhs(
+            core,
+            &self.growth,
+            state.abundance(),
+            &mut self.interaction,
+            &mut self.drift,
+            &mut self.k1,
+        )?;
+        Ok(Some(KernelResidual::Abundance(self.k1.view())))
     }
 }
 

@@ -10,6 +10,7 @@ pub mod advanced;
 pub mod core;
 #[doc(hidden)]
 pub mod engine;
+pub mod initialization;
 pub mod interaction;
 pub mod invariant;
 pub mod kernel;
@@ -20,6 +21,7 @@ pub mod reading;
 pub mod recording;
 pub mod simulation;
 mod template;
+pub mod termination;
 
 pub use template::{GlvRunError, GlvTemplate, run};
 

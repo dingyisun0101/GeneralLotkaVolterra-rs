@@ -20,7 +20,9 @@ use thiserror::Error;
 use crate::interaction::{INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactDescriptor};
 use crate::reading::glv_json_decoders;
 use crate::simulation::SimulationKind;
+use crate::termination::{ConvergenceReason, FixedPointDiagnostics, OscillationDiagnostics};
 use crate::{AbundanceRepresentation, CHECKPOINT_STREAM, load_state_schema};
+use ecological_initial_state::{INITIAL_STATE_METADATA_KEY, InitialStateArtifactDescriptor};
 
 /// Creation-metadata key containing the concrete model identity.
 pub const MODEL_KIND_METADATA_KEY: &str = "model_kind";
@@ -34,15 +36,19 @@ pub const TASK_ORDINAL_METADATA_KEY: &str = "task_ordinal";
 /// Terminal-metadata key containing the typed successful termination reason.
 pub const TERMINATION_REASON_METADATA_KEY: &str = "termination_reason";
 
+/// Terminal-metadata key containing detector evidence for an early stop.
+pub const TERMINATION_DIAGNOSTICS_METADATA_KEY: &str = "termination_diagnostics";
+
 /// Terminal-metadata key containing the last successfully completed iteration.
 pub const COMPLETED_ITERATION_METADATA_KEY: &str = "completed_iteration";
 
-const RESERVED_CREATION_KEYS: [&str; 5] = [
+const RESERVED_CREATION_KEYS: [&str; 6] = [
     MODEL_KIND_METADATA_KEY,
     ABUNDANCE_REPRESENTATION_METADATA_KEY,
     INTERACTION_MATRIX_METADATA_KEY,
     TASK_ORDINAL_METADATA_KEY,
     RNG_RECORDS_METADATA_KEY,
+    INITIAL_STATE_METADATA_KEY,
 ];
 
 /// Fully assembled immutable creation metadata for one simulation recording.
@@ -129,14 +135,31 @@ impl GlvRecordingMetadata {
         Ok(self)
     }
 
+    /// Adds the shared categorical initial-state artifact and RNG provenance.
+    pub fn with_initial_state(
+        mut self,
+        descriptor: &InitialStateArtifactDescriptor,
+        rng_record: Option<&RngRecord>,
+    ) -> Result<Self, RecordingMetadataError> {
+        if descriptor.insert_into_metadata(&mut self.values).is_some() {
+            return Err(RecordingMetadataError::ReservedTaskParameter {
+                key: INITIAL_STATE_METADATA_KEY.to_owned(),
+            });
+        }
+        if let Some(record) = rng_record {
+            record.insert_into_metadata(&mut self.values)?;
+        }
+        Ok(self)
+    }
+
     fn into_values(self) -> Map<String, Value> {
         self.values
     }
 }
 
 /// Successful scientific stopping condition committed at recording completion.
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(tag = "kind", content = "diagnostics", rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum TerminationReason {
     /// The configured maximum completed iteration was reached.
@@ -147,16 +170,39 @@ pub enum TerminationReason {
     Extinction,
     /// External orchestration requested a successful stop.
     Requested,
+    /// A whole-window state and authoritative RHS residual test passed.
+    FixedPoint(FixedPointDiagnostics),
+    /// Multiple nontrivial recurrent cycles passed the orbit detector.
+    Oscillation(OscillationDiagnostics),
 }
 
 impl TerminationReason {
     /// Returns the stable terminal-metadata value.
-    pub const fn as_str(self) -> &'static str {
+    pub const fn as_str(&self) -> &'static str {
         match self {
             Self::MaximumIterations => "maximum_iterations",
             Self::Monoculture => "monoculture",
             Self::Extinction => "extinction",
             Self::Requested => "requested",
+            Self::FixedPoint(_) => "fixed_point",
+            Self::Oscillation(_) => "oscillation",
+        }
+    }
+
+    fn diagnostics(&self) -> Option<Value> {
+        match self {
+            Self::FixedPoint(value) => serde_json::to_value(value).ok(),
+            Self::Oscillation(value) => serde_json::to_value(value).ok(),
+            _ => None,
+        }
+    }
+}
+
+impl From<ConvergenceReason> for TerminationReason {
+    fn from(reason: ConvergenceReason) -> Self {
+        match reason {
+            ConvergenceReason::FixedPoint(value) => Self::FixedPoint(value),
+            ConvergenceReason::Oscillation(value) => Self::Oscillation(value),
         }
     }
 }
@@ -266,6 +312,9 @@ impl GlvRecording {
             TERMINATION_REASON_METADATA_KEY.to_owned(),
             Value::from(reason.as_str()),
         );
+        if let Some(diagnostics) = reason.diagnostics() {
+            terminal_metadata.insert(TERMINATION_DIAGNOSTICS_METADATA_KEY.to_owned(), diagnostics);
+        }
         terminal_metadata.insert(
             COMPLETED_ITERATION_METADATA_KEY.to_owned(),
             Value::from(final_state.simulation_time().iteration()),

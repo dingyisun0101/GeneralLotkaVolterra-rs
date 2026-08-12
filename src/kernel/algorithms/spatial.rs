@@ -249,6 +249,25 @@ impl SpatialRk2 {
         }
         Ok(self.output.view())
     }
+
+    pub(super) fn residual<'algorithm>(
+        &'algorithm mut self,
+        core: &KernelCore,
+        state: KernelStateView<'_>,
+        dynamics: SpatialDynamics,
+    ) -> Result<ndarray::ArrayViewD<'algorithm, f64>, KernelAlgorithmError> {
+        self.validate(core, state)?;
+        rhs(
+            core,
+            &self.growth,
+            &self.diffusion,
+            dynamics,
+            state.space().expect("spatial state was validated"),
+            &mut self.k1,
+            &mut self.interaction_output,
+        )?;
+        Ok(self.k1.view())
+    }
 }
 
 fn rhs(

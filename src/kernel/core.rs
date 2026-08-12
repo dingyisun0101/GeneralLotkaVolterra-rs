@@ -156,6 +156,12 @@ pub enum KernelUpdate<'a> {
     },
 }
 
+/// Model-owned instantaneous right-hand side evaluated at canonical state.
+pub enum KernelResidual<'a> {
+    Abundance(ArrayView1<'a, f64>),
+    Space(ArrayViewD<'a, f64>),
+}
+
 impl<'a> KernelUpdate<'a> {
     /// Creates an aggregate-only update.
     pub const fn abundance(values: ArrayView1<'a, f64>) -> Self {
@@ -193,6 +199,18 @@ pub trait KernelAlgorithm {
         state: KernelStateView<'_>,
         time_step: TimeStep,
     ) -> Result<KernelUpdate<'algorithm>, Self::Error>;
+
+    /// Evaluates the complete deterministic RHS without advancing state.
+    ///
+    /// Custom algorithms may return `None`; fixed-point termination then
+    /// rejects that composition rather than substituting an inferred rate.
+    fn residual<'algorithm>(
+        &'algorithm mut self,
+        _core: &KernelCore,
+        _state: KernelStateView<'_>,
+    ) -> Result<Option<KernelResidual<'algorithm>>, Self::Error> {
+        Ok(None)
+    }
 }
 
 /// Shared deterministic kernel composed with one algorithm implementation.
@@ -281,6 +299,109 @@ where
         commit_update(abundance, space, update);
         Ok(())
     }
+
+    /// Returns the maximum component-wise scaled model residual.
+    pub fn maximum_scaled_residual(
+        &mut self,
+        state: &SystemState,
+        absolute_tolerance: f64,
+        relative_tolerance: f64,
+    ) -> Result<Option<f64>, KernelStepError<A::Error>> {
+        for (name, value) in [
+            ("absolute", absolute_tolerance),
+            ("relative", relative_tolerance),
+        ] {
+            if !value.is_finite() || value < 0.0 {
+                return Err(KernelStepError::Residual(
+                    KernelResidualError::InvalidTolerance { name, value },
+                ));
+            }
+        }
+        let residual = {
+            let (abundance, space) = state
+                .borrow_payloads::<(AggregateAbundance, SpatialAbundance)>((
+                    ABUNDANCE_FIELD,
+                    SPACE_FIELD,
+                ))
+                .map_err(KernelStepError::State)?;
+            let view = KernelStateView::new(abundance, space);
+            self.algorithm
+                .residual(&self.core, view)
+                .map_err(KernelStepError::Algorithm)?
+        };
+        let maximum = match residual {
+            None => return Ok(None),
+            Some(KernelResidual::Abundance(values)) => {
+                let abundance = state
+                    .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
+                    .map_err(KernelStepError::State)?;
+                if values.len() != abundance.len() {
+                    return Err(KernelStepError::Residual(
+                        KernelResidualError::AbundanceLength {
+                            expected: abundance.len(),
+                            actual: values.len(),
+                        },
+                    ));
+                }
+                maximum_scaled_component(
+                    values.iter().copied(),
+                    abundance.iter().copied(),
+                    absolute_tolerance,
+                    relative_tolerance,
+                )
+                .map_err(KernelStepError::Residual)?
+            }
+            Some(KernelResidual::Space(values)) => {
+                let space = state
+                    .payload::<SpatialAbundance>(SPACE_FIELD)
+                    .map_err(KernelStepError::State)?;
+                let space = space.as_ref().ok_or(KernelStepError::Residual(
+                    KernelResidualError::SpaceUnavailable,
+                ))?;
+                if values.shape() != space.shape() {
+                    return Err(KernelStepError::Residual(KernelResidualError::SpaceShape {
+                        expected: space.shape().to_vec(),
+                        actual: values.shape().to_vec(),
+                    }));
+                }
+                maximum_scaled_component(
+                    values.iter().copied(),
+                    space.iter().copied(),
+                    absolute_tolerance,
+                    relative_tolerance,
+                )
+                .map_err(KernelStepError::Residual)?
+            }
+        };
+        Ok(Some(maximum))
+    }
+}
+
+fn maximum_scaled_component(
+    residuals: impl Iterator<Item = f64>,
+    state_values: impl Iterator<Item = f64>,
+    absolute_tolerance: f64,
+    relative_tolerance: f64,
+) -> Result<f64, KernelResidualError> {
+    let mut maximum = 0.0_f64;
+    for (linear_index, (residual, value)) in residuals.zip(state_values).enumerate() {
+        if !residual.is_finite() {
+            return Err(KernelResidualError::NonFiniteValue {
+                linear_index,
+                value: residual,
+            });
+        }
+        let denominator = absolute_tolerance + relative_tolerance * value.abs();
+        let scaled = if denominator > 0.0 {
+            residual.abs() / denominator
+        } else if residual == 0.0 {
+            0.0
+        } else {
+            f64::INFINITY
+        };
+        maximum = maximum.max(scaled);
+    }
+    Ok(maximum)
 }
 
 fn validate_update(
@@ -413,6 +534,25 @@ pub enum KernelUpdateError {
     },
 }
 
+/// Rejection of an algorithm-provided deterministic residual.
+#[derive(Debug, ThisError)]
+#[non_exhaustive]
+pub enum KernelResidualError {
+    #[error("{name} residual tolerance must be finite and nonnegative, got {value}")]
+    InvalidTolerance { name: &'static str, value: f64 },
+    #[error("kernel residual length {actual} does not match state length {expected}")]
+    AbundanceLength { expected: usize, actual: usize },
+    #[error("kernel returned a spatial residual for a non-spatial state")]
+    SpaceUnavailable,
+    #[error("kernel residual shape {actual:?} does not match state shape {expected:?}")]
+    SpaceShape {
+        expected: Vec<usize>,
+        actual: Vec<usize>,
+    },
+    #[error("kernel residual at linear index {linear_index} is not finite: {value}")]
+    NonFiniteValue { linear_index: usize, value: f64 },
+}
+
 /// Failure while validating or applying a deterministic kernel.
 #[derive(Debug)]
 #[non_exhaustive]
@@ -423,6 +563,8 @@ pub enum KernelStepError<E> {
     Algorithm(E),
     /// The proposed update was rejected before committing any values.
     Update(KernelUpdateError),
+    /// The model RHS could not be compared safely with canonical state.
+    Residual(KernelResidualError),
 }
 
 impl<E> fmt::Display for KernelStepError<E>
@@ -434,6 +576,7 @@ where
             Self::State(error) => fmt::Display::fmt(error, formatter),
             Self::Algorithm(error) => write!(formatter, "kernel algorithm failed: {error}"),
             Self::Update(error) => fmt::Display::fmt(error, formatter),
+            Self::Residual(error) => fmt::Display::fmt(error, formatter),
         }
     }
 }
@@ -447,6 +590,7 @@ where
             Self::State(error) => Some(error),
             Self::Algorithm(error) => Some(error),
             Self::Update(error) => Some(error),
+            Self::Residual(error) => Some(error),
         }
     }
 }
