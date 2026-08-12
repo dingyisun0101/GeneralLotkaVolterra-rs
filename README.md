@@ -195,6 +195,8 @@ other compiler-visible implementation paths are not compatibility promises.
   `GlvRecordingMetadata`, `RecordingMetadataError`, `TerminationReason`,
   `GlvCheckpointVerificationError`, `glv_json_decoders`,
   `open_completed_glv_recording`, `verify_completed_glv_checkpoint`,
+  `open_accepted_fixed_point`, `AcceptedFixedPoint`,
+  `AcceptedFixedPointError`, `ACCEPTED_FIXED_POINT_FORMAT`,
   `ABUNDANCE_REPRESENTATION_METADATA_KEY`,
   `COMPLETED_ITERATION_METADATA_KEY`, `MODEL_KIND_METADATA_KEY`,
   `TASK_ORDINAL_METADATA_KEY`, `TERMINATION_REASON_METADATA_KEY`, and
@@ -336,6 +338,12 @@ Use `open_completed_glv_recording` to obtain a verified
 latest state. `verify_completed_glv_checkpoint` performs the standard final
 checkpoint comparison used by every example.
 
+`open_accepted_fixed_point` succeeds only when GLV's configured whole-window
+monitor terminated with `fixed_point`. It verifies that the terminal
+diagnostics, completed iteration, and final checkpoint agree, then returns the
+normalized final state that directly passed the configured residual test. It
+does not apply an unrelated tail fraction or downstream extinction cutoff.
+
 The plotting helper validates declared byte counts and SHA-256 checksums before
 exporting signal data:
 
@@ -346,6 +354,12 @@ python tools/plot_workflow_recording.py path/to/task-000000 \
 
 Add `--plot signal.png` when Matplotlib is installed. CSV export uses only the
 Python standard library and refuses to overwrite an existing destination.
+
+The separately packaged `general-lotka-volterra-reader` distribution composes
+Workflow's official reader with GLV-owned NumPy decoders. It validates the
+versioned ndarray representation, model identity, abundance interpretation,
+rank, shape, finiteness, and nonnegativity before exposing contiguous arrays.
+Its payload fixture is serialized by a Rust conformance test.
 
 ## Noise and reproducibility
 

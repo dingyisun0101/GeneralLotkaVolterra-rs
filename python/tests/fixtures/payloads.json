@@ -1,0 +1,6 @@
+{
+  "abundance": {"v": 1, "dim": [3], "data": [0.2, 0.3, 0.5]},
+  "space": {"v": 1, "dim": [1, 2, 2], "data": [0.2, 0.8, 0.3, 0.7]},
+  "absent_space": null,
+  "total": 1.0
+}

@@ -10,6 +10,7 @@ pub mod advanced;
 pub mod core;
 #[doc(hidden)]
 pub mod engine;
+pub mod fixed_point;
 pub mod initialization;
 pub mod interaction;
 pub mod invariant;
@@ -31,6 +32,10 @@ pub use simulation::{
 };
 
 pub use core::{TimeStep, TimeStepError};
+pub use fixed_point::{
+    ACCEPTED_FIXED_POINT_FORMAT, AcceptedFixedPoint, AcceptedFixedPointError,
+    open_accepted_fixed_point,
+};
 
 /// Canonical field containing aggregate species abundance.
 pub const ABUNDANCE_FIELD: &str = "abundance";

@@ -175,6 +175,7 @@ fn require_nonnegative_finite(name: &str, value: f64) -> Result<(), TerminationE
 
 /// Auditable diagnostics for one accepted fixed point.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct FixedPointDiagnostics {
     pub iteration: u64,
     pub completed_windows: usize,
@@ -186,6 +187,7 @@ pub struct FixedPointDiagnostics {
 
 /// Auditable diagnostics for one accepted orbit.
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct OscillationDiagnostics {
     pub iteration: u64,
     pub period_samples: usize,

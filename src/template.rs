@@ -689,5 +689,15 @@ mod tests {
             document["terminal_metadata"][TERMINATION_DIAGNOSTICS_METADATA_KEY]["completed_windows"],
             2
         );
+        let fixed_point =
+            crate::open_accepted_fixed_point(scope.task_recording_directory(0)).unwrap();
+        assert_eq!(fixed_point.iteration(), 6);
+        assert!((fixed_point.physical_time().unwrap() - 0.6).abs() < 1.0e-12);
+        assert_eq!(fixed_point.composition(), [0.4, 0.6]);
+        let encoded = fixed_point.to_json_bytes().unwrap();
+        assert_eq!(
+            crate::AcceptedFixedPoint::from_json_bytes(&encoded).unwrap(),
+            fixed_point
+        );
     }
 }
