@@ -20,6 +20,7 @@ use thiserror::Error;
 use crate::interaction::{INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactDescriptor};
 use crate::reading::glv_json_decoders;
 use crate::simulation::SimulationKind;
+use crate::terminal_state::TerminalState;
 use crate::termination::{ConvergenceReason, FixedPointDiagnostics, OscillationDiagnostics};
 use crate::{AbundanceRepresentation, CHECKPOINT_STREAM, load_state_schema};
 use ecological_initial_state::{INITIAL_STATE_METADATA_KEY, InitialStateArtifactDescriptor};
@@ -41,6 +42,9 @@ pub const TERMINATION_DIAGNOSTICS_METADATA_KEY: &str = "termination_diagnostics"
 
 /// Terminal-metadata key containing the last successfully completed iteration.
 pub const COMPLETED_ITERATION_METADATA_KEY: &str = "completed_iteration";
+
+/// Terminal-metadata key containing the canonical terminal composition product.
+pub const TERMINAL_STATE_METADATA_KEY: &str = "terminal_state";
 
 const RESERVED_CREATION_KEYS: [&str; 6] = [
     MODEL_KIND_METADATA_KEY,
@@ -306,6 +310,7 @@ impl GlvRecording {
         self,
         final_state: &SystemState,
         reason: TerminationReason,
+        terminal_state: &TerminalState,
     ) -> Result<CompletedRecording, GlvRecordingError> {
         let mut terminal_metadata = Map::new();
         terminal_metadata.insert(
@@ -318,6 +323,10 @@ impl GlvRecording {
         terminal_metadata.insert(
             COMPLETED_ITERATION_METADATA_KEY.to_owned(),
             Value::from(final_state.simulation_time().iteration()),
+        );
+        terminal_metadata.insert(
+            TERMINAL_STATE_METADATA_KEY.to_owned(),
+            serde_json::to_value(terminal_state).expect("validated terminal state serializes"),
         );
         Ok(self
             .writer

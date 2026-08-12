@@ -2,17 +2,13 @@
 
 use std::path::Path;
 
-use ndarray::Array1;
 use scientific_workflow::prelude::{StateError, StorageError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::recording::{
-    COMPLETED_ITERATION_METADATA_KEY, TERMINATION_DIAGNOSTICS_METADATA_KEY,
-    TERMINATION_REASON_METADATA_KEY,
-};
+use crate::recording::{COMPLETED_ITERATION_METADATA_KEY, TERMINATION_DIAGNOSTICS_METADATA_KEY};
+use crate::terminal_state::{TerminalStateError, open_terminal_state};
 use crate::termination::FixedPointDiagnostics;
-use crate::{ABUNDANCE_FIELD, AggregateAbundance, CHECKPOINT_STREAM};
 
 /// Versioned representation emitted for accepted GLV fixed points.
 pub const ACCEPTED_FIXED_POINT_FORMAT: &str = "general-lotka-volterra.accepted-fixed-point.v1";
@@ -100,17 +96,15 @@ impl AcceptedFixedPoint {
 pub fn open_accepted_fixed_point(
     recording: impl AsRef<Path>,
 ) -> Result<AcceptedFixedPoint, AcceptedFixedPointError> {
-    let reader = crate::reading::open_completed_glv_recording(recording)?;
-    let terminal = reader.terminal_metadata();
-    let reason = terminal
-        .get(TERMINATION_REASON_METADATA_KEY)
-        .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| invalid_terminal("missing string termination reason"))?;
-    if reason != "fixed_point" {
+    let recording = recording.as_ref();
+    let terminal_state = open_terminal_state(recording)?;
+    if !terminal_state.is_accepted_fixed_point() {
         return Err(AcceptedFixedPointError::NotAcceptedFixedPoint {
-            reason: reason.to_owned(),
+            reason: terminal_state.termination_reason().to_owned(),
         });
     }
+    let reader = crate::reading::open_completed_glv_recording(recording)?;
+    let terminal = reader.terminal_metadata();
     let diagnostics: FixedPointDiagnostics = serde_json::from_value(
         terminal
             .get(TERMINATION_DIAGNOSTICS_METADATA_KEY)
@@ -122,38 +116,22 @@ pub fn open_accepted_fixed_point(
         .get(COMPLETED_ITERATION_METADATA_KEY)
         .and_then(serde_json::Value::as_u64)
         .ok_or_else(|| invalid_terminal("missing completed iteration"))?;
-    let state = reader.read_latest_state_from_stream(CHECKPOINT_STREAM)?;
-    let time = state.simulation_time();
-    if diagnostics.iteration != completed_iteration || time.iteration() != completed_iteration {
+    if diagnostics.iteration != completed_iteration
+        || terminal_state.iteration() != completed_iteration
+    {
         return Err(invalid_terminal(
             "diagnostic, completed, and checkpoint iterations differ",
         ));
     }
-    let abundance = state.payload::<AggregateAbundance>(ABUNDANCE_FIELD)?;
-    let composition = normalized_composition(abundance)?;
     let fixed_point = AcceptedFixedPoint {
         format: ACCEPTED_FIXED_POINT_FORMAT.to_owned(),
         iteration: completed_iteration,
-        physical_time: time.physical_time(),
-        composition,
+        physical_time: terminal_state.physical_time(),
+        composition: terminal_state.composition().to_vec(),
         diagnostics,
     };
     fixed_point.validate()?;
     Ok(fixed_point)
-}
-
-fn normalized_composition(abundance: &Array1<f64>) -> Result<Vec<f64>, AcceptedFixedPointError> {
-    let values = abundance.as_slice().ok_or_else(|| {
-        AcceptedFixedPointError::InvalidProduct("accepted abundance is not contiguous".to_owned())
-    })?;
-    validate_values(values)?;
-    let total = values.iter().sum::<f64>();
-    if !total.is_finite() || total <= 0.0 {
-        return Err(AcceptedFixedPointError::InvalidProduct(
-            "accepted abundance has nonpositive total mass".to_owned(),
-        ));
-    }
-    Ok(values.iter().map(|value| value / total).collect())
 }
 
 fn validate_composition(values: &[f64]) -> Result<(), AcceptedFixedPointError> {
@@ -188,6 +166,9 @@ fn invalid_terminal(message: impl Into<String>) -> AcceptedFixedPointError {
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum AcceptedFixedPointError {
+    /// The canonical terminal-state product was unavailable or invalid.
+    #[error(transparent)]
+    TerminalState(#[from] TerminalStateError),
     /// Workflow rejected recording integrity or decoding.
     #[error(transparent)]
     Storage(#[from] StorageError),

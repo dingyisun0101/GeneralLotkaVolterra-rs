@@ -107,6 +107,23 @@ create another project, scope, reporter, task wrapper, or output-path system.
 
 ### Deterministic termination monitoring
 
+Every built-in run requires a bounded terminal-state sampling policy:
+
+```json
+"terminal_state": {
+  "sample_interval_iterations": 10,
+  "trailing_window_samples": 128
+}
+```
+
+GLV always embeds one normalized `general-lotka-volterra.terminal-state.v1`
+JSON product in completed recording metadata. If the fixed-point monitor
+accepts the run, the product contains the exact final normalized state and is
+marked `accepted_fixed_point`. Otherwise it contains the normalized mean of
+the configured trailing global-composition samples and is marked
+`trailing_average`. Terminal-state sampling is independent of recording
+cadence and uses bounded memory.
+
 Deterministic tasks may opt into synchronous early termination with a
 `termination` object in `fixed.json` or `sweep.json`. The checker samples after
 completed solver steps and is independent of recording cadence. It accepts a
@@ -197,6 +214,9 @@ other compiler-visible implementation paths are not compatibility promises.
   `open_completed_glv_recording`, `verify_completed_glv_checkpoint`,
   `open_accepted_fixed_point`, `AcceptedFixedPoint`,
   `AcceptedFixedPointError`, `ACCEPTED_FIXED_POINT_FORMAT`,
+  `open_terminal_state`, `TerminalState`, `TerminalStateClassification`,
+  `TerminalStatePolicy`, `TerminalStateMonitor`, `TerminalStateError`,
+  `TERMINAL_STATE_FORMAT`, `TERMINAL_STATE_METADATA_KEY`,
   `ABUNDANCE_REPRESENTATION_METADATA_KEY`,
   `COMPLETED_ITERATION_METADATA_KEY`, `MODEL_KIND_METADATA_KEY`,
   `TASK_ORDINAL_METADATA_KEY`, `TERMINATION_REASON_METADATA_KEY`, and

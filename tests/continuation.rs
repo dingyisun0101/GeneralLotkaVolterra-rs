@@ -11,7 +11,8 @@ use general_lotka_volterra_rs::recording::{GlvRecording, GlvRecordingMetadata, T
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, CHECKPOINT_STREAM, MeanFieldReplicator,
     MeanFieldReplicatorConfig, SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM, SpatialAbundance,
-    TOTAL_FIELD, TimeStep, TotalAbundance,
+    TOTAL_FIELD, TerminalState, TerminalStateMonitor, TerminalStatePolicy, TimeStep,
+    TotalAbundance,
 };
 use ndarray::{Array1, arr2};
 use scientific_workflow::configuration::{ParameterSpace, TaskParameters};
@@ -21,6 +22,16 @@ use scientific_workflow::system_state::SystemState;
 use scientific_workflow::time_series::StateSeries;
 
 static WORKSPACE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+fn terminal_state(state: &SystemState, reason: &TerminationReason) -> TerminalState {
+    let mut monitor = TerminalStateMonitor::new(TerminalStatePolicy {
+        sample_interval_iterations: 1,
+        trailing_window_samples: 1,
+    })
+    .unwrap();
+    monitor.observe(state).unwrap();
+    monitor.finish(state, reason).unwrap()
+}
 
 struct Workspace {
     root: PathBuf,
@@ -175,8 +186,10 @@ fn deterministic_continuation_matches_uninterrupted_state_and_samples() {
     )
     .unwrap();
     advance(&mut uninterrupted, &mut uninterrupted_recording, 6);
+    let reason = TerminationReason::MaximumIterations;
+    let terminal = terminal_state(uninterrupted.state(), &reason);
     let uninterrupted_completed = uninterrupted_recording
-        .complete(uninterrupted.state(), TerminationReason::MaximumIterations)
+        .complete(uninterrupted.state(), reason, &terminal)
         .unwrap();
     assert_eq!(uninterrupted_completed.timing().continuation_count(), 0);
 
@@ -228,8 +241,10 @@ fn deterministic_continuation_matches_uninterrupted_state_and_samples() {
     )
     .unwrap();
     advance(&mut resumed, &mut resumed_recording, 6);
+    let reason = TerminationReason::MaximumIterations;
+    let terminal = terminal_state(resumed.state(), &reason);
     let resumed_completed = resumed_recording
-        .complete(resumed.state(), TerminationReason::MaximumIterations)
+        .complete(resumed.state(), reason, &terminal)
         .unwrap();
     assert_eq!(resumed_completed.timing().continuation_count(), 1);
     assert_state_equal(resumed.state(), uninterrupted.state(), true);

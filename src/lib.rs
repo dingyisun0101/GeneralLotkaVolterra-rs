@@ -22,6 +22,7 @@ pub mod reading;
 pub mod recording;
 pub mod simulation;
 mod template;
+pub mod terminal_state;
 pub mod termination;
 
 pub use template::{GlvRunError, GlvTemplate, run};
@@ -35,6 +36,10 @@ pub use core::{TimeStep, TimeStepError};
 pub use fixed_point::{
     ACCEPTED_FIXED_POINT_FORMAT, AcceptedFixedPoint, AcceptedFixedPointError,
     open_accepted_fixed_point,
+};
+pub use terminal_state::{
+    TERMINAL_STATE_FORMAT, TerminalState, TerminalStateClassification, TerminalStateError,
+    TerminalStateMonitor, TerminalStatePolicy, open_terminal_state,
 };
 
 /// Canonical field containing aggregate species abundance.

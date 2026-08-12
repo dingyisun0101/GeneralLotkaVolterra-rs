@@ -42,8 +42,8 @@ pub mod prelude {
     pub use crate::recording::{
         ABUNDANCE_REPRESENTATION_METADATA_KEY, COMPLETED_ITERATION_METADATA_KEY, GlvRecording,
         GlvRecordingError, GlvRecordingMetadata, MODEL_KIND_METADATA_KEY, RecordingMetadataError,
-        TASK_ORDINAL_METADATA_KEY, TERMINATION_DIAGNOSTICS_METADATA_KEY,
-        TERMINATION_REASON_METADATA_KEY, TerminationReason,
+        TASK_ORDINAL_METADATA_KEY, TERMINAL_STATE_METADATA_KEY,
+        TERMINATION_DIAGNOSTICS_METADATA_KEY, TERMINATION_REASON_METADATA_KEY, TerminationReason,
     };
     pub use crate::simulation::{
         DefaultSimulationBuildError, MeanFieldReplicator, MeanFieldReplicatorConfig,
@@ -53,6 +53,10 @@ pub mod prelude {
     };
     pub use crate::template::{
         GlvProjectTemplate, GlvRunError, GlvTemplate, TemplateTaskError, run,
+    };
+    pub use crate::terminal_state::{
+        TERMINAL_STATE_FORMAT, TerminalState, TerminalStateClassification, TerminalStateError,
+        TerminalStateMonitor, TerminalStatePolicy, open_terminal_state,
     };
     pub use crate::termination::{
         ConvergenceReason, FixedPointDiagnostics, FixedPointTerminationConfig,

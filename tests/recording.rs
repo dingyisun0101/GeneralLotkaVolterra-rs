@@ -21,8 +21,8 @@ use general_lotka_volterra_rs::recording::{
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AbundanceRepresentation, AggregateAbundance, CHECKPOINT_STREAM,
     MeanFieldReplicator, MeanFieldReplicatorConfig, SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM,
-    SpatialAbundance, SpatialReplicator, SpatialReplicatorConfig, TOTAL_FIELD, TimeStep,
-    TotalAbundance,
+    SpatialAbundance, SpatialReplicator, SpatialReplicatorConfig, TOTAL_FIELD, TerminalState,
+    TerminalStateMonitor, TerminalStatePolicy, TimeStep, TotalAbundance,
 };
 use ndarray::{Array1, Array2, ArrayD, IxDyn};
 use physics_in_parallel::rng::RngConfig;
@@ -34,6 +34,19 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 static WORKSPACE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+fn terminal_state(
+    state: &scientific_workflow::system_state::SystemState,
+    reason: &TerminationReason,
+) -> TerminalState {
+    let mut monitor = TerminalStateMonitor::new(TerminalStatePolicy {
+        sample_interval_iterations: 1,
+        trailing_window_samples: 1,
+    })
+    .unwrap();
+    monitor.observe(state).unwrap();
+    monitor.finish(state, reason).unwrap()
+}
 
 struct Workspace {
     root: PathBuf,
@@ -275,8 +288,10 @@ fn workflow_records_all_glv_streams_metadata_terminal_state_and_integrity() {
         simulation.step().unwrap();
         recording.observe_state(simulation.state()).unwrap();
     }
+    let reason = TerminationReason::MaximumIterations;
+    let terminal = terminal_state(simulation.state(), &reason);
     let completed = recording
-        .complete(simulation.state(), TerminationReason::MaximumIterations)
+        .complete(simulation.state(), reason, &terminal)
         .unwrap();
 
     assert_eq!(completed.directory(), recording_directory);
@@ -473,6 +488,8 @@ fn stochastic_noise_identity_is_written_once_in_creation_metadata() {
     )
     .unwrap();
     let recording_directory = scope.task_recording_directory(0);
+    let reason = TerminationReason::Requested;
+    let terminal = terminal_state(simulation.state(), &reason);
     GlvRecording::start(
         &recording_directory,
         recording_config(8_192),
@@ -480,7 +497,7 @@ fn stochastic_noise_identity_is_written_once_in_creation_metadata() {
         simulation.state(),
     )
     .unwrap()
-    .complete(simulation.state(), TerminationReason::Requested)
+    .complete(simulation.state(), reason, &terminal)
     .unwrap();
 
     let document = metadata(&recording_directory);
@@ -669,8 +686,10 @@ fn completed_reader_round_trips_populated_spatial_payload_and_exact_time() {
     .unwrap();
     simulation.step().unwrap();
     recording.observe_state(simulation.state()).unwrap();
+    let reason = TerminationReason::MaximumIterations;
+    let terminal = terminal_state(simulation.state(), &reason);
     recording
-        .complete(simulation.state(), TerminationReason::MaximumIterations)
+        .complete(simulation.state(), reason, &terminal)
         .unwrap();
 
     let reader = open_completed_glv_recording(&recording_directory).unwrap();
