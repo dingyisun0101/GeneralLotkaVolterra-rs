@@ -134,8 +134,6 @@ dependencies = [
 [[package]]
 name = "ecological-initial-state"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a3e5c53a09b65915a8c610eb29343410a4b1c4a2b2513e5d1b2b4d5c50aee39b"
 dependencies = [
  "physics_in_parallel",
  "scientific-workflow",
@@ -557,9 +555,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "scientific-workflow"
-version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9dfc26c3420eeb9c1616dae9b8a3d67a11eb3cef3b8e4e0050f1a664e163f96"
+version = "0.2.4"
 dependencies = [
  "console",
  "erased-serde",
