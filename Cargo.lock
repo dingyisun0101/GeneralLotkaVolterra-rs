@@ -203,7 +203,7 @@ dependencies = [
 
 [[package]]
 name = "general-lotka-volterra-rs"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "ecological-initial-state",
  "ndarray",
