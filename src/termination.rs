@@ -1,4 +1,4 @@
-//! Configurable deterministic convergence and oscillation monitoring.
+//! Deterministic convergence and oscillation monitoring.
 
 use std::collections::VecDeque;
 
@@ -62,6 +62,40 @@ pub struct TerminationPolicy {
 }
 
 impl TerminationPolicy {
+    /// Builds GLV's standard bounded policy from simple detector toggles.
+    ///
+    /// Built-in templates use this policy so project authors select scientific
+    /// outcomes without configuring the monitor's internal evidence schedule.
+    pub(crate) fn automatic(fixed_point: bool, oscillation: bool) -> Option<Self> {
+        if !fixed_point && !oscillation {
+            return None;
+        }
+        Some(Self {
+            start_after_iteration: 0,
+            sample_interval_iterations: 10,
+            observable: TerminationObservable::GlobalState,
+            fixed_point: fixed_point.then(|| FixedPointTerminationConfig {
+                base_window_samples: 16,
+                confirmation_window_multipliers: vec![1, 2, 4],
+                composition_tolerance: 1.0e-7,
+                relative_mass_tolerance: Some(1.0e-7),
+                mass_floor: 1.0e-12,
+                support_threshold: 1.0e-10,
+                residual_tolerance: ResidualTolerance {
+                    absolute: 1.0e-10,
+                    relative: 1.0e-8,
+                },
+            }),
+            oscillation: oscillation.then_some(OscillationTerminationConfig {
+                minimum_period_samples: 2,
+                maximum_period_samples: 128,
+                repeated_cycles: 3,
+                recurrence_tolerance: 1.0e-6,
+                minimum_cycle_amplitude: 1.0e-4,
+            }),
+        })
+    }
+
     pub fn validate(&self) -> Result<(), TerminationError> {
         if self.sample_interval_iterations == 0 {
             return Err(TerminationError::InvalidConfig(
@@ -267,6 +301,68 @@ impl TerminationMonitor {
         self.observe_oscillation(sample)
     }
 
+    /// Returns whether the configured fixed-point support has one species.
+    ///
+    /// This is a cheap preflight for callers whose model makes single-species
+    /// support absorbing. It does not itself claim convergence.
+    pub fn has_single_supported_species(
+        &self,
+        state: &SystemState,
+    ) -> Result<bool, TerminationError> {
+        let Some(config) = &self.policy.fixed_point else {
+            return Ok(false);
+        };
+        let sample = sample_state(state, self.policy.observable, 0.0, config.support_threshold)?;
+        Ok(sample
+            .support
+            .iter()
+            .filter(|supported| **supported)
+            .count()
+            == 1)
+    }
+
+    /// Evaluates one absorbing single-species state using the model residual.
+    ///
+    /// Callers must use this shortcut only when their invariant makes
+    /// single-species support absorbing. GLV's built-in runner does so for
+    /// mean-field and spatial replicator dynamics, but not population GLV.
+    pub fn evaluate_absorbing_fixed_point(
+        &self,
+        state: &SystemState,
+        scaled_residual: f64,
+    ) -> Result<Option<ConvergenceReason>, TerminationError> {
+        if !scaled_residual.is_finite() || scaled_residual < 0.0 {
+            return Err(TerminationError::InvalidResidual { scaled_residual });
+        }
+        let Some(config) = &self.policy.fixed_point else {
+            return Ok(None);
+        };
+        let sample = sample_state(
+            state,
+            self.policy.observable,
+            scaled_residual,
+            config.support_threshold,
+        )?;
+        if sample
+            .support
+            .iter()
+            .filter(|supported| **supported)
+            .count()
+            != 1
+            || scaled_residual > 1.0
+        {
+            return Ok(None);
+        }
+        Ok(Some(ConvergenceReason::FixedPoint(FixedPointDiagnostics {
+            iteration: sample.iteration,
+            completed_windows: 1,
+            final_window_samples: 1,
+            maximum_composition_distance: 0.0,
+            relative_mass_range: 0.0,
+            maximum_scaled_residual: scaled_residual,
+        })))
+    }
+
     fn support_threshold(&self) -> f64 {
         self.policy
             .fixed_point
@@ -282,6 +378,14 @@ impl TerminationMonitor {
         let Some(config) = &self.policy.fixed_point else {
             return Ok(None);
         };
+        if self
+            .fixed_window
+            .last()
+            .is_some_and(|previous| previous.support != sample.support)
+        {
+            self.fixed_window.clear();
+            self.fixed_stage = 0;
+        }
         self.fixed_window.push(sample);
         let multiplier = config.confirmation_window_multipliers[self.fixed_stage];
         let required = config
@@ -523,6 +627,9 @@ pub enum TerminationError {
 
 #[cfg(test)]
 mod tests {
+    use ndarray::Array1;
+    use scientific_workflow::prelude::{SimulationTime, SystemState};
+
     use super::*;
 
     fn fixed_config() -> FixedPointTerminationConfig {
@@ -550,11 +657,77 @@ mod tests {
         }
     }
 
+    fn state(iteration: u64, abundance: [f64; 2]) -> SystemState {
+        let mut state = crate::load_state_schema()
+            .unwrap()
+            .create_empty_state(SimulationTime::from_iteration(iteration));
+        state
+            .insert_payload(ABUNDANCE_FIELD, Array1::from_vec(abundance.to_vec()))
+            .unwrap();
+        state
+    }
+
     #[test]
     fn fixed_point_requires_the_rhs_residual_even_when_state_is_confined() {
         let samples = [sample(1, [0.5, 0.5], 2.0), sample(2, [0.5, 0.5], 2.0)];
         assert!(
             evaluate_fixed_window(&samples, &fixed_config(), 1)
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn support_change_starts_a_new_window_with_the_transition_sample() {
+        let mut monitor = TerminationMonitor::new(TerminationPolicy {
+            start_after_iteration: 0,
+            sample_interval_iterations: 1,
+            observable: TerminationObservable::GlobalState,
+            fixed_point: Some(FixedPointTerminationConfig {
+                confirmation_window_multipliers: vec![1],
+                ..fixed_config()
+            }),
+            oscillation: None,
+        })
+        .unwrap();
+        assert!(
+            monitor
+                .observe(&state(0, [0.5, 0.5]), 0.0)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            monitor
+                .observe(&state(1, [1.0, 0.0]), 0.0)
+                .unwrap()
+                .is_none()
+        );
+        assert!(matches!(
+            monitor.observe(&state(2, [1.0, 0.0]), 0.0).unwrap(),
+            Some(ConvergenceReason::FixedPoint(_))
+        ));
+    }
+
+    #[test]
+    fn absorbing_shortcut_still_requires_the_rhs_residual() {
+        let monitor = TerminationMonitor::new(TerminationPolicy {
+            start_after_iteration: 0,
+            sample_interval_iterations: 10,
+            observable: TerminationObservable::GlobalState,
+            fixed_point: Some(fixed_config()),
+            oscillation: None,
+        })
+        .unwrap();
+        let monoculture = state(0, [1.0, 0.0]);
+        assert!(matches!(
+            monitor
+                .evaluate_absorbing_fixed_point(&monoculture, 0.0)
+                .unwrap(),
+            Some(ConvergenceReason::FixedPoint(_))
+        ));
+        assert!(
+            monitor
+                .evaluate_absorbing_fixed_point(&monoculture, 2.0)
                 .unwrap()
                 .is_none()
         );

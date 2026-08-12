@@ -36,6 +36,15 @@ use crate::terminal_state::{TerminalStateMonitor, TerminalStatePolicy};
 use crate::termination::{ResidualTolerance, TerminationMonitor, TerminationPolicy};
 use crate::{AbundanceRepresentation, TimeStep};
 
+#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AutomaticTerminationConfig {
+    #[serde(default)]
+    fixed_point: bool,
+    #[serde(default)]
+    oscillation: bool,
+}
+
 /// Error returned by one advanced template task implementation.
 pub type TemplateTaskError = Box<dyn Error + Send + Sync + 'static>;
 
@@ -498,13 +507,17 @@ fn finish_task<S>(
 where
     S: StandardTemplateSimulation,
 {
-    let terminal_state_policy: TerminalStatePolicy = task.decode_value("terminal_state")?;
-    let mut terminal_state_monitor = TerminalStateMonitor::new(terminal_state_policy)?;
+    let mut terminal_state_monitor = TerminalStateMonitor::new(TerminalStatePolicy::default())?;
     terminal_state_monitor.observe(simulation.state())?;
-    let termination_policy: Option<TerminationPolicy> = task
+    let automatic_termination: AutomaticTerminationConfig = task
         .value("termination")
         .map(|_| task.decode_value("termination"))
-        .transpose()?;
+        .transpose()?
+        .unwrap_or_default();
+    let termination_policy = TerminationPolicy::automatic(
+        automatic_termination.fixed_point,
+        automatic_termination.oscillation,
+    );
     if termination_policy.is_some() && simulation.rng_record().is_some() {
         return Err(
             "termination monitoring is supported only for deterministic simulations".into(),
@@ -531,37 +544,20 @@ where
         GlvRecording::start(&recording_directory, streams, metadata, simulation.state())?;
 
     progress.set_phase("evolving");
-    let mut termination_reason = TerminationReason::MaximumIterations;
-    while simulation.state().simulation_time().iteration() < maximum_iterations {
+    let mut termination_reason = evaluate_automatic_termination(&mut simulation, monitor.as_mut())?
+        .map(TerminationReason::from);
+    while termination_reason.is_none()
+        && simulation.state().simulation_time().iteration() < maximum_iterations
+    {
         let time = simulation.step_template()?;
         recording.observe_state(simulation.state())?;
         terminal_state_monitor.observe(simulation.state())?;
         progress.set_iteration(time.iteration())?;
-        let should_sample = monitor
-            .as_ref()
-            .is_some_and(|monitor| monitor.should_sample(time.iteration()));
-        if should_sample {
-            let tolerance = monitor
-                .as_ref()
-                .and_then(|monitor| monitor.policy().fixed_point.as_ref())
-                .map(|config| config.residual_tolerance);
-            let scaled_residual = if let Some(tolerance) = tolerance {
-                simulation
-                    .maximum_scaled_residual(tolerance)?
-                    .ok_or(crate::termination::TerminationError::ResidualUnavailable)?
-            } else {
-                0.0
-            };
-            if let Some(reason) = monitor
-                .as_mut()
-                .expect("sample decision requires a monitor")
-                .observe(simulation.state(), scaled_residual)?
-            {
-                termination_reason = reason.into();
-                break;
-            }
-        }
+        termination_reason = evaluate_automatic_termination(&mut simulation, monitor.as_mut())?
+            .map(TerminationReason::from);
     }
+
+    let termination_reason = termination_reason.unwrap_or(TerminationReason::MaximumIterations);
 
     progress.set_phase("validating recording");
     let progress_completion_reason = match &termination_reason {
@@ -573,6 +569,51 @@ where
     verify_completed_glv_checkpoint(recording_directory, simulation.state())?;
     progress.complete(progress_completion_reason)?;
     Ok(())
+}
+
+fn evaluate_automatic_termination<S>(
+    simulation: &mut S,
+    monitor: Option<&mut TerminationMonitor>,
+) -> Result<Option<crate::termination::ConvergenceReason>, TemplateTaskError>
+where
+    S: StandardTemplateSimulation,
+{
+    let Some(monitor) = monitor else {
+        return Ok(None);
+    };
+    let iteration = simulation.state().simulation_time().iteration();
+    let fixed_tolerance = monitor
+        .policy()
+        .fixed_point
+        .as_ref()
+        .map(|config| config.residual_tolerance);
+    let absorbing_replicator = matches!(
+        simulation.kind(),
+        SimulationKind::MeanFieldReplicator | SimulationKind::SpatialReplicator
+    ) && monitor.has_single_supported_species(simulation.state())?;
+
+    if absorbing_replicator {
+        let tolerance = fixed_tolerance.expect("single-support check requires fixed-point policy");
+        let residual = simulation
+            .maximum_scaled_residual(tolerance)?
+            .ok_or(crate::termination::TerminationError::ResidualUnavailable)?;
+        if let Some(reason) =
+            monitor.evaluate_absorbing_fixed_point(simulation.state(), residual)?
+        {
+            return Ok(Some(reason));
+        }
+    }
+    if !monitor.should_sample(iteration) {
+        return Ok(None);
+    }
+    let residual = if let Some(tolerance) = fixed_tolerance {
+        simulation
+            .maximum_scaled_residual(tolerance)?
+            .ok_or(crate::termination::TerminationError::ResidualUnavailable)?
+    } else {
+        0.0
+    };
+    Ok(monitor.observe(simulation.state(), residual)?)
 }
 
 #[cfg(test)]
@@ -602,29 +643,14 @@ mod tests {
             fs::write(
                 root.join("config/fixed.json"),
                 r#"{
-                    "initial_abundance": [0.4, 0.6],
+                    "initial_abundance": [1.0, 0.0],
                     "growth": [0.0, 0.0],
                     "cutoff": 0.0,
                     "physical_time_increment": 0.1,
-                    "maximum_iterations": 100,
-                    "terminal_state": {
-                        "sample_interval_iterations": 1,
-                        "trailing_window_samples": 4
-                    },
+                    "maximum_iterations": 0,
                     "termination": {
-                        "start_after_iteration": 1,
-                        "sample_interval_iterations": 1,
-                        "observable": "global_state",
-                        "fixed_point": {
-                            "base_window_samples": 2,
-                            "confirmation_window_multipliers": [1, 2],
-                            "composition_tolerance": 0.0,
-                            "relative_mass_tolerance": 0.0,
-                            "mass_floor": 1e-12,
-                            "support_threshold": 0.0,
-                            "residual_tolerance": {"absolute": 1e-12, "relative": 1e-12}
-                        },
-                        "oscillation": null
+                        "fixed_point": true,
+                        "oscillation": false
                     },
                     "recording": [
                         {"name":"signal","sampling_interval":10,"fields":["abundance","total"],"storage_limits":[65536,262144]},
@@ -658,7 +684,52 @@ mod tests {
             let mut config: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
             config.as_object_mut().unwrap().remove("termination");
             config["maximum_iterations"] = Value::from(3);
-            config["terminal_state"]["trailing_window_samples"] = Value::from(2);
+            fs::write(path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+            project
+        }
+
+        fn collapses_at_cap() -> Self {
+            let project = Self::stationary();
+            let path = project.0.join("config/fixed.json");
+            let mut config: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            config["initial_abundance"] = serde_json::json!([0.98, 0.02]);
+            config["growth"] = serde_json::json!([0.0, -100.0]);
+            config["cutoff"] = Value::from(0.01);
+            config["physical_time_increment"] = Value::from(0.01);
+            config["maximum_iterations"] = Value::from(1);
+            fs::write(path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+            project
+        }
+
+        fn nonstationary_population_monoculture() -> Self {
+            let project = Self::stationary();
+            let path = project.0.join("config/fixed.json");
+            let config = serde_json::json!({
+                "spatial_shape": [2, 2],
+                "initialization": {
+                    "source": "config",
+                    "config": {
+                        "method": "random",
+                        "distribution": {"kind": "inline", "weights": [1.0, 0.0]},
+                        "rng": {"seed": 7}
+                    }
+                },
+                "initial_population_per_site": 1.0,
+                "growth": [0.35, 0.0],
+                "diffusion": [0.0, 0.0],
+                "spacing": [1.0, 1.0],
+                "boundary": "neumann",
+                "cutoff": 0.0,
+                "carrying_capacity": 100.0,
+                "physical_time_increment": 0.01,
+                "maximum_iterations": 0,
+                "termination": {"fixed_point": true, "oscillation": false},
+                "recording": [
+                    {"name":"signal","sampling_interval":10,"fields":["abundance","total"],"storage_limits":[65536,262144]},
+                    {"name":"space","sampling_interval":10,"fields":["abundance","space","total"],"storage_limits":[65536,262144]},
+                    {"name":"checkpoint","sampling_interval":10,"fields":["abundance","space","total"],"storage_limits":[65536,262144]}
+                ]
+            });
             fs::write(path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
             project
         }
@@ -707,17 +778,17 @@ mod tests {
         );
         assert_eq!(
             document["terminal_metadata"][COMPLETED_ITERATION_METADATA_KEY],
-            6
+            0
         );
         assert_eq!(
             document["terminal_metadata"][TERMINATION_DIAGNOSTICS_METADATA_KEY]["completed_windows"],
-            2
+            1
         );
         let fixed_point =
             crate::open_accepted_fixed_point(scope.task_recording_directory(0)).unwrap();
-        assert_eq!(fixed_point.iteration(), 6);
-        assert!((fixed_point.physical_time().unwrap() - 0.6).abs() < 1.0e-12);
-        assert_eq!(fixed_point.composition(), [0.4, 0.6]);
+        assert_eq!(fixed_point.iteration(), 0);
+        assert_eq!(fixed_point.physical_time(), Some(0.0));
+        assert_eq!(fixed_point.composition(), [1.0, 0.0]);
         let encoded = fixed_point.to_json_bytes().unwrap();
         assert_eq!(
             crate::AcceptedFixedPoint::from_json_bytes(&encoded).unwrap(),
@@ -725,8 +796,34 @@ mod tests {
         );
         let terminal = crate::open_terminal_state(scope.task_recording_directory(0)).unwrap();
         assert!(terminal.is_accepted_fixed_point());
-        assert_eq!(terminal.composition(), [0.4, 0.6]);
+        assert_eq!(terminal.composition(), [1.0, 0.0]);
         assert_eq!(terminal.sample_count(), 1);
+    }
+
+    #[test]
+    fn runner_accepts_a_collapse_on_the_last_allowed_step() {
+        let _guard = RUN_LOCK.lock().unwrap();
+        let project = TestProject::collapses_at_cap();
+        let scope = run(GlvTemplate::MeanFieldReplicator, project.0.join("config")).unwrap();
+        let fixed_point =
+            crate::open_accepted_fixed_point(scope.task_recording_directory(0)).unwrap();
+        assert_eq!(fixed_point.iteration(), 1);
+        assert_eq!(fixed_point.composition(), [1.0, 0.0]);
+    }
+
+    #[test]
+    fn population_monoculture_with_nonzero_residual_is_not_a_fixed_point() {
+        let _guard = RUN_LOCK.lock().unwrap();
+        let project = TestProject::nonstationary_population_monoculture();
+        let scope = run(
+            GlvTemplate::SpatialGeneralLotkaVolterra,
+            project.0.join("config"),
+        )
+        .unwrap();
+        let terminal = crate::open_terminal_state(scope.task_recording_directory(0)).unwrap();
+        assert!(!terminal.is_accepted_fixed_point());
+        assert_eq!(terminal.termination_reason(), "maximum_iterations");
+        assert_eq!(terminal.iteration(), 0);
     }
 
     #[test]
@@ -737,9 +834,9 @@ mod tests {
         let terminal = crate::open_terminal_state(scope.task_recording_directory(0)).unwrap();
         assert!(!terminal.is_accepted_fixed_point());
         assert_eq!(terminal.termination_reason(), "maximum_iterations");
-        assert_eq!(terminal.composition(), [0.4, 0.6]);
+        assert_eq!(terminal.composition(), [1.0, 0.0]);
         assert_eq!(terminal.sample_count(), 2);
-        assert_eq!(terminal.first_sample_iteration(), 2);
+        assert_eq!(terminal.first_sample_iteration(), 0);
         assert_eq!(terminal.last_sample_iteration(), 3);
         assert!(matches!(
             crate::open_accepted_fixed_point(scope.task_recording_directory(0)),

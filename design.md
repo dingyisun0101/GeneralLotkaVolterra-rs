@@ -160,6 +160,36 @@ GLV owns:
 Recording and reporting remain outside the engine. A simulation exposes its
 current state by immutable borrow; orchestration decides when to observe it.
 
+## Automatic termination and terminal products
+
+Automatic termination is an internal synchronous part of built-in template
+orchestration, not a numerical-engine concern and not a background thread.
+Ordinary project configuration only toggles the fixed-point and oscillation
+detectors. GLV owns their sampling cadence, bounded evidence windows,
+tolerances, confirmation schedule, and observable. This keeps scientific
+classification consistent across studies instead of allowing each project to
+silently define a different meaning of convergence.
+
+The fixed-point detector combines windowed composition, support, mass, and an
+authoritative deterministic RHS residual. A support transition resets staged
+confirmation immediately while retaining the first sample on the new support.
+Mean-field and spatial replicator templates additionally check an absorbing
+single-species candidate at iteration zero and after every step. They may
+accept it without filling the ordinary windows only when its residual passes.
+Population GLV does not use this shortcut because one-species support alone
+does not imply stationary population dynamics. Stochastic models reject
+deterministic automatic termination.
+
+Terminal-state production is unconditional for successful built-in runs and
+does not itself stop a simulation. A bounded internal monitor samples normalized
+global composition from iteration zero and forces inclusion of the final state.
+Fixed-point termination publishes the exact final normalized composition as
+`accepted_fixed_point`; every other successful completion publishes the
+normalized trailing mean as `trailing_average`. The product records its final
+iteration, physical time, completion reason, represented sample count, and
+sample bounds. This explicit classification prevents downstream studies from
+mistaking a capped or oscillatory estimate for a proven fixed point.
+
 ## Workflow state contract
 
 Every simulation uses the one canonical schema in `schemas/state.json`:

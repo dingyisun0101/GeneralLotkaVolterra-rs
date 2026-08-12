@@ -15,7 +15,7 @@
   "cutoff": 1e-9,
   "physical_time_increment": 0.003,
   "maximum_iterations": 100,
-  "terminal_state": {"sample_interval_iterations": 10, "trailing_window_samples": 16},
+  "termination": {"fixed_point": true, "oscillation": true},
   "recording": [
     {"name": "signal", "sampling_interval": 10, "fields": ["abundance", "total"], "storage_limits": [65536, 262144]},
     {"name": "space", "sampling_interval": 25, "fields": ["abundance", "space", "total"], "storage_limits": [262144, 1048576]},

@@ -107,63 +107,54 @@ create another project, scope, reporter, task wrapper, or output-path system.
 
 ### Deterministic termination monitoring
 
-Every built-in run requires a bounded terminal-state sampling policy:
-
-```json
-"terminal_state": {
-  "sample_interval_iterations": 10,
-  "trailing_window_samples": 128
-}
-```
-
-GLV always embeds one normalized `general-lotka-volterra.terminal-state.v1`
-JSON product in completed recording metadata. If the fixed-point monitor
-accepts the run, the product contains the exact final normalized state and is
-marked `accepted_fixed_point`. Otherwise it contains the normalized mean of
-the configured trailing global-composition samples and is marked
-`trailing_average`. Terminal-state sampling is independent of recording
-cadence and uses bounded memory.
-
-Deterministic tasks may opt into synchronous early termination with a
-`termination` object in `fixed.json` or `sweep.json`. The checker samples after
-completed solver steps and is independent of recording cadence. It accepts a
-fixed point only when every sample in each configured, non-overlapping
-confirmation window has stable support, confined Jensen–Shannon composition,
-optional stable mass, and an authoritative model RHS residual within the
-configured absolute/state-relative scale. A separate optional detector can
-classify a recurrent orbit only after multiple matching cycles with a
-nontrivial within-cycle amplitude.
+Built-in templates expose automatic termination as detector toggles:
 
 ```json
 "termination": {
-  "start_after_iteration": 1000,
-  "sample_interval_iterations": 10,
-  "observable": "global_state",
-  "fixed_point": {
-    "base_window_samples": 16,
-    "confirmation_window_multipliers": [1, 2, 4],
-    "composition_tolerance": 1e-7,
-    "relative_mass_tolerance": 1e-7,
-    "mass_floor": 1e-12,
-    "support_threshold": 1e-10,
-    "residual_tolerance": {"absolute": 1e-10, "relative": 1e-8}
-  },
-  "oscillation": {
-    "minimum_period_samples": 2,
-    "maximum_period_samples": 128,
-    "repeated_cycles": 3,
-    "recurrence_tolerance": 1e-6,
-    "minimum_cycle_amplitude": 1e-4
-  }
+  "fixed_point": true,
+  "oscillation": false
 }
 ```
 
-Either detector may be omitted, but at least one is required. The observable
-may be `global_state` or `spatial_field`. Monitoring stochastic simulations is
-rejected rather than assigning deterministic convergence semantics to noise.
-The public `termination` submodule contains the same no-I/O, bounded-history
-`TerminationMonitor` used by the built-in runner, so downstream runners can use
-the identical decision rule synchronously in their own step loop.
+The `termination` object is optional, and either detector may be toggled
+independently. Omitting it, or setting both values to `false`, runs to
+`maximum_iterations`. Deterministic detectors cannot be enabled for a
+stochastic task because noisy trajectories do not have the same convergence
+semantics.
+
+GLV owns the detector's sampling cadence, bounded windows, tolerances, and
+confirmation schedule. These are intentionally not ordinary project settings.
+The synchronous checker runs inside the solver loop after complete steps and
+is independent of recording cadence. Fixed-point acceptance requires stable
+support, confined Jensen–Shannon composition, stable mass, and an authoritative
+model RHS residual. A support change immediately starts a fresh confirmation
+window and retains the transition sample. Oscillation acceptance is separate
+and requires repeated matching cycles with nontrivial amplitude.
+
+Replicator dynamics receive one safe fast path: GLV checks iteration zero and
+every later single-species state, including the last allowed step. A
+single-species state is accepted immediately only when the model invariant
+makes that support absorbing and the authoritative RHS residual also passes.
+This shortcut applies to mean-field and spatial replicators, not generic
+population GLV.
+
+Terminal-state production is independent of automatic termination. Every
+successful built-in run embeds one normalized
+`general-lotka-volterra.terminal-state.v1` product in completed recording
+metadata. GLV samples global composition in a bounded internal window starting
+at iteration zero and always forces the final state into that window. If GLV
+accepted a fixed point, the product contains the exact normalized final state,
+has one represented sample, and is marked `accepted_fixed_point`. For every
+other completion reason—including an iteration cap, oscillation, a request, or
+a stochastic run—the product contains the normalized mean of the internal
+trailing samples and is marked `trailing_average`. The classification is the
+authoritative distinction; downstream code must not infer fixed-point status
+from the vector alone.
+
+Advanced template authors can use the no-I/O, bounded-history
+`TerminationMonitor` and `TerminalStateMonitor` directly when composing a
+custom runner. Built-in templates deliberately keep those mechanisms behind
+the two detector toggles.
 
 ## Supported public API
 

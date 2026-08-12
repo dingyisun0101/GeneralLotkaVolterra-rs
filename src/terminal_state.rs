@@ -26,6 +26,15 @@ pub struct TerminalStatePolicy {
     pub trailing_window_samples: usize,
 }
 
+impl Default for TerminalStatePolicy {
+    fn default() -> Self {
+        Self {
+            sample_interval_iterations: 10,
+            trailing_window_samples: 128,
+        }
+    }
+}
+
 impl TerminalStatePolicy {
     /// Validates nonzero sampling controls.
     pub fn validate(self) -> Result<(), TerminalStateError> {
