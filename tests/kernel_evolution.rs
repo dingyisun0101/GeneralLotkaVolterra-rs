@@ -1,6 +1,7 @@
+use general_lotka_volterra_rs::interaction::InteractionMatrix;
 use general_lotka_volterra_rs::kernel::{
-    InMemorySource, InteractionSource, Kernel, KernelAlgorithm, KernelCore, KernelStateView,
-    KernelStepError, KernelUpdate, KernelUpdateError,
+    Kernel, KernelAlgorithm, KernelCore, KernelStateView, KernelStepError, KernelUpdate,
+    KernelUpdateError,
 };
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TimeStep,
@@ -58,9 +59,7 @@ fn spatial_state() -> SystemState {
 
 #[test]
 fn invalid_multi_payload_update_commits_nothing() {
-    let matrix = InMemorySource::new(arr2(&[[1.0, 0.0], [0.0, 1.0]]))
-        .resolve(2)
-        .unwrap();
+    let matrix = InteractionMatrix::from_array(arr2(&[[1.0, 0.0], [0.0, 1.0]]), 2).unwrap();
     let algorithm = InvalidBothUpdate {
         abundance: Array1::zeros(2),
         space: ArrayD::zeros(IxDyn(&[1, 2])),

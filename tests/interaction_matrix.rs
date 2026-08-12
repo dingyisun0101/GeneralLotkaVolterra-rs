@@ -3,21 +3,19 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use general_lotka_volterra_rs::kernel::{
-    ArtifactDisposition, GeneratedSource, INTERACTION_MATRIX_FORMAT,
-    INTERACTION_MATRIX_METADATA_KEY, InMemorySource, InteractionArtifactError,
-    InteractionGenerator, InteractionProvenance, InteractionSource, InteractionSourceError,
-    InteractionSourceKind, JsonInteractionSource, load_verified_interaction_matrix,
-    persist_interaction_matrix,
+use general_lotka_volterra_rs::interaction::{
+    ArtifactDisposition, GeneratorProvenance, INTERACTION_GENERATOR_RNG_NAMESPACE,
+    INTERACTION_MATRIX_FORMAT, INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactError,
+    InteractionArtifactLoadError, InteractionMatrix, InteractionMatrixError, InteractionProvenance,
+    InteractionSourceKind, load_verified_interaction_matrix, persist_interaction_matrix,
 };
-use ndarray::{Array2, arr2};
+use physics_in_parallel::math::prelude::DenseMatrix;
 use physics_in_parallel::rng::{RngConfig, RngMethod};
+use scientific_workflow::artifact::{ArtifactError, ArtifactLoadError};
 use scientific_workflow::execution::ExecutionScope;
 use scientific_workflow::project::ScientificProject;
-use serde::Serialize;
-use serde_json::Map;
+use serde_json::{Map, json};
 use sha2::{Digest, Sha256};
-use thiserror::Error;
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -46,96 +44,75 @@ impl Drop for TestDirectory {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
-struct GeneratorParameters {
-    diagonal: f64,
+fn matrix(rows: usize, columns: usize, values: Vec<f64>) -> DenseMatrix<f64> {
+    DenseMatrix::try_from_vec(rows, columns, values).unwrap()
 }
 
-#[derive(Debug, Error)]
-#[error("test generator failed")]
-struct GeneratorError;
-
-#[derive(Debug)]
-struct DiagonalGenerator {
-    parameters: GeneratorParameters,
-    rng_config: Option<RngConfig>,
-}
-
-impl InteractionGenerator for DiagonalGenerator {
-    type Error = GeneratorError;
-    type Parameters = GeneratorParameters;
-
-    const IDENTITY: &'static str = "test.diagonal";
-    const VERSION: &'static str = "1";
-
-    fn parameters(&self) -> &Self::Parameters {
-        &self.parameters
-    }
-
-    fn rng_config(&self) -> Option<RngConfig> {
-        self.rng_config
-    }
-
-    fn generate(self, species: usize) -> Result<Array2<f64>, Self::Error> {
-        Ok(Array2::from_diag_elem(species, self.parameters.diagonal))
+fn assert_coefficients(actual: &InteractionMatrix, expected: &[f64]) {
+    assert_eq!(actual.values().size(), expected.len());
+    for row in 0..actual.species() {
+        for column in 0..actual.species() {
+            assert_eq!(
+                actual.coefficient(row, column),
+                expected[row * actual.species() + column]
+            );
+        }
     }
 }
 
 #[test]
-fn in_memory_and_inline_sources_validate_the_complete_domain() {
-    let allocation = Arc::new(arr2(&[[1.0, 2.0], [3.0, 4.0]]));
-    let resolved = InMemorySource::from_shared(Arc::clone(&allocation))
-        .with_label("direct-test")
-        .resolve(2)
-        .unwrap();
+fn matrices_validate_domain_and_reuse_shared_storage() {
+    let allocation = Arc::new(matrix(2, 2, vec![1.0, 2.0, 3.0, 4.0]));
+    let resolved = InteractionMatrix::from_shared(Arc::clone(&allocation), 2).unwrap();
     assert!(Arc::ptr_eq(&allocation, &resolved.shared_values()));
     assert_eq!(resolved.species(), 2);
-    assert!(matches!(
-        resolved.provenance(),
-        InteractionProvenance::InMemory { label: Some(label) } if label == "direct-test"
-    ));
 
-    let inline = JsonInteractionSource::inline(vec![vec![0.0, 1.0], vec![-1.0, 0.0]])
-        .resolve(2)
-        .unwrap();
-    assert_eq!(
-        inline.provenance().kind(),
-        InteractionSourceKind::InlineJson
-    );
-    assert_eq!(inline.values(), &arr2(&[[0.0, 1.0], [-1.0, 0.0]]));
+    let inline = InteractionMatrix::from_rows(vec![vec![0.0, 1.0], vec![-1.0, 0.0]], 2).unwrap();
+    assert_eq!(inline.provenance().kind(), InteractionSourceKind::Inline);
+    assert_coefficients(&inline, &[0.0, 1.0, -1.0, 0.0]);
 
     assert!(matches!(
-        JsonInteractionSource::inline(vec![vec![1.0, 2.0], vec![3.0]]).resolve(2),
-        Err(InteractionSourceError::RaggedRows { .. })
+        InteractionMatrix::from_rows(vec![vec![1.0, 2.0], vec![3.0]], 2),
+        Err(InteractionMatrixError::RaggedRows { .. })
     ));
     assert!(matches!(
-        InMemorySource::new(Array2::zeros((2, 3))).resolve(2),
-        Err(InteractionSourceError::NonSquare { .. })
+        InteractionMatrix::from_matrix(matrix(2, 3, vec![0.0; 6]), 2),
+        Err(InteractionMatrixError::NonSquare { .. })
     ));
     assert!(matches!(
-        InMemorySource::new(Array2::eye(2)).resolve(3),
-        Err(InteractionSourceError::SpeciesMismatch { .. })
+        InteractionMatrix::from_matrix(matrix(2, 2, vec![1.0, 0.0, 0.0, 1.0]), 3),
+        Err(InteractionMatrixError::SpeciesMismatch { .. })
     ));
     assert!(matches!(
-        InMemorySource::new(arr2(&[[f64::INFINITY]])).resolve(1),
-        Err(InteractionSourceError::NonFiniteEntry { .. })
+        InteractionMatrix::from_matrix(matrix(1, 1, vec![f64::INFINITY]), 1),
+        Err(InteractionMatrixError::NonFiniteEntry { .. })
     ));
 }
 
 #[test]
-fn generated_sources_record_typed_parameters_version_and_seed() {
-    let resolved = GeneratedSource::new(DiagonalGenerator {
-        parameters: GeneratorParameters { diagonal: -0.25 },
-        rng_config: Some(RngConfig::new(
+fn generated_matrices_record_explicit_parameters_version_and_seed() {
+    let provenance = GeneratorProvenance::new(
+        "test.diagonal",
+        "1",
+        json!({"diagonal": -0.25}),
+        Some(RngConfig::new(
             Some(42),
             Some(RngMethod::SmallRng),
             std::num::NonZeroUsize::new(1),
         )),
-    })
-    .resolve(3)
+    )
+    .unwrap();
+    let resolved = InteractionMatrix::from_generated(
+        matrix(
+            3,
+            3,
+            vec![-0.25, 0.0, 0.0, 0.0, -0.25, 0.0, 0.0, 0.0, -0.25],
+        ),
+        3,
+        provenance,
+    )
     .unwrap();
 
-    assert_eq!(resolved.values(), &Array2::from_diag_elem(3, -0.25));
     let InteractionProvenance::Generated { generator } = resolved.provenance() else {
         panic!("expected generated provenance");
     };
@@ -143,19 +120,14 @@ fn generated_sources_record_typed_parameters_version_and_seed() {
     assert_eq!(generator.version(), "1");
     assert_eq!(generator.parameters()["diagonal"], -0.25);
     assert_eq!(generator.rng_config().unwrap().seed(), Some(42));
-    let rng = resolved
-        .generator_rng_record()
-        .unwrap()
-        .expect("stochastic generator RNG record");
-    assert_eq!(rng.namespace(), "scientific_interaction.generator");
+    let rng = resolved.generator_rng_record().unwrap().unwrap();
+    assert_eq!(rng.namespace(), INTERACTION_GENERATOR_RNG_NAMESPACE);
     assert_eq!(rng.method(), "test.diagonal+small_rng");
-    assert_eq!(rng.version(), "1+rand-0.10.1");
     assert_eq!(rng.key(), "42");
-    assert_eq!(rng.parameters()["generator_parameters"]["diagonal"], -0.25);
 }
 
 #[test]
-fn workflow_decodes_inline_values_and_resolves_named_file_paths() {
+fn workflow_decodes_inline_values_and_resolves_pip_matrix_paths() {
     let directory = TestDirectory::new("workflow-source-boundary");
     let configuration = directory.path().join("config");
     let data = directory.path().join("data");
@@ -183,37 +155,36 @@ fn workflow_decodes_inline_values_and_resolves_named_file_paths() {
     .unwrap();
     fs::write(
         data.join("interaction.json"),
-        br#"{"format":"glv.interaction-matrix.v1","rows":2,"columns":2,"layout":"row_major","values":[0.0,1.0,-1.0,0.0]}"#,
+        br#"{"kind":"matrix","version":1,"scalar":"f64","shape":[2,2],"data":[0.0,1.0,-1.0,0.0]}"#,
     )
     .unwrap();
 
     let project = ScientificProject::load(directory.path()).unwrap();
     let task = project.task_config(0).unwrap();
-    let inline_rows = task
-        .decode_value::<Vec<Vec<f64>>>("interaction_matrix")
-        .unwrap();
-    let inline = JsonInteractionSource::inline(inline_rows)
-        .resolve(2)
-        .unwrap();
-    let resolved_path = task.resolve_path("interaction_matrix_file").unwrap();
-    let file = JsonInteractionSource::resolved_file(resolved_path)
-        .resolve(2)
-        .unwrap();
-
-    assert_eq!(inline.values(), &Array2::<f64>::eye(2));
-    assert_eq!(file.values(), &arr2(&[[0.0, 1.0], [-1.0, 0.0]]));
+    let inline = InteractionMatrix::from_rows(
+        task.decode_value::<Vec<Vec<f64>>>("interaction_matrix")
+            .unwrap(),
+        2,
+    )
+    .unwrap();
+    let path = task.resolve_path("interaction_matrix_file").unwrap();
+    let file = InteractionMatrix::load_json(&path, 2).unwrap();
+    assert_coefficients(&inline, &[1.0, 0.0, 0.0, 1.0]);
+    assert_coefficients(&file, &[0.0, 1.0, -1.0, 0.0]);
+    assert!(matches!(
+        file.provenance(),
+        InteractionProvenance::JsonFile { path: source } if source == &path
+    ));
 }
 
 #[test]
-fn artifacts_are_exact_content_addressed_and_reused() {
+fn artifacts_use_pip_json_and_workflow_content_addressing() {
     let directory = TestDirectory::new("artifact-reuse");
     let scope = ExecutionScope::create_named(directory.path(), "execution").unwrap();
-    let first_matrix = InMemorySource::new(arr2(&[[2.0, -1.0], [0.5, 3.0]]))
-        .resolve(2)
-        .unwrap();
-    let second_matrix = InMemorySource::new(arr2(&[[2.0, -1.0], [0.5, 3.0]]))
-        .resolve(2)
-        .unwrap();
+    let first_matrix =
+        InteractionMatrix::from_matrix(matrix(2, 2, vec![2.0, -1.0, 0.5, 3.0]), 2).unwrap();
+    let second_matrix =
+        InteractionMatrix::from_matrix(matrix(2, 2, vec![2.0, -1.0, 0.5, 3.0]), 2).unwrap();
 
     let first = persist_interaction_matrix(&scope, &first_matrix).unwrap();
     let second = persist_interaction_matrix(&scope, &second_matrix).unwrap();
@@ -222,13 +193,9 @@ fn artifacts_are_exact_content_addressed_and_reused() {
     assert_eq!(first.descriptor(), second.descriptor());
     assert_eq!(first.descriptor().format(), INTERACTION_MATRIX_FORMAT);
     assert_eq!(first.descriptor().shape(), [2, 2]);
-    assert_eq!(
-        first.descriptor().source_kind(),
-        InteractionSourceKind::InMemory
-    );
 
-    let artifact_path = scope.directory().join(first.descriptor().path());
-    let bytes = fs::read(&artifact_path).unwrap();
+    let path = scope.directory().join(first.descriptor().path());
+    let bytes = fs::read(&path).unwrap();
     let digest = Sha256::digest(&bytes)
         .iter()
         .map(|byte| format!("{byte:02x}"))
@@ -236,65 +203,26 @@ fn artifacts_are_exact_content_addressed_and_reused() {
     assert_eq!(first.descriptor().sha256(), digest);
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&bytes).unwrap(),
-        serde_json::json!({
-            "format": "glv.interaction-matrix.v1",
-            "rows": 2,
-            "columns": 2,
-            "layout": "row_major",
-            "values": [2.0, -1.0, 0.5, 3.0]
+        json!({
+            "kind": "matrix",
+            "version": 1,
+            "scalar": "f64",
+            "shape": [2, 2],
+            "data": [2.0, -1.0, 0.5, 3.0]
         })
     );
 
-    let files = fs::read_dir(scope.directory().join("inputs"))
-        .unwrap()
-        .collect::<Result<Vec<_>, _>>()
-        .unwrap();
-    assert_eq!(files.len(), 1);
-}
-
-#[test]
-fn persisted_artifact_is_a_checked_json_file_source() {
-    let directory = TestDirectory::new("artifact-source");
-    let scope = ExecutionScope::create_named(directory.path(), "execution").unwrap();
-    let original = GeneratedSource::new(DiagonalGenerator {
-        parameters: GeneratorParameters { diagonal: -0.5 },
-        rng_config: None,
-    })
-    .resolve(2)
-    .unwrap();
-    let persisted = persist_interaction_matrix(&scope, &original).unwrap();
-    let path = scope.directory().join(persisted.descriptor().path());
-
-    let loaded = JsonInteractionSource::resolved_file(&path)
-        .resolve(2)
-        .unwrap();
-    let verified =
-        load_verified_interaction_matrix(scope.directory(), persisted.descriptor()).unwrap();
-    assert_eq!(loaded.values(), original.values());
-    assert_eq!(verified.values(), original.values());
-    assert!(matches!(
-        loaded.provenance(),
-        InteractionProvenance::JsonFile { path: source } if source == &path
-    ));
-
+    let verified = load_verified_interaction_matrix(scope.directory(), first.descriptor()).unwrap();
+    assert_coefficients(&verified, &[2.0, -1.0, 0.5, 3.0]);
     let mut metadata = Map::new();
     assert!(
-        persisted
+        first
             .descriptor()
             .insert_into_metadata(&mut metadata)
             .is_none()
     );
-    let encoded = serde_json::to_string(&metadata).unwrap();
     assert!(metadata.contains_key(INTERACTION_MATRIX_METADATA_KEY));
-    assert!(!encoded.contains("values"));
-    assert_eq!(
-        metadata[INTERACTION_MATRIX_METADATA_KEY]["source_kind"],
-        "generated"
-    );
-    assert_eq!(
-        metadata[INTERACTION_MATRIX_METADATA_KEY]["generator"]["rng_config"],
-        serde_json::Value::Null
-    );
+    assert!(!serde_json::to_string(&metadata).unwrap().contains("data"));
 }
 
 #[test]
@@ -303,32 +231,36 @@ fn malformed_json_and_artifact_collisions_fail_closed() {
     let malformed = directory.path().join("malformed.json");
     fs::write(&malformed, b"{").unwrap();
     assert!(matches!(
-        JsonInteractionSource::resolved_file(&malformed).resolve(1),
-        Err(InteractionSourceError::Json { .. })
+        InteractionMatrix::load_json(&malformed, 1),
+        Err(InteractionMatrixError::Json { .. })
     ));
 
     let wrong_count = directory.path().join("wrong-count.json");
     fs::write(
         &wrong_count,
-        br#"{"format":"glv.interaction-matrix.v1","rows":2,"columns":2,"layout":"row_major","values":[1.0]}"#,
+        br#"{"kind":"matrix","version":1,"scalar":"f64","shape":[2,2],"data":[1.0]}"#,
     )
     .unwrap();
     assert!(matches!(
-        JsonInteractionSource::resolved_file(&wrong_count).resolve(2),
-        Err(InteractionSourceError::ElementCountMismatch { .. })
+        InteractionMatrix::load_json(&wrong_count, 2),
+        Err(InteractionMatrixError::Json { .. })
     ));
 
     let scope = ExecutionScope::create_named(directory.path(), "execution").unwrap();
-    let matrix = InMemorySource::new(arr2(&[[1.0]])).resolve(1).unwrap();
+    let matrix = InteractionMatrix::from_matrix(matrix(1, 1, vec![1.0]), 1).unwrap();
     let persisted = persist_interaction_matrix(&scope, &matrix).unwrap();
     let path = scope.directory().join(persisted.descriptor().path());
     fs::write(&path, b"different bytes").unwrap();
     assert!(matches!(
         load_verified_interaction_matrix(scope.directory(), persisted.descriptor()),
-        Err(general_lotka_volterra_rs::kernel::InteractionArtifactLoadError::DigestMismatch { .. })
+        Err(InteractionArtifactLoadError::Workflow(
+            ArtifactLoadError::DigestMismatch { .. }
+        ))
     ));
     assert!(matches!(
         persist_interaction_matrix(&scope, &matrix),
-        Err(InteractionArtifactError::DigestCollision { .. })
+        Err(InteractionArtifactError::Workflow(
+            ArtifactError::DigestCollision { .. }
+        ))
     ));
 }

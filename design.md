@@ -336,7 +336,8 @@ physical-time increment.
 - its complete provenance descriptor; and
 - shared zero-allocation matrix application into caller-provided output.
 
-The interaction matrix is stored as an immutable `Arc<Array2<f64>>`. This lets
+The interaction matrix is stored as an immutable PiP
+`Arc<DenseMatrix<f64>>`. This lets
 independent task kernels share one large matrix without cloning its allocation,
 while generated per-task matrices retain the same ownership API.
 
@@ -383,33 +384,35 @@ updates retain a stable documented numerical operation order. Integration
 tests compare deterministic endpoints to independently generated
 high-resolution ground truth within reviewed method-specific tolerances.
 
-### Interaction sources
+### Interaction matrices
 
-`kernel/source.rs` defines the source contract. A source is consumed to produce
-one resolved matrix and provenance:
+`interaction.rs` is a GLV domain module rather than a separate crate. It wraps
+an immutable `Arc<DenseMatrix<f64>>`, while PiP owns storage, the versioned JSON
+schema, fallible construction, and allocation-free matrix-vector application.
+GLV adds only the nonempty square/species contract and source provenance.
+
+The concrete constructors cover the supported boundaries without requiring a
+custom source or generator trait:
 
 ```rust,ignore
-pub trait InteractionSource {
-    fn resolve(self, species: usize)
-        -> Result<InteractionMatrix, InteractionSourceError>;
-}
+InteractionMatrix::from_matrix(matrix, species)?;
+InteractionMatrix::from_array(array, species)?;
+InteractionMatrix::from_rows(rows, species)?;
+InteractionMatrix::load_json(path, species)?;
+InteractionMatrix::from_generated(matrix, species, provenance)?;
 ```
 
-Implemented source families are:
-
-- in-memory: an owned or already shared `Array2<f64>`;
-- JSON: exact inline rows decoded by Workflow or a versioned matrix file at an
-  already resolved project path; and
-- generated: a typed generator with explicit algorithm identity, version,
-  serializable parameters, and optional resolved PiP `RngConfig` provenance.
+An external generator produces an ordinary PiP matrix. If provenance is
+needed, it supplies a `GeneratorProvenance` value containing explicit identity,
+version, JSON parameters, and an optional resolved PiP `RngConfig`.
 
 Scientific Workflow remains the configuration parser. `ScientificProject` and
 `TaskConfig` decode `fixed.json`, `sweep.json`, and `paths.json` into typed GLV
 source configuration. A kernel source consumes that resolved configuration; it
 does not independently parse the project files.
 
-Direct programmatic callers may supply an already-owned matrix through a
-checked in-memory source. Tests use this path without filesystem setup.
+Direct programmatic callers may supply an already-owned PiP matrix or ndarray.
+Tests use this path without filesystem setup.
 
 ### Resolved matrix persistence
 
@@ -427,15 +430,15 @@ execution-.../
 └── task-000001/
 ```
 
-The artifact format begins as versioned, row-major JSON:
+The artifact uses PiP's versioned dense-matrix JSON:
 
 ```json
 {
-  "format": "glv.interaction-matrix.v1",
-  "rows": 2,
-  "columns": 2,
-  "layout": "row_major",
-  "values": [-0.4, 0.1, 0.05, -0.3]
+  "kind": "matrix",
+  "version": 1,
+  "scalar": "f64",
+  "shape": [2, 2],
+  "data": [-0.4, 0.1, 0.05, -0.3]
 }
 ```
 
@@ -636,7 +639,7 @@ ScientificProject
         ↓
 resolved TaskConfig
         ↓
-interaction source → resolved matrix → content-addressed input artifact
+PiP matrix input → validated GLV interaction → content-addressed input artifact
         ↓
 kernel + noise + invariant → concrete simulation
         ↓

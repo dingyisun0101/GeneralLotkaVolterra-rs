@@ -4,12 +4,13 @@ use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
 
-use ndarray::{Array2, ArrayD, ArrayView1, ArrayViewD};
+use ndarray::{ArrayD, ArrayView1, ArrayViewD};
+use physics_in_parallel::math::prelude::{DenseMatrix, MatrixError};
 use scientific_workflow::system_state::{StateError, SystemState};
 use thiserror::Error as ThisError;
 
+use crate::interaction::{InteractionMatrix, InteractionProvenance};
 use crate::{ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TimeStep};
-use scientific_interaction::{InteractionMatrix, InteractionProvenance};
 
 /// Invalid shared matrix application.
 #[derive(Debug, ThisError)]
@@ -56,12 +57,12 @@ impl KernelCore {
     }
 
     /// Borrows the exact immutable interaction matrix.
-    pub fn interaction(&self) -> &Array2<f64> {
+    pub fn interaction(&self) -> &DenseMatrix<f64> {
         self.interaction.values()
     }
 
     /// Clones only the shared matrix handle, never its coefficient allocation.
-    pub fn shared_interaction(&self) -> Arc<Array2<f64>> {
+    pub fn shared_interaction(&self) -> Arc<DenseMatrix<f64>> {
         self.interaction.shared_values()
     }
 
@@ -93,15 +94,17 @@ impl KernelCore {
                 actual: output.len(),
             });
         }
-        let interaction = self.interaction.values();
-        for (row, output_value) in output.iter_mut().enumerate() {
-            let mut value = 0.0;
-            for (column, input_value) in input.iter().copied().enumerate() {
-                value += interaction[(row, column)] * input_value;
-            }
-            *output_value = value;
-        }
-        Ok(())
+        self.interaction
+            .mul_vector_into(input, output)
+            .map_err(|error| match error {
+                MatrixError::InputLength { expected, actual } => {
+                    KernelCoreError::InputLength { expected, actual }
+                }
+                MatrixError::OutputLength { expected, actual } => {
+                    KernelCoreError::OutputLength { expected, actual }
+                }
+                _ => unreachable!("matrix was validated before kernel construction"),
+            })
     }
 }
 

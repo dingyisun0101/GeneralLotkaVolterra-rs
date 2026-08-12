@@ -1,6 +1,7 @@
+use general_lotka_volterra_rs::interaction::InteractionMatrix;
 use general_lotka_volterra_rs::kernel::{
-    BoundaryCondition, Diffusion, InMemorySource, InteractionSource, Kernel, KernelAlgorithmError,
-    KernelCore, SpatialGeneralLotkaVolterraRk2, SpatialReplicatorRk2,
+    BoundaryCondition, Diffusion, Kernel, KernelAlgorithmError, KernelCore,
+    SpatialGeneralLotkaVolterraRk2, SpatialReplicatorRk2,
 };
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, load_state_schema,
@@ -56,9 +57,7 @@ fn spatial_kernel_rejects_non_contiguous_storage() {
     values.swap_axes(0, 1);
     assert!(values.as_slice().is_none());
 
-    let interaction = InMemorySource::new(Array2::zeros((3, 3)))
-        .resolve(3)
-        .unwrap();
+    let interaction = InteractionMatrix::from_array(Array2::zeros((3, 3)), 3).unwrap();
     let algorithm = SpatialReplicatorRk2::new(
         Array1::zeros(3),
         Diffusion::unit_spacing(Array1::zeros(3), &[2, 2], BoundaryCondition::Periodic).unwrap(),

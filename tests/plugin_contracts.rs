@@ -1,7 +1,8 @@
+use general_lotka_volterra_rs::interaction::{InteractionMatrix, InteractionMatrixError};
 use general_lotka_volterra_rs::invariant::{self, InvariantPolicy};
 use general_lotka_volterra_rs::kernel::{
-    InMemorySource, InteractionSource, InteractionSourceError, Kernel, KernelAlgorithm, KernelCore,
-    KernelCoreError, KernelStateView, KernelStepError, KernelUpdate,
+    Kernel, KernelAlgorithm, KernelCore, KernelCoreError, KernelStateView, KernelStepError,
+    KernelUpdate,
 };
 use general_lotka_volterra_rs::noise::{Noise, NoiseAlgorithm};
 use general_lotka_volterra_rs::{
@@ -168,9 +169,7 @@ impl InvariantPolicy for SumInvariant {
 
 #[test]
 fn kernel_core_validates_and_applies_one_shared_matrix() {
-    let matrix = InMemorySource::new(arr2(&[[2.0, -1.0], [0.5, 3.0]]))
-        .resolve(2)
-        .unwrap();
+    let matrix = InteractionMatrix::from_array(arr2(&[[2.0, -1.0], [0.5, 3.0]]), 2).unwrap();
     let core = KernelCore::new(matrix);
     let shared = core.shared_interaction();
     assert!(std::ptr::eq(core.interaction(), shared.as_ref()));
@@ -180,12 +179,12 @@ fn kernel_core_validates_and_applies_one_shared_matrix() {
     assert_eq!(output, [6.0, 8.0]);
 
     assert!(matches!(
-        InMemorySource::new(Array2::zeros((2, 3))).resolve(2),
-        Err(InteractionSourceError::NonSquare { .. })
+        InteractionMatrix::from_array(Array2::zeros((2, 3)), 2),
+        Err(InteractionMatrixError::NonSquare { .. })
     ));
     assert!(matches!(
-        InMemorySource::new(Array2::from_shape_vec((1, 1), vec![f64::NAN]).unwrap()).resolve(1),
-        Err(InteractionSourceError::NonFiniteEntry { .. })
+        InteractionMatrix::from_array(Array2::from_shape_vec((1, 1), vec![f64::NAN]).unwrap(), 1,),
+        Err(InteractionMatrixError::NonFiniteEntry { .. })
     ));
     assert!(matches!(
         core.apply_interaction(&[1.0], &mut output),
@@ -195,11 +194,8 @@ fn kernel_core_validates_and_applies_one_shared_matrix() {
 
 #[test]
 fn plugins_mutate_only_borrowed_payloads_and_never_advance_time() {
-    let core = KernelCore::new(
-        InMemorySource::new(arr2(&[[0.0, 1.0], [1.0, 0.0]]))
-            .resolve(2)
-            .unwrap(),
-    );
+    let core =
+        KernelCore::new(InteractionMatrix::from_array(arr2(&[[0.0, 1.0], [1.0, 0.0]]), 2).unwrap());
     let mut kernel = Kernel::new(core, EulerInteraction::new(false));
     let mut noise = Noise::new(AdditiveNoise { updates: 0 });
     let mut invariant = SumInvariant;
@@ -233,7 +229,7 @@ fn plugins_mutate_only_borrowed_payloads_and_never_advance_time() {
 
 #[test]
 fn incompatible_spatial_kernel_fails_validation_before_evolution() {
-    let core = KernelCore::new(InMemorySource::new(Array2::eye(2)).resolve(2).unwrap());
+    let core = KernelCore::new(InteractionMatrix::from_array(Array2::eye(2), 2).unwrap());
     let kernel = Kernel::new(core, EulerInteraction::new(true));
     let state = state(vec![0.5, 0.5], None, 1.0);
 
@@ -246,7 +242,7 @@ fn incompatible_spatial_kernel_fails_validation_before_evolution() {
 
 #[test]
 fn validated_time_steps_reject_invalid_increments_before_mutation() {
-    let core = KernelCore::new(InMemorySource::new(Array2::eye(2)).resolve(2).unwrap());
+    let core = KernelCore::new(InteractionMatrix::from_array(Array2::eye(2), 2).unwrap());
     let kernel = Kernel::new(core, EulerInteraction::new(false));
     let noise = Noise::new(AdditiveNoise { updates: 0 });
     let state = state(vec![0.5, 0.5], Some(ArrayD::zeros(IxDyn(&[1, 2]))), 1.0);

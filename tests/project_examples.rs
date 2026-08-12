@@ -1,8 +1,7 @@
 use std::path::PathBuf;
 
-use general_lotka_volterra_rs::kernel::{
-    BoundaryCondition, InteractionSource, JsonInteractionSource,
-};
+use general_lotka_volterra_rs::interaction::InteractionMatrix;
+use general_lotka_volterra_rs::kernel::BoundaryCondition;
 use general_lotka_volterra_rs::project::load_glv_project;
 use general_lotka_volterra_rs::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD};
 use physics_in_parallel::rng::RngConfig;
@@ -67,8 +66,7 @@ fn mean_field_example_is_a_complete_lazy_workflow_project() {
         );
 
         let matrix =
-            JsonInteractionSource::resolved_file(task.resolve_path("interaction_matrix").unwrap())
-                .resolve(3)
+            InteractionMatrix::load_json(task.resolve_path("interaction_matrix").unwrap(), 3)
                 .unwrap();
         assert_eq!(matrix.species(), 3);
         assert_eq!(

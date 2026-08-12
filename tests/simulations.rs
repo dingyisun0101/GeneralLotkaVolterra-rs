@@ -1,9 +1,10 @@
 use std::convert::Infallible;
 
+use general_lotka_volterra_rs::interaction::InteractionMatrix;
 use general_lotka_volterra_rs::invariant::FrequencyInvariant;
 use general_lotka_volterra_rs::kernel::{
-    BoundaryCondition, Diffusion, InMemorySource, InteractionSource, Kernel, KernelAlgorithm,
-    KernelCore, KernelStateView, KernelUpdate,
+    BoundaryCondition, Diffusion, Kernel, KernelAlgorithm, KernelCore, KernelStateView,
+    KernelUpdate,
 };
 use general_lotka_volterra_rs::noise::{Noise, NoiseDomain, ProportionalGaussian};
 use general_lotka_volterra_rs::simulation::{
@@ -18,10 +19,8 @@ use general_lotka_volterra_rs::{
 use ndarray::{Array1, Array2, ArrayD, IxDyn};
 use physics_in_parallel::rng::RngConfig;
 
-fn interaction(species: usize) -> general_lotka_volterra_rs::kernel::InteractionMatrix {
-    InMemorySource::new(Array2::zeros((species, species)))
-        .resolve(species)
-        .unwrap()
+fn interaction(species: usize) -> InteractionMatrix {
+    InteractionMatrix::from_array(Array2::zeros((species, species)), species).unwrap()
 }
 
 fn time_step() -> TimeStep {

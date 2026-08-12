@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
 
-use crate::kernel::{INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactDescriptor};
+use crate::interaction::{INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactDescriptor};
 use crate::reading::glv_json_decoders;
 use crate::simulation::SimulationKind;
 use crate::{AbundanceRepresentation, CHECKPOINT_STREAM, load_state_schema};

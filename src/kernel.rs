@@ -16,11 +16,3 @@ pub use core::{
     Kernel, KernelAlgorithm, KernelCore, KernelCoreError, KernelStateView, KernelStepError,
     KernelUpdate, KernelUpdateError,
 };
-pub use scientific_interaction::{
-    ArtifactDisposition, GeneratedSource, GeneratorProvenance, INTERACTION_GENERATOR_RNG_NAMESPACE,
-    INTERACTION_MATRIX_FORMAT, INTERACTION_MATRIX_LAYOUT, INTERACTION_MATRIX_METADATA_KEY,
-    InMemorySource, InteractionArtifactDescriptor, InteractionArtifactError,
-    InteractionArtifactLoadError, InteractionGenerator, InteractionMatrix, InteractionProvenance,
-    InteractionSource, InteractionSourceError, InteractionSourceKind, JsonInteractionSource,
-    PersistedInteraction, load_verified_interaction_matrix, persist_interaction_matrix,
-};

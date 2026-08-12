@@ -10,6 +10,7 @@ pub mod advanced;
 pub mod core;
 #[doc(hidden)]
 pub mod engine;
+pub mod interaction;
 pub mod invariant;
 pub mod kernel;
 pub mod noise;

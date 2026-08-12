@@ -1,10 +1,10 @@
 use std::sync::{Arc, Mutex};
 
 use general_lotka_volterra_rs::engine::{Engine, EngineBuildError, EngineStepError};
+use general_lotka_volterra_rs::interaction::InteractionMatrix;
 use general_lotka_volterra_rs::invariant::InvariantPolicy;
 use general_lotka_volterra_rs::kernel::{
-    InMemorySource, InteractionSource, Kernel, KernelAlgorithm, KernelCore, KernelStateView,
-    KernelUpdate,
+    Kernel, KernelAlgorithm, KernelCore, KernelStateView, KernelUpdate,
 };
 use general_lotka_volterra_rs::noise::{Noise, NoiseAlgorithm};
 use general_lotka_volterra_rs::{
@@ -133,7 +133,7 @@ fn engine(
     calls: CallLog,
     fail_noise: bool,
 ) -> Engine<TestKernel, TestNoise, TestInvariant> {
-    let interaction = InMemorySource::new(arr2(&[[0.0]])).resolve(1).unwrap();
+    let interaction = InteractionMatrix::from_array(arr2(&[[0.0]]), 1).unwrap();
     Engine::new(
         state(time),
         Kernel::new(
@@ -247,7 +247,7 @@ fn impossible_time_advance_fails_before_any_scientific_mutation() {
 #[test]
 fn engine_rejects_state_without_physical_time_before_validation_or_mutation() {
     let calls = Arc::new(Mutex::new(Vec::new()));
-    let interaction = InMemorySource::new(arr2(&[[0.0]])).resolve(1).unwrap();
+    let interaction = InteractionMatrix::from_array(arr2(&[[0.0]]), 1).unwrap();
     let result = Engine::new(
         state(SimulationTime::from_iteration(7)),
         Kernel::new(

@@ -7,21 +7,22 @@
 /// Imports for advanced users assembling a custom project template.
 pub mod prelude {
     pub use crate::core::{TimeStep, TimeStepError};
+    pub use crate::interaction::{
+        ArtifactDisposition, GeneratorProvenance, INTERACTION_GENERATOR_RNG_NAMESPACE,
+        INTERACTION_MATRIX_FORMAT, INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactDescriptor,
+        InteractionArtifactError, InteractionArtifactLoadError, InteractionMatrix,
+        InteractionMatrixError, InteractionProvenance, InteractionSourceKind, PersistedInteraction,
+        load_verified_interaction_matrix, persist_interaction_matrix,
+    };
     pub use crate::invariant::{
         FrequencyInvariant, INVARIANT_TOLERANCE, InvariantError, InvariantPolicy,
         InvariantPolicyError, LocalFrequencyInvariant, PopulationInvariant, enforce_state,
         validate_state,
     };
     pub use crate::kernel::{
-        ArtifactDisposition, BoundaryCondition, Diffusion, GeneratedSource, GeneratorProvenance,
-        INTERACTION_MATRIX_FORMAT, INTERACTION_MATRIX_LAYOUT, INTERACTION_MATRIX_METADATA_KEY,
-        InMemorySource, InteractionArtifactDescriptor, InteractionArtifactError,
-        InteractionArtifactLoadError, InteractionGenerator, InteractionMatrix,
-        InteractionProvenance, InteractionSource, InteractionSourceError, InteractionSourceKind,
-        JsonInteractionSource, Kernel, KernelAlgorithm, KernelAlgorithmError, KernelCore,
+        BoundaryCondition, Diffusion, Kernel, KernelAlgorithm, KernelAlgorithmError, KernelCore,
         KernelCoreError, KernelStateView, KernelStepError, KernelUpdate, KernelUpdateError,
-        MeanFieldReplicatorRk4, PersistedInteraction, SpatialGeneralLotkaVolterraRk2,
-        SpatialReplicatorRk2, load_verified_interaction_matrix, persist_interaction_matrix,
+        MeanFieldReplicatorRk4, SpatialGeneralLotkaVolterraRk2, SpatialReplicatorRk2,
     };
     pub use crate::noise::{
         DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE, DemographicGaussian, NoNoise, Noise, NoiseAlgorithm,
@@ -54,6 +55,7 @@ pub mod prelude {
     };
 
     pub use ndarray::{Array1, Array2, ArrayD, Axis, IxDyn, ShapeError, arr1, arr2};
+    pub use physics_in_parallel::math::prelude::DenseMatrix;
     pub use physics_in_parallel::rng::{RngConfig, RngMethod};
     pub use physics_in_parallel::space::discrete::square_lattice::SquareLatticeConfig;
     pub use scientific_workflow::prelude::*;

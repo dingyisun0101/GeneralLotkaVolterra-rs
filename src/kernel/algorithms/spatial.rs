@@ -86,6 +86,7 @@ pub(super) struct SpatialRk2 {
     k1: ArrayD<f64>,
     temporary: ArrayD<f64>,
     output: ArrayD<f64>,
+    interaction_output: Vec<f64>,
 }
 
 impl SpatialRk2 {
@@ -129,6 +130,7 @@ impl SpatialRk2 {
             k1: ArrayD::zeros(dynamic_shape.clone()),
             temporary: ArrayD::zeros(dynamic_shape.clone()),
             output: ArrayD::zeros(dynamic_shape),
+            interaction_output: vec![0.0; species],
         })
     }
 
@@ -215,6 +217,7 @@ impl SpatialRk2 {
             dynamics,
             space,
             &mut self.k1,
+            &mut self.interaction_output,
         )?;
         let input = space.as_slice().expect("spatial state was validated");
         let first_stage = self.k1.as_slice().expect("scratch is standard contiguous");
@@ -233,6 +236,7 @@ impl SpatialRk2 {
             dynamics,
             &self.temporary,
             &mut self.k1,
+            &mut self.interaction_output,
         )?;
         let second_stage = self.k1.as_slice().expect("scratch is standard contiguous");
         let output = self
@@ -254,6 +258,7 @@ fn rhs(
     dynamics: SpatialDynamics,
     space: &ArrayD<f64>,
     output: &mut ArrayD<f64>,
+    interaction_output: &mut [f64],
 ) -> Result<(), KernelAlgorithmError> {
     let species_count = growth.len();
     let cells = diffusion.space.num_sites();
@@ -267,34 +272,23 @@ fn rhs(
         .space
         .laplacian(input, species_count, target)
         .map_err(KernelAlgorithmError::SpaceConfig)?;
-    let interaction_matrix = core.interaction();
-
     for cell in 0..cells {
         let base = cell * species_count;
+        core.apply_interaction(&input[base..base + species_count], interaction_output)
+            .expect("kernel and spatial species dimensions were validated");
         let mean_fitness = match dynamics {
             SpatialDynamics::Glv => 0.0,
-            SpatialDynamics::Replicator => {
-                let mut value = 0.0;
-                for species in 0..species_count {
-                    let mut interaction = 0.0;
-                    for neighbor_species in 0..species_count {
-                        interaction += interaction_matrix[(species, neighbor_species)]
-                            * input[base + neighbor_species];
-                    }
-                    value += input[base + species] * (growth[species] + interaction);
-                }
-                value
-            }
+            SpatialDynamics::Replicator => (0..species_count)
+                .map(|species| {
+                    input[base + species] * (growth[species] + interaction_output[species])
+                })
+                .sum(),
         };
 
         for species in 0..species_count {
             let center_index = base + species;
             let center = input[center_index];
-            let mut interaction = 0.0;
-            for neighbor_species in 0..species_count {
-                interaction += interaction_matrix[(species, neighbor_species)]
-                    * input[base + neighbor_species];
-            }
+            let interaction = interaction_output[species];
             let laplacian = target[center_index];
             let reaction = match dynamics {
                 SpatialDynamics::Glv => center * (growth[species] + interaction),

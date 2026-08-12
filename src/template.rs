@@ -16,11 +16,11 @@ use scientific_workflow::system_state::{SimulationTime, SystemState};
 use serde::{Deserialize, Serialize};
 use thiserror::Error as ThisError;
 
-use crate::invariant::FrequencyInvariant;
-use crate::kernel::{
-    Diffusion, InteractionArtifactDescriptor, InteractionSource, JsonInteractionSource, Kernel,
-    KernelAlgorithm, KernelCore, MeanFieldReplicatorRk4, persist_interaction_matrix,
+use crate::interaction::{
+    InteractionArtifactDescriptor, InteractionMatrix, persist_interaction_matrix,
 };
+use crate::invariant::FrequencyInvariant;
+use crate::kernel::{Diffusion, Kernel, KernelAlgorithm, KernelCore, MeanFieldReplicatorRk4};
 use crate::noise::{DemographicGaussian, Noise, NoiseAlgorithm, NoiseDomain};
 use crate::project::{GlvProjectError, load_glv_project};
 use crate::reading::verify_completed_glv_checkpoint;
@@ -218,8 +218,7 @@ fn run_mean_field(
     progress.set_phase("resolving interaction matrix");
     let species = initial_abundance.len();
     let interaction =
-        JsonInteractionSource::resolved_file(task.resolve_path("interaction_matrix")?)
-            .resolve(species)?;
+        InteractionMatrix::load_json(task.resolve_path("interaction_matrix")?, species)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
 
     progress.set_phase("constructing simulation");
@@ -288,8 +287,7 @@ fn run_spatial_replicator(
     progress.set_phase("resolving interaction matrix");
     let species = initial_cell.len();
     let interaction =
-        JsonInteractionSource::resolved_file(task.resolve_path("interaction_matrix")?)
-            .resolve(species)?;
+        InteractionMatrix::load_json(task.resolve_path("interaction_matrix")?, species)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
 
     progress.set_phase("constructing simulation");
@@ -333,8 +331,7 @@ fn run_spatial_glv(
     progress.set_phase("resolving interaction matrix");
     let species = initial_cell.len();
     let interaction =
-        JsonInteractionSource::resolved_file(task.resolve_path("interaction_matrix")?)
-            .resolve(species)?;
+        InteractionMatrix::load_json(task.resolve_path("interaction_matrix")?, species)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
 
     progress.set_phase("constructing simulation");

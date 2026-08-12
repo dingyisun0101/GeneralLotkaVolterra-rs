@@ -4,10 +4,10 @@ use std::num::NonZeroU64;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use general_lotka_volterra_rs::interaction::{InteractionMatrix, persist_interaction_matrix};
 use general_lotka_volterra_rs::invariant::FrequencyInvariant;
 use general_lotka_volterra_rs::kernel::{
-    BoundaryCondition, Diffusion, InMemorySource, InteractionSource, Kernel, KernelCore,
-    MeanFieldReplicatorRk4, persist_interaction_matrix,
+    BoundaryCondition, Diffusion, Kernel, KernelCore, MeanFieldReplicatorRk4,
 };
 use general_lotka_volterra_rs::noise::{
     DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE, DemographicGaussian, Noise, NoiseDomain,
@@ -118,9 +118,7 @@ fn recording_config(queue_bytes: u64) -> Vec<StateStreamConfig> {
     ]
 }
 
-fn make_simulation(
-    interaction: general_lotka_volterra_rs::kernel::InteractionMatrix,
-) -> MeanFieldReplicator {
+fn make_simulation(interaction: InteractionMatrix) -> MeanFieldReplicator {
     MeanFieldReplicator::new(
         Array1::from_vec(vec![0.4, 0.6]),
         interaction,
@@ -130,7 +128,7 @@ fn make_simulation(
 }
 
 fn make_stochastic_simulation(
-    interaction: general_lotka_volterra_rs::kernel::InteractionMatrix,
+    interaction: InteractionMatrix,
 ) -> MeanFieldReplicator<MeanFieldReplicatorRk4, DemographicGaussian> {
     let time_step = TimeStep::new(0.1).unwrap();
     let state = MeanFieldReplicator::new(
@@ -253,9 +251,7 @@ fn workflow_records_all_glv_streams_metadata_terminal_state_and_integrity() {
     let scope = ExecutionScope::create_named(&workspace.root, "execution").unwrap();
     let task =
         workspace.task_parameters(r#"{"seed":7,"physical_time_increment":0.1}"#, "task-config");
-    let interaction = InMemorySource::new(Array2::zeros((2, 2)))
-        .resolve(2)
-        .unwrap();
+    let interaction = InteractionMatrix::from_array(Array2::zeros((2, 2)), 2).unwrap();
     let persisted = persist_interaction_matrix(&scope, &interaction).unwrap();
     let mut simulation = make_simulation(interaction);
     let creation = GlvRecordingMetadata::new(
@@ -465,9 +461,7 @@ fn stochastic_noise_identity_is_written_once_in_creation_metadata() {
     let workspace = Workspace::new("rng-record");
     let scope = ExecutionScope::create_named(&workspace.root, "execution").unwrap();
     let task = workspace.task_parameters(r#"{"seed":42,"noise_sigma":0.05}"#, "task-config");
-    let interaction = InMemorySource::new(Array2::zeros((2, 2)))
-        .resolve(2)
-        .unwrap();
+    let interaction = InteractionMatrix::from_array(Array2::zeros((2, 2)), 2).unwrap();
     let persisted = persist_interaction_matrix(&scope, &interaction).unwrap();
     let simulation = make_stochastic_simulation(interaction);
     let creation = GlvRecordingMetadata::new(
@@ -521,9 +515,7 @@ fn recording_metadata_and_failure_lifecycle_fail_closed() {
     let workspace = Workspace::new("lifecycle");
     let scope = ExecutionScope::create_named(&workspace.root, "execution").unwrap();
     let task = workspace.task_parameters(r#"{"seed":9}"#, "task-config");
-    let interaction = InMemorySource::new(Array2::zeros((2, 2)))
-        .resolve(2)
-        .unwrap();
+    let interaction = InteractionMatrix::from_array(Array2::zeros((2, 2)), 2).unwrap();
     let persisted = persist_interaction_matrix(&scope, &interaction).unwrap();
     let mut simulation = make_simulation(interaction);
 
@@ -596,11 +588,8 @@ fn recording_metadata_and_failure_lifecycle_fail_closed() {
     assert!(interrupted_metadata.get("terminal_metadata").is_none());
 
     let bounded_directory = scope.task_recording_directory(3);
-    let bounded_simulation = make_simulation(
-        InMemorySource::new(Array2::zeros((2, 2)))
-            .resolve(2)
-            .unwrap(),
-    );
+    let bounded_simulation =
+        make_simulation(InteractionMatrix::from_array(Array2::zeros((2, 2)), 2).unwrap());
     let bounded_error = match GlvRecording::start(
         &bounded_directory,
         recording_config(1),
@@ -625,9 +614,7 @@ fn completed_reader_round_trips_populated_spatial_payload_and_exact_time() {
     let workspace = Workspace::new("spatial-read");
     let scope = ExecutionScope::create_named(&workspace.root, "execution").unwrap();
     let task = workspace.task_parameters(r#"{"seed":11}"#, "task-config");
-    let interaction = InMemorySource::new(Array2::zeros((2, 2)))
-        .resolve(2)
-        .unwrap();
+    let interaction = InteractionMatrix::from_array(Array2::zeros((2, 2)), 2).unwrap();
     let persisted = persist_interaction_matrix(&scope, &interaction).unwrap();
     let initial_space = ArrayD::from_shape_vec(IxDyn(&[1, 2]), vec![0.4, 0.6]).unwrap();
     let mut simulation = SpatialReplicator::new(

@@ -5,10 +5,9 @@ use scientific_workflow::rng_record::RngRecord;
 use scientific_workflow::system_state::{SimulationTime, SystemState};
 
 use crate::engine::{Engine, EngineStepError};
+use crate::interaction::InteractionMatrix;
 use crate::invariant::{FrequencyInvariant, InvariantPolicyError};
-use crate::kernel::{
-    InteractionMatrix, Kernel, KernelAlgorithm, KernelCore, MeanFieldReplicatorRk4,
-};
+use crate::kernel::{Kernel, KernelAlgorithm, KernelCore, MeanFieldReplicatorRk4};
 use crate::noise::{NoNoise, Noise, NoiseAlgorithm};
 use crate::{AbundanceRepresentation, TimeStep};
 

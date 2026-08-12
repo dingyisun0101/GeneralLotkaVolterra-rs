@@ -3,8 +3,8 @@ use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use general_lotka_volterra_rs::kernel::{
-    InMemorySource, InteractionSource, load_verified_interaction_matrix, persist_interaction_matrix,
+use general_lotka_volterra_rs::interaction::{
+    InteractionMatrix, load_verified_interaction_matrix, persist_interaction_matrix,
 };
 use general_lotka_volterra_rs::reading::open_completed_glv_recording;
 use general_lotka_volterra_rs::recording::{GlvRecording, GlvRecordingMetadata, TerminationReason};
@@ -98,10 +98,8 @@ fn simulation_config() -> MeanFieldReplicatorConfig {
     )
 }
 
-fn interaction() -> general_lotka_volterra_rs::kernel::InteractionMatrix {
-    InMemorySource::new(arr2(&[[-0.2, 0.7], [-0.4, 0.1]]))
-        .resolve(2)
-        .unwrap()
+fn interaction() -> InteractionMatrix {
+    InteractionMatrix::from_array(arr2(&[[-0.2, 0.7], [-0.4, 0.1]]), 2).unwrap()
 }
 
 fn advance(

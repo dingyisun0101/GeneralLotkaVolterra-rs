@@ -1,7 +1,7 @@
 {
-  "format": "glv.interaction-matrix.v1",
-  "rows": 3,
-  "columns": 3,
-  "layout": "row_major",
-  "values": [0.0, 0.4, -0.2, -0.3, 0.0, 0.5, 0.2, -0.4, 0.0]
+  "kind": "matrix",
+  "version": 1,
+  "scalar": "f64",
+  "shape": [3, 3],
+  "data": [0.0, 0.4, -0.2, -0.3, 0.0, 0.5, 0.2, -0.4, 0.0]
 }

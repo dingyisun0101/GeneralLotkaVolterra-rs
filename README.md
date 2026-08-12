@@ -86,8 +86,8 @@ run(MyTemplate, "path/to/project/config")?;
 ```
 
 `advanced::prelude` exposes the concrete models, kernels, noise plugins,
-invariants, interaction sources, recording adapter, ndarray boundary types,
-PiP spatial/RNG configuration, Workflow prelude, and the
+invariants, interaction matrices, recording adapter, ndarray boundary types,
+PiP matrix/spatial/RNG configuration, Workflow prelude, and the
 `GlvProjectTemplate` contract. Built-in templates are assembled from these same
 components; they have no privileged model API.
 
@@ -97,6 +97,59 @@ per-task scientific composition: it decodes the supplied `TaskConfig`, starts
 and completes that task's `TaskProgress`, resolves scientific inputs, constructs
 and steps the model, and delegates recording to `GlvRecording`. It should not
 create another project, scope, reporter, task wrapper, or output-path system.
+
+## Supported public API
+
+This is the exhaustive GLV API allowlist. Ordinary users may use only `run`
+and `GlvTemplate`, both exported by `prelude`. Advanced template authors may
+also use the items below through `advanced::prelude`. Their public enum
+variants and documented public methods are part of the same supported surface;
+other compiler-visible implementation paths are not compatibility promises.
+
+- State: `ABUNDANCE_FIELD`, `SPACE_FIELD`, `TOTAL_FIELD`, `SIGNAL_STREAM`,
+  `SPACE_STREAM`, `CHECKPOINT_STREAM`, `AbundanceRepresentation`,
+  `AggregateAbundance`, `SpatialAbundance`, `TotalAbundance`, `TimeStep`,
+  `TimeStepError`, `load_state_schema`, and `state_schema_path`.
+- Interaction: `InteractionMatrix`, `InteractionMatrixError`,
+  `InteractionProvenance`, `InteractionSourceKind`, `GeneratorProvenance`,
+  `InteractionArtifactDescriptor`, `InteractionArtifactError`,
+  `InteractionArtifactLoadError`, `PersistedInteraction`,
+  `ArtifactDisposition`, `INTERACTION_MATRIX_FORMAT`,
+  `INTERACTION_MATRIX_METADATA_KEY`, `INTERACTION_GENERATOR_RNG_NAMESPACE`,
+  `persist_interaction_matrix`, and `load_verified_interaction_matrix`.
+- Kernels: `Kernel`, `KernelAlgorithm`, `KernelCore`, `KernelStateView`,
+  `KernelUpdate`, `KernelCoreError`, `KernelStepError`, `KernelUpdateError`,
+  `KernelAlgorithmError`, `MeanFieldReplicatorRk4`, `Diffusion`,
+  `BoundaryCondition`, `SpatialReplicatorRk2`, and
+  `SpatialGeneralLotkaVolterraRk2`.
+- Noise: `Noise`, `NoiseAlgorithm`, `NoiseDomain`, `NoNoise`,
+  `DemographicGaussian`, `ProportionalGaussian`, `NoisePluginError`,
+  `NoiseStepError`, `DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE`, and
+  `PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE`.
+- Invariants: `InvariantPolicy`, `InvariantError`, `InvariantPolicyError`,
+  `FrequencyInvariant`, `LocalFrequencyInvariant`, `PopulationInvariant`,
+  `INVARIANT_TOLERANCE`, `validate_state`, and `enforce_state`.
+- Models: `MeanFieldReplicator`, `MeanFieldReplicatorConfig`,
+  `SpatialReplicator`, `SpatialReplicatorConfig`,
+  `SpatialGeneralLotkaVolterra`, `SpatialGeneralLotkaVolterraConfig`,
+  `SimulationKind`, `SimulationBuildError`, `DefaultSimulationBuildError`,
+  and `StateAssemblyError`.
+- Project execution: `GlvProjectTemplate`, `TemplateTaskError`, `GlvRunError`,
+  `GlvProjectError`, `load_glv_project`, and `validate_glv_project`.
+- Recording and reading: `GlvRecording`, `GlvRecordingError`,
+  `GlvRecordingMetadata`, `RecordingMetadataError`, `TerminationReason`,
+  `GlvCheckpointVerificationError`, `glv_json_decoders`,
+  `open_completed_glv_recording`, `verify_completed_glv_checkpoint`,
+  `ABUNDANCE_REPRESENTATION_METADATA_KEY`,
+  `COMPLETED_ITERATION_METADATA_KEY`, `MODEL_KIND_METADATA_KEY`,
+  `TASK_ORDINAL_METADATA_KEY`, and `TERMINATION_REASON_METADATA_KEY`.
+- Deliberate upstream reexports: ndarray's `Array1`, `Array2`, `ArrayD`,
+  `Axis`, `IxDyn`, `ShapeError`, `arr1`, and `arr2`; PiP's `DenseMatrix`,
+  `RngConfig`, `RngMethod`, and `SquareLatticeConfig`; and the complete
+  `scientific_workflow::prelude` allowlist documented by Workflow.
+
+Generated crate documentation is the exact signature reference for every item
+in this list.
 
 ## Canonical state
 
@@ -120,21 +173,22 @@ state contract. Workflow embeds the resolved schema in every recording.
 ## Interaction matrices
 
 An interaction matrix is resolved and validated before simulation
-construction. Sources can be:
+construction. It can be constructed from:
 
-- an in-memory `Array2<f64>`;
+- an in-memory PiP `DenseMatrix<f64>` or ndarray `Array2<f64>`;
 - inline JSON already decoded by `TaskConfig`;
 - a versioned JSON file resolved through project paths; or
-- a typed generator with identity, version, parameters, and a resolved PiP
-  `RngConfig` when stochastic.
+- externally generated coefficients with explicit identity, version,
+  parameters, and a resolved PiP `RngConfig` when stochastic.
 
-Matrices are immutable `Arc<Array2<f64>>` values. For recorded runs,
+Matrices are immutable `Arc<DenseMatrix<f64>>` values and use PiP's standard
+versioned matrix JSON. For recorded runs,
 `persist_interaction_matrix` writes canonical JSON once beneath the execution
 scope's `inputs/` directory. Its SHA-256 digest, shape, format, path, and source
 kind enter recording metadata; matrix values do not enter evolving states or
 checkpoints. Scientific Workflow now owns the generic atomic publication,
-content reuse, path containment, and digest-verification mechanics;
-`scientific-interaction` owns only the matrix document and provenance schema.
+content reuse, path containment, and digest-verification mechanics. GLV's
+`interaction` module owns only ecological validation and provenance.
 
 ## Workflow project layout
 
