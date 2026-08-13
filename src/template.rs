@@ -625,6 +625,9 @@ where
     while termination_reason.is_none()
         && simulation.state().simulation_time().iteration() < maximum_iterations
     {
+        if progress.is_cancelled() {
+            return Err("execution cancelled by Ctrl-C".into());
+        }
         let time = simulation.step_template()?;
         recording.observe_state(simulation.state())?;
         terminal_state_monitor.observe(simulation.state())?;
