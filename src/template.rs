@@ -2,6 +2,7 @@
 
 use std::error::Error;
 use std::ffi::OsStr;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use ndarray::Array1;
@@ -645,8 +646,28 @@ where
     };
     let terminal_state = terminal_state_monitor.finish(simulation.state(), &termination_reason)?;
     recording.complete(simulation.state(), termination_reason, &terminal_state)?;
+    publish_terminal_state(scope, task.task_ordinal(), &terminal_state)?;
     verify_completed_glv_checkpoint(recording_directory, simulation.state())?;
     progress.complete(progress_completion_reason)?;
+    Ok(())
+}
+
+fn publish_terminal_state(
+    scope: &ExecutionScope,
+    task_ordinal: u64,
+    terminal_state: &crate::TerminalState,
+) -> Result<(), TemplateTaskError> {
+    let path = scope
+        .directory()
+        .join(format!("task-{task_ordinal:06}-terminal-state.json"));
+    let temporary = path.with_extension(format!("json.tmp-{}", std::process::id()));
+    fs::write(&temporary, serde_json::to_vec_pretty(terminal_state)?)?;
+    fs::rename(&temporary, &path)?;
+
+    let published = crate::TerminalState::from_json_bytes(&fs::read(&path)?)?;
+    if published != *terminal_state {
+        return Err("published terminal-state JSON failed round-trip validation".into());
+    }
     Ok(())
 }
 
@@ -877,6 +898,11 @@ mod tests {
         assert!(terminal.is_accepted_fixed_point());
         assert_eq!(terminal.composition(), [1.0, 0.0]);
         assert_eq!(terminal.sample_count(), 1);
+        let exported = crate::TerminalState::from_json_bytes(
+            &fs::read(scope.directory().join("task-000000-terminal-state.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(exported, terminal);
     }
 
     #[test]
@@ -917,6 +943,11 @@ mod tests {
         assert_eq!(terminal.sample_count(), 2);
         assert_eq!(terminal.first_sample_iteration(), 0);
         assert_eq!(terminal.last_sample_iteration(), 3);
+        let exported = crate::TerminalState::from_json_bytes(
+            &fs::read(scope.directory().join("task-000000-terminal-state.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(exported, terminal);
         assert!(matches!(
             crate::open_accepted_fixed_point(scope.task_recording_directory(0)),
             Err(crate::AcceptedFixedPointError::NotAcceptedFixedPoint { .. })

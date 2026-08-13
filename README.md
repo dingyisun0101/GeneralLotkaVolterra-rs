@@ -145,10 +145,11 @@ This shortcut applies to mean-field and spatial replicators, not generic
 population GLV.
 
 Terminal-state production is independent of automatic termination. Every
-successful built-in run embeds one normalized
-`general-lotka-volterra.terminal-state.v1` product in completed recording
-metadata. GLV samples global composition in a bounded internal window starting
-at iteration zero and always forces the final state into that window. If GLV
+successful built-in run embeds one normalized `ecological.terminal-state.v1`
+product in completed recording metadata and publishes the same document as
+`task-NNNNNN-terminal-state.json` beside that task's recording directory. GLV
+samples global composition in a bounded internal window starting at iteration
+zero and always forces the final state into that window. If GLV
 accepted a fixed point, the product contains the exact normalized final state,
 has one represented sample, and is marked `accepted_fixed_point`. For every
 other completion reason—including an iteration cap, oscillation, a request, or
@@ -190,6 +191,9 @@ match terminal.classification() {
     TerminalStateClassification::AcceptedFixedPoint => {
         println!("GLV accepted a fixed point");
     }
+    TerminalStateClassification::AbsorbedState => {
+        println!("the dynamics reached an absorbed state");
+    }
     TerminalStateClassification::TrailingAverage => {
         println!("terminal vector is a trailing estimate");
     }
@@ -197,6 +201,10 @@ match terminal.classification() {
 # Ok(())
 # }
 ```
+
+The execution directory also contains a directly inspectable
+`task-NNNNNN-terminal-state.json`. This is a validated export of the canonical
+recording metadata, not a separately computed result.
 
 An accepted fixed point contains the exact normalized final composition. Any
 other successful completion contains a bounded trailing average, including an
