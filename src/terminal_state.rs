@@ -1,4 +1,4 @@
-//! Canonical terminal composition produced by every deterministic GLV run.
+//! Canonical terminal composition shared by ecological simulations.
 
 use std::collections::VecDeque;
 use std::path::Path;
@@ -14,7 +14,8 @@ use crate::recording::{
 use crate::{ABUNDANCE_FIELD, AggregateAbundance};
 
 /// Versioned terminal-state document embedded in completed recording metadata.
-pub const TERMINAL_STATE_FORMAT: &str = "general-lotka-volterra.terminal-state.v1";
+pub const TERMINAL_STATE_FORMAT: &str = "ecological.terminal-state.v1";
+const LEGACY_TERMINAL_STATE_FORMAT: &str = "general-lotka-volterra.terminal-state.v1";
 
 /// Configuration for the bounded trailing estimate used without fixed-point acceptance.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -51,6 +52,8 @@ impl TerminalStatePolicy {
 pub enum TerminalStateClassification {
     /// The final state passed GLV's configured fixed-point monitor.
     AcceptedFixedPoint,
+    /// The final state is absorbing under the simulator's dynamics.
+    AbsorbedState,
     /// The run ended otherwise and this vector is a trailing sample mean.
     TrailingAverage,
 }
@@ -134,7 +137,7 @@ impl TerminalState {
     }
 
     fn validate(&self) -> Result<(), TerminalStateError> {
-        if self.format != TERMINAL_STATE_FORMAT
+        if self.format != TERMINAL_STATE_FORMAT && self.format != LEGACY_TERMINAL_STATE_FORMAT
             || self.termination_reason.is_empty()
             || self.sample_count == 0
             || self.first_sample_iteration > self.last_sample_iteration
@@ -154,7 +157,15 @@ impl TerminalState {
                 Err(TerminalStateError::InvalidProduct)
             }
             TerminalStateClassification::TrailingAverage
-                if self.termination_reason == "fixed_point" =>
+                if matches!(self.termination_reason.as_str(), "fixed_point" | "absorbed") =>
+            {
+                Err(TerminalStateError::InvalidProduct)
+            }
+            TerminalStateClassification::AbsorbedState
+                if self.termination_reason != "absorbed"
+                    || self.sample_count != 1
+                    || self.first_sample_iteration != self.iteration
+                    || self.last_sample_iteration != self.iteration =>
             {
                 Err(TerminalStateError::InvalidProduct)
             }
@@ -185,38 +196,73 @@ impl TerminalStateMonitor {
         })
     }
 
+    /// Returns whether the completed iteration lies on this monitor's cadence.
+    pub fn samples_iteration(&self, iteration: u64) -> bool {
+        iteration.is_multiple_of(self.policy.sample_interval_iterations)
+    }
+
     /// Samples one state when its completed iteration lies on the configured cadence.
     pub fn observe(&mut self, state: &SystemState) -> Result<(), TerminalStateError> {
         let iteration = state.simulation_time().iteration();
-        if iteration.is_multiple_of(self.policy.sample_interval_iterations) {
-            self.push(state)?;
+        if self.samples_iteration(iteration) {
+            self.push_composition(iteration, &normalized_composition(state)?)?;
+        }
+        Ok(())
+    }
+
+    /// Samples one aggregate composition without depending on a model's spatial state.
+    pub fn observe_composition(
+        &mut self,
+        iteration: u64,
+        abundance: &[f64],
+    ) -> Result<(), TerminalStateError> {
+        if self.samples_iteration(iteration) {
+            self.push_composition(iteration, abundance)?;
         }
         Ok(())
     }
 
     /// Produces the common terminal product, forcing the final state into the tail.
     pub fn finish(
-        mut self,
+        self,
         final_state: &SystemState,
         reason: &TerminationReason,
     ) -> Result<TerminalState, TerminalStateError> {
-        let iteration = final_state.simulation_time().iteration();
+        let classification = match reason {
+            TerminationReason::FixedPoint(_) => TerminalStateClassification::AcceptedFixedPoint,
+            _ => TerminalStateClassification::TrailingAverage,
+        };
+        self.finish_composition(
+            final_state.simulation_time().iteration(),
+            final_state.simulation_time().physical_time(),
+            &normalized_composition(final_state)?,
+            reason.as_str(),
+            classification,
+        )
+    }
+
+    /// Produces a terminal product from aggregate abundance only.
+    pub fn finish_composition(
+        mut self,
+        iteration: u64,
+        physical_time: Option<f64>,
+        final_abundance: &[f64],
+        termination_reason: &str,
+        classification: TerminalStateClassification,
+    ) -> Result<TerminalState, TerminalStateError> {
         if self
             .samples
             .back()
             .is_none_or(|sample| sample.iteration != iteration)
         {
-            self.push(final_state)?;
+            self.push_composition(iteration, final_abundance)?;
         }
-        let (classification, composition, sample_count, first, last) = match reason {
-            TerminationReason::FixedPoint(_) => (
-                TerminalStateClassification::AcceptedFixedPoint,
-                normalized_composition(final_state)?,
-                1,
-                iteration,
-                iteration,
-            ),
-            _ => {
+        let (composition, sample_count, first, last) = match classification {
+            TerminalStateClassification::AcceptedFixedPoint
+            | TerminalStateClassification::AbsorbedState => {
+                (normalize_copy(final_abundance)?, 1, iteration, iteration)
+            }
+            TerminalStateClassification::TrailingAverage => {
                 let first = self
                     .samples
                     .front()
@@ -235,21 +281,15 @@ impl TerminalStateMonitor {
                     *value /= self.samples.len() as f64;
                 }
                 normalize_values(&mut mean)?;
-                (
-                    TerminalStateClassification::TrailingAverage,
-                    mean,
-                    self.samples.len(),
-                    first.iteration,
-                    last.iteration,
-                )
+                (mean, self.samples.len(), first.iteration, last.iteration)
             }
         };
         let product = TerminalState {
             format: TERMINAL_STATE_FORMAT.to_owned(),
             classification,
-            termination_reason: reason.as_str().to_owned(),
+            termination_reason: termination_reason.to_owned(),
             iteration,
-            physical_time: final_state.simulation_time().physical_time(),
+            physical_time,
             composition,
             sample_count,
             first_sample_iteration: first,
@@ -259,13 +299,17 @@ impl TerminalStateMonitor {
         Ok(product)
     }
 
-    fn push(&mut self, state: &SystemState) -> Result<(), TerminalStateError> {
+    fn push_composition(
+        &mut self,
+        iteration: u64,
+        abundance: &[f64],
+    ) -> Result<(), TerminalStateError> {
         while self.samples.len() >= self.policy.trailing_window_samples {
             self.samples.pop_front();
         }
         self.samples.push_back(CompositionSample {
-            iteration: state.simulation_time().iteration(),
-            composition: normalized_composition(state)?,
+            iteration,
+            composition: normalize_copy(abundance)?,
         });
         Ok(())
     }
@@ -303,13 +347,18 @@ pub fn open_terminal_state(
 }
 
 fn normalized_composition(state: &SystemState) -> Result<Vec<f64>, TerminalStateError> {
-    let mut values = state
+    let values = state
         .payload::<AggregateAbundance>(ABUNDANCE_FIELD)?
         .iter()
         .copied()
         .collect::<Vec<_>>();
-    normalize_values(&mut values)?;
-    Ok(values)
+    normalize_copy(&values)
+}
+
+fn normalize_copy(values: &[f64]) -> Result<Vec<f64>, TerminalStateError> {
+    let mut normalized = values.to_vec();
+    normalize_values(&mut normalized)?;
+    Ok(normalized)
 }
 
 fn normalize_values(values: &mut [f64]) -> Result<(), TerminalStateError> {
@@ -427,5 +476,22 @@ mod tests {
             TerminalState::from_json_bytes(&product.to_json_bytes().unwrap()).unwrap(),
             product
         );
+    }
+
+    #[test]
+    fn abundance_only_absorption_uses_the_exact_final_composition() {
+        let mut monitor = TerminalStateMonitor::new(TerminalStatePolicy::default()).unwrap();
+        monitor.observe_composition(0, &[2.0, 2.0]).unwrap();
+        let product = monitor
+            .finish_composition(
+                3,
+                None,
+                &[0.0, 4.0],
+                "absorbed",
+                TerminalStateClassification::AbsorbedState,
+            )
+            .unwrap();
+        assert_eq!(product.composition(), &[0.0, 1.0]);
+        assert_eq!(product.sample_count(), 1);
     }
 }

@@ -110,11 +110,24 @@ impl GlvProjectTemplate for GlvTemplate {
         reporter: &ProgressReporter,
         task: TaskConfig,
     ) -> Result<(), TemplateTaskError> {
+        let maximum_iterations = task.decode_value("maximum_iterations")?;
+        let progress = reporter.start_task(&task, 0, Some(maximum_iterations))?;
+        self.run_task_with_progress(scope, task, progress)
+    }
+}
+
+impl GlvTemplate {
+    fn run_task_with_progress(
+        &mut self,
+        scope: &ExecutionScope,
+        task: TaskConfig,
+        progress: TaskProgress,
+    ) -> Result<(), TemplateTaskError> {
         match self {
-            Self::MeanFieldReplicator => run_mean_field(scope, reporter, task, false),
-            Self::MeanFieldReplicatorDemographic => run_mean_field(scope, reporter, task, true),
-            Self::SpatialReplicator => run_spatial_replicator(scope, reporter, task),
-            Self::SpatialGeneralLotkaVolterra => run_spatial_glv(scope, reporter, task),
+            Self::MeanFieldReplicator => run_mean_field(scope, task, progress, false),
+            Self::MeanFieldReplicatorDemographic => run_mean_field(scope, task, progress, true),
+            Self::SpatialReplicator => run_spatial_replicator(scope, task, progress),
+            Self::SpatialGeneralLotkaVolterra => run_spatial_glv(scope, task, progress),
         }
     }
 }
@@ -138,6 +151,9 @@ pub enum GlvRunError {
     /// Workflow progress reporting failed.
     #[error(transparent)]
     Reporting(#[from] ReportingError),
+    /// An embedding reporter can drive only a single task per GLV project.
+    #[error("external progress requires exactly one GLV task, found {actual}")]
+    ExternalProgressTaskCount { actual: u64 },
     /// One template task failed.
     #[error("template `{template}` task {task_ordinal} failed: {source}")]
     Task {
@@ -195,6 +211,36 @@ pub fn run(
     Ok(scope)
 }
 
+/// Runs one built-in, single-task GLV project with a progress handle supplied
+/// by an embedding application. The caller owns the parent reporter.
+pub fn run_with_progress(
+    mut template: GlvTemplate,
+    configuration_folder: impl AsRef<Path>,
+    progress: TaskProgress,
+) -> Result<ExecutionScope, GlvRunError> {
+    let configuration_folder = configuration_folder.as_ref();
+    let project_root = project_root(configuration_folder)?;
+    let project = load_glv_project(project_root)?;
+    let actual = project.task_count();
+    if actual != 1 {
+        return Err(GlvRunError::ExternalProgressTaskCount { actual });
+    }
+    let scope = ExecutionScope::create_generated(project.resolve_path("recordings")?)?;
+    let task = project
+        .task_configs()
+        .next()
+        .expect("a validated one-task project has one task");
+    let task_ordinal = task.task_ordinal();
+    template
+        .run_task_with_progress(&scope, task, progress)
+        .map_err(|source| GlvRunError::Task {
+            template: template.name().to_owned(),
+            task_ordinal,
+            source,
+        })?;
+    Ok(scope)
+}
+
 fn project_root(configuration_folder: &Path) -> Result<&Path, GlvRunError> {
     if configuration_folder.file_name() != Some(OsStr::new("config")) {
         return Err(GlvRunError::ConfigurationFolder {
@@ -209,12 +255,23 @@ fn project_root(configuration_folder: &Path) -> Result<&Path, GlvRunError> {
 
 fn run_mean_field(
     scope: &ExecutionScope,
-    reporter: &ProgressReporter,
     task: TaskConfig,
+    progress: TaskProgress,
     demographic: bool,
 ) -> Result<(), TemplateTaskError> {
-    let initial_abundance = Array1::from_vec(task.decode_value("initial_abundance")?);
-    let growth = Array1::from_vec(task.decode_value("growth")?);
+    let initial_abundance = if task.value("K").is_some() {
+        let species = task.decode_value::<usize>("K")?;
+        if species == 0 {
+            return Err("mean-field well-mixed species count `K` must be nonzero".into());
+        }
+        Array1::from_elem(species, 1.0 / species as f64)
+    } else {
+        Array1::from_vec(task.decode_value("initial_abundance")?)
+    };
+    let growth = match task.value("growth").and_then(serde_json::Value::as_f64) {
+        Some(value) => Array1::from_elem(initial_abundance.len(), value),
+        None => Array1::from_vec(task.decode_value("growth")?),
+    };
     let cutoff = task.decode_value("cutoff")?;
     let time_step = TimeStep::new(task.decode_value("physical_time_increment")?)?;
     let maximum_iterations = task.decode_value("maximum_iterations")?;
@@ -228,7 +285,6 @@ fn run_mean_field(
         })
         .transpose()?;
 
-    let progress = reporter.start_task(&task, 0, Some(maximum_iterations))?;
     progress.set_phase("resolving interaction matrix");
     let species = initial_abundance.len();
     let interaction =
@@ -285,12 +341,20 @@ fn run_mean_field(
 
 fn run_spatial_replicator(
     scope: &ExecutionScope,
-    reporter: &ProgressReporter,
     task: TaskConfig,
+    progress: TaskProgress,
 ) -> Result<(), TemplateTaskError> {
     let spatial_shape: Vec<usize> = task.decode_value("spatial_shape")?;
-    let growth = Array1::from_vec(task.decode_value("growth")?);
-    let diffusion_coefficients = Array1::from_vec(task.decode_value("diffusion")?);
+    let species = task
+        .value("K")
+        .map(|_| task.decode_value::<usize>("K"))
+        .transpose()?;
+    if species == Some(0) {
+        return Err("spatial species count `K` must be nonzero".into());
+    }
+    let growth = decode_species_values(&task, "growth", species)?;
+    let species = species.unwrap_or(growth.len());
+    let diffusion_coefficients = decode_species_values(&task, "diffusion", Some(species))?;
     let spacing: Vec<f64> = task.decode_value("spacing")?;
     let boundary = task.decode_value("boundary")?;
     let cutoff = task.decode_value("cutoff")?;
@@ -299,9 +363,7 @@ fn run_spatial_replicator(
     let streams: Vec<StateStreamConfig> = task.decode_value("recording")?;
     let initialization: SpatialInitialStateSource = task.decode_value("initialization")?;
 
-    let progress = reporter.start_task(&task, 0, Some(maximum_iterations))?;
     progress.set_phase("resolving interaction matrix");
-    let species = growth.len();
     let interaction =
         InteractionMatrix::load_json(task.resolve_path("interaction_matrix")?, species)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
@@ -328,10 +390,25 @@ fn run_spatial_replicator(
     )
 }
 
+fn decode_species_values(
+    task: &TaskConfig,
+    name: &str,
+    species: Option<usize>,
+) -> Result<Array1<f64>, TemplateTaskError> {
+    match (
+        task.value(name).and_then(serde_json::Value::as_f64),
+        species,
+    ) {
+        (Some(value), Some(species)) => Ok(Array1::from_elem(species, value)),
+        (Some(_), None) => Err(format!("scalar `{name}` requires species count `K`").into()),
+        (None, _) => Ok(Array1::from_vec(task.decode_value(name)?)),
+    }
+}
+
 fn run_spatial_glv(
     scope: &ExecutionScope,
-    reporter: &ProgressReporter,
     task: TaskConfig,
+    progress: TaskProgress,
 ) -> Result<(), TemplateTaskError> {
     let spatial_shape: Vec<usize> = task.decode_value("spatial_shape")?;
     let growth = Array1::from_vec(task.decode_value("growth")?);
@@ -346,7 +423,6 @@ fn run_spatial_glv(
     let streams: Vec<StateStreamConfig> = task.decode_value("recording")?;
     let initialization: SpatialInitialStateSource = task.decode_value("initialization")?;
 
-    let progress = reporter.start_task(&task, 0, Some(maximum_iterations))?;
     progress.set_phase("resolving interaction matrix");
     let species = growth.len();
     let interaction =

@@ -25,7 +25,7 @@ mod template;
 pub mod terminal_state;
 pub mod termination;
 
-pub use template::{GlvRunError, GlvTemplate, run};
+pub use template::{GlvRunError, GlvTemplate, run, run_with_progress};
 
 pub use simulation::{
     MeanFieldReplicator, MeanFieldReplicatorConfig, SpatialGeneralLotkaVolterra,
