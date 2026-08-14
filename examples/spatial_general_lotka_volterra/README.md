@@ -45,9 +45,10 @@ Both deterministic automatic-termination detectors are enabled: fixed-point
 convergence and nontrivial recurrent oscillation. Their evidence policy is
 internal to GLV.
 
-The binary selects `GlvTemplate::SpatialGeneralLotkaVolterra` and contains no
-model assembly or recording code. Pass another compatible Workflow `config`
-folder as the optional first argument.
+The binary registers `GlvTemplate::SpatialGeneralLotkaVolterra::run_task` in an
+application-owned Workflow phase. It contains no model assembly or recording
+code. Pass another compatible Workflow `config` folder as the optional first
+argument.
 Every invocation creates new output and records aggregate, spatial, and
 checkpoint streams. The program verifies the final checkpoint before success.
 Every successful task also records a classified terminal composition. For

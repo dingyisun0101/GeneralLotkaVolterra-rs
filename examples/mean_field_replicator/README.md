@@ -27,10 +27,19 @@ Install Rust 1.97 or newer, copy this entire directory, and run:
 cargo run --release
 ```
 
-The binary contains only the ordinary two-item prelude and this call:
+The binary loads the GLV project, creates its execution scope, and registers the
+built-in model as a Workflow progress workload:
 
 ```rust
-run(GlvTemplate::MeanFieldReplicator, config)?;
+let simulation = Phase::builder(1, "mean-field replicator")
+    .progress_tasks_from_project(&project, template.as_str(), move |context| {
+        template.run_task(&task_execution, context)
+    })
+    .build()?;
+WorkflowRuntime::builder()
+    .phase(simulation)
+    .build()?
+    .run_phases([1])?;
 ```
 
 An optional first argument selects another compatible Workflow configuration

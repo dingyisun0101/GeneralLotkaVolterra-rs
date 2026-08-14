@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 use std::path::Path;
 
-use scientific_workflow::prelude::{StateError, StorageError, SystemState};
+use scientific_workflow::prelude::basics::{StateError, StorageError, SystemState};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -436,7 +436,7 @@ pub enum TerminalStateError {
 #[cfg(test)]
 mod tests {
     use ndarray::Array1;
-    use scientific_workflow::prelude::SimulationTime;
+    use scientific_workflow::prelude::basics::SimulationTime;
 
     use super::*;
 

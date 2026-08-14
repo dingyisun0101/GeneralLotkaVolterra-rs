@@ -40,9 +40,10 @@ Both deterministic automatic-termination detectors are enabled: fixed-point
 convergence and nontrivial recurrent oscillation. GLV owns their evidence
 policy and records which outcome, if any, ended the run.
 
-The binary selects `GlvTemplate::SpatialReplicator`; all construction and
-Workflow orchestration are supplied by that built-in template. An optional
-configuration-folder path allows the same binary to run another project:
+The binary registers `GlvTemplate::SpatialReplicator::run_task` in a phase it
+constructs itself. GLV supplies model construction and scientific I/O while the
+application owns Workflow orchestration. An optional configuration-folder path
+allows the same binary to run another project:
 
 ```sh
 cargo run --release -- /path/to/project/config

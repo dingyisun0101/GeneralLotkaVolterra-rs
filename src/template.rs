@@ -1,21 +1,18 @@
-//! Project templates and the single ordinary-user execution entry point.
+//! Built-in GLV task templates for application-owned Workflow runtimes.
 
 use std::error::Error;
-use std::ffi::OsStr;
 use std::fs;
-use std::path::{Path, PathBuf};
 
 use ndarray::Array1;
 use physics_in_parallel::rng::RngConfig;
 use physics_in_parallel::space::discrete::square_lattice::SquareLatticeConfig;
-use scientific_workflow::configuration::{ConfigurationError, TaskConfig};
-use scientific_workflow::execution::{ExecutionScope, ExecutionScopeError};
-use scientific_workflow::reporting::{ProgressReporter, ReportingError, TaskProgress};
+use scientific_workflow::configuration::TaskConfig;
+use scientific_workflow::execution::ExecutionScope;
 use scientific_workflow::rng_record::RngRecord;
+use scientific_workflow::runtime::TaskContext;
 use scientific_workflow::storage::StateStreamConfig;
 use scientific_workflow::system_state::{SimulationTime, SystemState};
 use serde::{Deserialize, Serialize};
-use thiserror::Error as ThisError;
 
 use crate::initialization::{
     ResolvedSpatialInitialState, SpatialInitialStateSource, categorical_to_species_field,
@@ -26,7 +23,6 @@ use crate::interaction::{
 use crate::invariant::FrequencyInvariant;
 use crate::kernel::{Diffusion, Kernel, KernelAlgorithm, KernelCore, MeanFieldReplicatorRk4};
 use crate::noise::{DemographicGaussian, Noise, NoiseAlgorithm, NoiseDomain};
-use crate::project::{GlvProjectError, load_glv_project};
 use crate::reading::verify_completed_glv_checkpoint;
 use crate::recording::{GlvRecording, GlvRecordingMetadata, TerminationReason};
 use crate::simulation::{
@@ -52,8 +48,8 @@ pub type TemplateTaskError = Box<dyn Error + Send + Sync + 'static>;
 /// Complete built-in GLV project compositions.
 ///
 /// A variant fixes model assembly only. Scientific values, recording streams,
-/// path aliases, and parameter sweeps remain in the Workflow project documents
-/// found beneath the configuration folder passed to [`run`].
+/// path aliases, and parameter sweeps remain in application-owned Workflow
+/// project documents.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -80,184 +76,35 @@ impl GlvTemplate {
     }
 }
 
-/// Advanced contract for a complete GLV project composition.
-///
-/// [`run`] retains all generic orchestration. Implementors receive Workflow's
-/// own scope, reporter, and task values directly and should assemble only their
-/// scientific model plus its thin recording adapter. Each task must finish its
-/// progress handle successfully; otherwise the outer reporter rejects project
-/// completion.
-pub trait GlvProjectTemplate {
-    /// Stable human-readable template identity.
-    fn name(&self) -> &str;
-
-    /// Runs one complete Workflow task inside the already-created execution.
-    fn run_task(
-        &mut self,
-        scope: &ExecutionScope,
-        reporter: &ProgressReporter,
-        task: TaskConfig,
-    ) -> Result<(), TemplateTaskError>;
-}
-
-impl GlvProjectTemplate for GlvTemplate {
-    fn name(&self) -> &str {
-        self.as_str()
-    }
-
-    fn run_task(
-        &mut self,
-        scope: &ExecutionScope,
-        reporter: &ProgressReporter,
-        task: TaskConfig,
-    ) -> Result<(), TemplateTaskError> {
-        let maximum_iterations = task.decode_value("maximum_iterations")?;
-        let progress = reporter.start_task(&task, 0, Some(maximum_iterations))?;
-        self.run_task_with_progress(scope, task, progress)
-    }
-}
-
 impl GlvTemplate {
-    fn run_task_with_progress(
-        &mut self,
+    /// Executes one runtime-owned task using GLV's model and I/O capabilities.
+    ///
+    /// The application owns project loading, phase construction, scheduling,
+    /// and the [`scientific_workflow::runtime::WorkflowRuntime`]. GLV owns model
+    /// construction, evolution, recording, terminal-state publication, and
+    /// final checkpoint verification for this task.
+    pub fn run_task(
+        self,
         scope: &ExecutionScope,
-        task: TaskConfig,
-        progress: TaskProgress,
+        context: &TaskContext,
     ) -> Result<(), TemplateTaskError> {
+        let task = context.configuration();
+        let maximum_iterations = task.decode_value("maximum_iterations")?;
+        context.set_iteration(0)?;
+        context.set_target_iteration(maximum_iterations)?;
         match self {
-            Self::MeanFieldReplicator => run_mean_field(scope, task, progress, false),
-            Self::MeanFieldReplicatorDemographic => run_mean_field(scope, task, progress, true),
-            Self::SpatialReplicator => run_spatial_replicator(scope, task, progress),
-            Self::SpatialGeneralLotkaVolterra => run_spatial_glv(scope, task, progress),
+            Self::MeanFieldReplicator => run_mean_field(scope, task, context, false),
+            Self::MeanFieldReplicatorDemographic => run_mean_field(scope, task, context, true),
+            Self::SpatialReplicator => run_spatial_replicator(scope, task, context),
+            Self::SpatialGeneralLotkaVolterra => run_spatial_glv(scope, task, context),
         }
     }
-}
-
-/// Failure while executing a complete GLV project.
-#[derive(Debug, ThisError)]
-#[non_exhaustive]
-pub enum GlvRunError {
-    /// The supplied path was not the conventional `config` directory.
-    #[error("GLV configuration folder must be named `config`, got `{path}`")]
-    ConfigurationFolder { path: PathBuf },
-    /// Workflow could not load or GLV could not validate the project.
-    #[error(transparent)]
-    Project(#[from] GlvProjectError),
-    /// Workflow could not resolve the configured recording root.
-    #[error(transparent)]
-    Configuration(#[from] ConfigurationError),
-    /// Workflow could not create the execution directory.
-    #[error(transparent)]
-    ExecutionScope(#[from] ExecutionScopeError),
-    /// Workflow progress reporting failed.
-    #[error(transparent)]
-    Reporting(#[from] ReportingError),
-    /// An embedding reporter can drive only a single task per GLV project.
-    #[error("external progress requires exactly one GLV task, found {actual}")]
-    ExternalProgressTaskCount { actual: u64 },
-    /// One template task failed.
-    #[error("template `{template}` task {task_ordinal} failed: {source}")]
-    Task {
-        /// Stable template identity.
-        template: String,
-        /// Workflow task ordinal.
-        task_ordinal: u64,
-        /// Scientific or recording failure returned by the template.
-        #[source]
-        source: TemplateTaskError,
-    },
-}
-
-/// Runs every Workflow task for one built-in or advanced GLV template.
-///
-/// `configuration_folder` must be the conventional `config` directory. Its
-/// parent is the Workflow project root against which `paths.json` entries are
-/// resolved. The returned Workflow scope identifies the generated output.
-pub fn run(
-    mut template: impl GlvProjectTemplate,
-    configuration_folder: impl AsRef<Path>,
-) -> Result<ExecutionScope, GlvRunError> {
-    let configuration_folder = configuration_folder.as_ref();
-    let project_root = project_root(configuration_folder)?;
-    let project = load_glv_project(project_root)?;
-    let scope = ExecutionScope::create_generated(project.resolve_path("recordings")?)?;
-    let reporter = ProgressReporter::for_project(&project).start()?;
-    reporter.report(format!(
-        "running template {} in {}",
-        template.name(),
-        scope.directory().display()
-    ))?;
-
-    for task in project.task_configs() {
-        let task_ordinal = task.task_ordinal();
-        if let Err(source) = template.run_task(&scope, &reporter, task) {
-            let message = format!(
-                "template {} task {task_ordinal} failed: {source}",
-                template.name()
-            );
-            let _ = reporter.fail(message);
-            return Err(GlvRunError::Task {
-                template: template.name().to_owned(),
-                task_ordinal,
-                source,
-            });
-        }
-    }
-
-    reporter.complete(format!(
-        "template {} complete: {}",
-        template.name(),
-        scope.directory().display()
-    ))?;
-    Ok(scope)
-}
-
-/// Runs one built-in, single-task GLV project with a progress handle supplied
-/// by an embedding application. The caller owns the parent reporter.
-pub fn run_with_progress(
-    mut template: GlvTemplate,
-    configuration_folder: impl AsRef<Path>,
-    progress: TaskProgress,
-) -> Result<ExecutionScope, GlvRunError> {
-    let configuration_folder = configuration_folder.as_ref();
-    let project_root = project_root(configuration_folder)?;
-    let project = load_glv_project(project_root)?;
-    let actual = project.task_count();
-    if actual != 1 {
-        return Err(GlvRunError::ExternalProgressTaskCount { actual });
-    }
-    let scope = ExecutionScope::create_generated(project.resolve_path("recordings")?)?;
-    let task = project
-        .task_configs()
-        .next()
-        .expect("a validated one-task project has one task");
-    let task_ordinal = task.task_ordinal();
-    template
-        .run_task_with_progress(&scope, task, progress)
-        .map_err(|source| GlvRunError::Task {
-            template: template.name().to_owned(),
-            task_ordinal,
-            source,
-        })?;
-    Ok(scope)
-}
-
-fn project_root(configuration_folder: &Path) -> Result<&Path, GlvRunError> {
-    if configuration_folder.file_name() != Some(OsStr::new("config")) {
-        return Err(GlvRunError::ConfigurationFolder {
-            path: configuration_folder.to_path_buf(),
-        });
-    }
-    Ok(configuration_folder
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new(".")))
 }
 
 fn run_mean_field(
     scope: &ExecutionScope,
-    task: TaskConfig,
-    progress: TaskProgress,
+    task: &TaskConfig,
+    context: &TaskContext,
     demographic: bool,
 ) -> Result<(), TemplateTaskError> {
     let initial_abundance = if task.value("K").is_some() {
@@ -286,13 +133,13 @@ fn run_mean_field(
         })
         .transpose()?;
 
-    progress.set_phase("resolving interaction matrix");
+    context.set_detail("resolving interaction matrix");
     let species = initial_abundance.len();
     let interaction =
         InteractionMatrix::load_json(task.resolve_path("interaction_matrix")?, species)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
 
-    progress.set_phase("constructing simulation");
+    context.set_detail("constructing simulation");
     let config = MeanFieldReplicatorConfig::new(growth.clone(), cutoff, time_step);
     if let Some((sigma, rng)) = noise {
         let initial_state =
@@ -318,7 +165,7 @@ fn run_mean_field(
         finish_task(
             scope,
             task,
-            progress,
+            context,
             streams,
             maximum_iterations,
             persisted.descriptor(),
@@ -330,7 +177,7 @@ fn run_mean_field(
         finish_task(
             scope,
             task,
-            progress,
+            context,
             streams,
             maximum_iterations,
             persisted.descriptor(),
@@ -342,8 +189,8 @@ fn run_mean_field(
 
 fn run_spatial_replicator(
     scope: &ExecutionScope,
-    task: TaskConfig,
-    progress: TaskProgress,
+    task: &TaskConfig,
+    context: &TaskContext,
 ) -> Result<(), TemplateTaskError> {
     let spatial_shape: Vec<usize> = task.decode_value("spatial_shape")?;
     let species = task
@@ -353,9 +200,9 @@ fn run_spatial_replicator(
     if species == Some(0) {
         return Err("spatial species count `K` must be nonzero".into());
     }
-    let growth = decode_species_values(&task, "growth", species)?;
+    let growth = decode_species_values(task, "growth", species)?;
     let species = species.unwrap_or(growth.len());
-    let diffusion_coefficients = decode_species_values(&task, "diffusion", Some(species))?;
+    let diffusion_coefficients = decode_species_values(task, "diffusion", Some(species))?;
     let spacing: Vec<f64> = task.decode_value("spacing")?;
     let boundary = task.decode_value("boundary")?;
     let cutoff = task.decode_value("cutoff")?;
@@ -364,14 +211,14 @@ fn run_spatial_replicator(
     let streams: Vec<StateStreamConfig> = task.decode_value("recording")?;
     let initialization: SpatialInitialStateSource = task.decode_value("initialization")?;
 
-    progress.set_phase("resolving interaction matrix");
+    context.set_detail("resolving interaction matrix");
     let interaction =
         InteractionMatrix::load_json(task.resolve_path("interaction_matrix")?, species)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
 
-    progress.set_phase("constructing simulation");
+    context.set_detail("constructing simulation");
     let lattice = SquareLatticeConfig::try_new(&spatial_shape, boundary, Some(&spacing))?;
-    let resolved = initialization.resolve(&task, scope, lattice.clone(), species)?;
+    let resolved = initialization.resolve(task, scope, lattice.clone(), species)?;
     let initial_space = categorical_to_species_field(resolved.initial(), 1.0)?;
     let diffusion = Diffusion::new(diffusion_coefficients, lattice)?;
     let simulation = SpatialReplicator::new(
@@ -382,7 +229,7 @@ fn run_spatial_replicator(
     finish_task(
         scope,
         task,
-        progress,
+        context,
         streams,
         maximum_iterations,
         persisted.descriptor(),
@@ -408,8 +255,8 @@ fn decode_species_values(
 
 fn run_spatial_glv(
     scope: &ExecutionScope,
-    task: TaskConfig,
-    progress: TaskProgress,
+    task: &TaskConfig,
+    context: &TaskContext,
 ) -> Result<(), TemplateTaskError> {
     let spatial_shape: Vec<usize> = task.decode_value("spatial_shape")?;
     let growth = Array1::from_vec(task.decode_value("growth")?);
@@ -424,15 +271,15 @@ fn run_spatial_glv(
     let streams: Vec<StateStreamConfig> = task.decode_value("recording")?;
     let initialization: SpatialInitialStateSource = task.decode_value("initialization")?;
 
-    progress.set_phase("resolving interaction matrix");
+    context.set_detail("resolving interaction matrix");
     let species = growth.len();
     let interaction =
         InteractionMatrix::load_json(task.resolve_path("interaction_matrix")?, species)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
 
-    progress.set_phase("constructing simulation");
+    context.set_detail("constructing simulation");
     let lattice = SquareLatticeConfig::try_new(&spatial_shape, boundary, Some(&spacing))?;
-    let resolved = initialization.resolve(&task, scope, lattice.clone(), species)?;
+    let resolved = initialization.resolve(task, scope, lattice.clone(), species)?;
     let initial_space =
         categorical_to_species_field(resolved.initial(), initial_population_per_site)?;
     let diffusion = Diffusion::new(diffusion_coefficients, lattice)?;
@@ -450,7 +297,7 @@ fn run_spatial_glv(
     finish_task(
         scope,
         task,
-        progress,
+        context,
         streams,
         maximum_iterations,
         persisted.descriptor(),
@@ -573,8 +420,8 @@ where
 #[allow(clippy::too_many_arguments)]
 fn finish_task<S>(
     scope: &ExecutionScope,
-    task: TaskConfig,
-    progress: TaskProgress,
+    task: &TaskConfig,
+    context: &TaskContext,
     streams: Vec<StateStreamConfig>,
     maximum_iterations: u64,
     interaction: &InteractionArtifactDescriptor,
@@ -620,35 +467,44 @@ where
     let mut recording =
         GlvRecording::start(&recording_directory, streams, metadata, simulation.state())?;
 
-    progress.set_phase("evolving");
+    context.set_detail("evolving");
     let mut termination_reason = evaluate_automatic_termination(&mut simulation, monitor.as_mut())?
         .map(TerminationReason::from);
     while termination_reason.is_none()
         && simulation.state().simulation_time().iteration() < maximum_iterations
     {
-        if progress.is_cancelled() {
+        if context.is_cancelled() {
             return Err("execution cancelled by Ctrl-C".into());
         }
         let time = simulation.step_template()?;
         recording.observe_state(simulation.state())?;
         terminal_state_monitor.observe(simulation.state())?;
-        progress.set_iteration(time.iteration())?;
+        context.set_iteration(time.iteration())?;
         termination_reason = evaluate_automatic_termination(&mut simulation, monitor.as_mut())?
             .map(TerminationReason::from);
     }
 
     let termination_reason = termination_reason.unwrap_or(TerminationReason::MaximumIterations);
 
-    progress.set_phase("validating recording");
-    let progress_completion_reason = match &termination_reason {
-        TerminationReason::MaximumIterations => None,
-        reason => Some(format!("scientific termination: {}", reason.as_str())),
-    };
+    context.set_detail("validating recording");
     let terminal_state = terminal_state_monitor.finish(simulation.state(), &termination_reason)?;
+    let scientific_termination =
+        (!matches!(termination_reason, TerminationReason::MaximumIterations)).then(|| {
+            (
+                simulation.state().simulation_time().iteration(),
+                termination_reason.as_str(),
+            )
+        });
     recording.complete(simulation.state(), termination_reason, &terminal_state)?;
     publish_terminal_state(scope, task.task_ordinal(), &terminal_state)?;
     verify_completed_glv_checkpoint(recording_directory, simulation.state())?;
-    progress.complete(progress_completion_reason)?;
+    if let Some((iteration, reason)) = scientific_termination {
+        context.set_target_iteration(iteration)?;
+        context.report(format!(
+            "scientific termination: {} at iteration {iteration}",
+            reason
+        ))?;
+    }
     Ok(())
 }
 
@@ -723,10 +579,35 @@ mod tests {
         COMPLETED_ITERATION_METADATA_KEY, TERMINATION_DIAGNOSTICS_METADATA_KEY,
         TERMINATION_REASON_METADATA_KEY,
     };
+    use scientific_workflow::prelude::runtime::{Phase, WorkflowRuntime};
     use serde_json::Value;
     use std::fs;
+    use std::path::{Path, PathBuf};
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicU64, Ordering};
+
+    fn run_project(template: GlvTemplate, root: &Path) -> ExecutionScope {
+        let project = crate::project::load_glv_project(root).unwrap();
+        let scope =
+            ExecutionScope::create_generated(project.resolve_path("recordings").unwrap()).unwrap();
+        let task_scope = scope.clone();
+        let phase = Phase::builder(1, "GLV simulation")
+            .progress_tasks_from_project(&project, template.as_str(), move |context| {
+                template.run_task(&task_scope, context)
+            })
+            .max_concurrent_workloads(1)
+            .queue_capacity(1)
+            .build()
+            .unwrap();
+        WorkflowRuntime::builder()
+            .phase(phase)
+            .hidden()
+            .build()
+            .unwrap()
+            .run_phases([1])
+            .unwrap();
+        scope
+    }
 
     static TEST_SEQUENCE: AtomicU64 = AtomicU64::new(0);
     static RUN_LOCK: Mutex<()> = Mutex::new(());
@@ -854,20 +735,10 @@ mod tests {
     }
 
     #[test]
-    fn entry_point_requires_the_configuration_folder() {
-        let error = project_root(Path::new("project")).unwrap_err();
-        assert!(matches!(error, GlvRunError::ConfigurationFolder { .. }));
-        assert_eq!(
-            project_root(Path::new("project/config")).unwrap(),
-            Path::new("project")
-        );
-    }
-
-    #[test]
-    fn ordinary_runner_stops_at_a_confirmed_fixed_point_and_records_evidence() {
+    fn runtime_task_stops_at_a_confirmed_fixed_point_and_records_evidence() {
         let _guard = RUN_LOCK.lock().unwrap();
         let project = TestProject::stationary();
-        let scope = run(GlvTemplate::MeanFieldReplicator, project.0.join("config")).unwrap();
+        let scope = run_project(GlvTemplate::MeanFieldReplicator, &project.0);
         let document: Value = serde_json::from_slice(
             &fs::read(scope.task_recording_directory(0).join("metadata.json")).unwrap(),
         )
@@ -906,10 +777,10 @@ mod tests {
     }
 
     #[test]
-    fn runner_accepts_a_collapse_on_the_last_allowed_step() {
+    fn runtime_task_accepts_a_collapse_on_the_last_allowed_step() {
         let _guard = RUN_LOCK.lock().unwrap();
         let project = TestProject::collapses_at_cap();
-        let scope = run(GlvTemplate::MeanFieldReplicator, project.0.join("config")).unwrap();
+        let scope = run_project(GlvTemplate::MeanFieldReplicator, &project.0);
         let fixed_point =
             crate::open_accepted_fixed_point(scope.task_recording_directory(0)).unwrap();
         assert_eq!(fixed_point.iteration(), 1);
@@ -920,11 +791,7 @@ mod tests {
     fn population_monoculture_with_nonzero_residual_is_not_a_fixed_point() {
         let _guard = RUN_LOCK.lock().unwrap();
         let project = TestProject::nonstationary_population_monoculture();
-        let scope = run(
-            GlvTemplate::SpatialGeneralLotkaVolterra,
-            project.0.join("config"),
-        )
-        .unwrap();
+        let scope = run_project(GlvTemplate::SpatialGeneralLotkaVolterra, &project.0);
         let terminal = crate::open_terminal_state(scope.task_recording_directory(0)).unwrap();
         assert!(!terminal.is_accepted_fixed_point());
         assert_eq!(terminal.termination_reason(), "maximum_iterations");
@@ -932,10 +799,10 @@ mod tests {
     }
 
     #[test]
-    fn capped_runner_publishes_a_trailing_average_with_an_explicit_marker() {
+    fn capped_runtime_task_publishes_a_trailing_average_with_an_explicit_marker() {
         let _guard = RUN_LOCK.lock().unwrap();
         let project = TestProject::capped();
-        let scope = run(GlvTemplate::MeanFieldReplicator, project.0.join("config")).unwrap();
+        let scope = run_project(GlvTemplate::MeanFieldReplicator, &project.0);
         let terminal = crate::open_terminal_state(scope.task_recording_directory(0)).unwrap();
         assert!(!terminal.is_accepted_fixed_point());
         assert_eq!(terminal.termination_reason(), "maximum_iterations");

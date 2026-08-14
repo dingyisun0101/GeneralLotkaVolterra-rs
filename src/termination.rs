@@ -2,7 +2,7 @@
 
 use std::collections::VecDeque;
 
-use scientific_workflow::prelude::SystemState;
+use scientific_workflow::prelude::basics::SystemState;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -612,7 +612,7 @@ pub enum TerminationError {
     #[error("invalid termination configuration: {0}")]
     InvalidConfig(String),
     #[error("canonical state could not be read: {0}")]
-    State(#[source] scientific_workflow::prelude::StateError),
+    State(#[source] scientific_workflow::prelude::basics::StateError),
     #[error("spatial_field termination requires a populated spatial state")]
     SpatialFieldRequired,
     #[error("termination observable must be nonempty, finite, nonnegative, and have positive mass")]
@@ -628,7 +628,7 @@ pub enum TerminationError {
 #[cfg(test)]
 mod tests {
     use ndarray::Array1;
-    use scientific_workflow::prelude::{SimulationTime, SystemState};
+    use scientific_workflow::prelude::basics::{SimulationTime, SystemState};
 
     use super::*;
 

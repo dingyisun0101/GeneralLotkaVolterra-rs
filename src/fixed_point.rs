@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use scientific_workflow::prelude::{StateError, StorageError};
+use scientific_workflow::prelude::basics::{StateError, StorageError};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 

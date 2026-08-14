@@ -51,9 +51,7 @@ pub mod prelude {
         SpatialGeneralLotkaVolterraConfig, SpatialReplicator, SpatialReplicatorConfig,
         StateAssemblyError,
     };
-    pub use crate::template::{
-        GlvProjectTemplate, GlvRunError, GlvTemplate, TemplateTaskError, run,
-    };
+    pub use crate::template::{GlvTemplate, TemplateTaskError};
     pub use crate::terminal_state::{
         TERMINAL_STATE_FORMAT, TerminalState, TerminalStateClassification, TerminalStateError,
         TerminalStateMonitor, TerminalStatePolicy, open_terminal_state,
@@ -79,5 +77,6 @@ pub mod prelude {
     pub use physics_in_parallel::math::prelude::DenseMatrix;
     pub use physics_in_parallel::rng::{RngConfig, RngMethod};
     pub use physics_in_parallel::space::discrete::square_lattice::SquareLatticeConfig;
-    pub use scientific_workflow::prelude::*;
+    pub use scientific_workflow::prelude::basics::*;
+    pub use scientific_workflow::prelude::runtime::*;
 }

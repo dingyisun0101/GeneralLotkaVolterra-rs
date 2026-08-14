@@ -1,6 +1,6 @@
 [package]
 name = "general-lotka-volterra-rs"
-version = "0.5.1"
+version = "0.6.0"
 edition = "2024"
 rust-version = "1.97"
 autoexamples = false
@@ -32,10 +32,10 @@ default-members = ["."]
 resolver = "3"
 
 [dependencies]
-ecological-initial-state = "0.1.1"
+ecological-initial-state = "0.1.2"
 ndarray = { version = "0.17.2", features = ["serde"] }
 physics_in_parallel = "3.2.2"
-scientific-workflow = "0.2.4"
+scientific-workflow = "0.3.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"
@@ -49,4 +49,4 @@ codegen-units = 1
 [patch.crates-io]
 ecological-initial-state = { path = "../init_state" }
 scientific-workflow = { path = "../workflow/rust" }
- general-lotka-volterra-rs = { path = "." }
+general-lotka-volterra-rs = { path = "." }

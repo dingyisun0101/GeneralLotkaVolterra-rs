@@ -5,7 +5,7 @@ use general_lotka_volterra_rs::kernel::BoundaryCondition;
 use general_lotka_volterra_rs::project::load_glv_project;
 use general_lotka_volterra_rs::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD};
 use physics_in_parallel::rng::RngConfig;
-use scientific_workflow::prelude::{SamplingInterval, StateStreamConfig};
+use scientific_workflow::prelude::basics::{SamplingInterval, StateStreamConfig};
 
 fn example_root(name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))

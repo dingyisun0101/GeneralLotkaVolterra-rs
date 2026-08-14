@@ -10,9 +10,9 @@ implementation on `sw-version`.
   and progress behavior.
 - Keep GLV responsible for ecological equations, numerical algorithms,
   invariants, stochastic updates, validation, and model-specific assembly.
-- Provide one ordinary-user `run(template, config_folder)` entry point and keep
-  concrete simulations, kernels, noise algorithms, invariant policies, and
-  interaction sources in a separate advanced template-authoring layer.
+- Provide built-in templates as runtime-compatible task workloads while the
+  application owns project loading, phase construction, scheduling, and
+  `WorkflowRuntime` execution.
 - Validate deterministic numerical behavior against independent
   high-resolution ground truth before changing scientific behavior.
 - Make every resolved interaction matrix independently inspectable and exactly
@@ -142,7 +142,7 @@ Scientific Workflow owns:
   recording lifecycle;
 - `StoredStateSeriesReader`, typed reconstruction, and state series;
 - creation-time and terminal recording metadata; and
-- `ProgressReporter` and `TaskProgress`.
+- `WorkflowRuntime`, phases, `TaskContext`, progress, and cancellation.
 
 GLV owns:
 
@@ -646,23 +646,20 @@ retain ownership of any rejected payload through typed Workflow
 
 ## Ordinary and advanced API layers
 
-The ordinary `prelude` exports only `run` and `GlvTemplate`. The caller selects
-one built-in scientific composition and supplies the conventional Workflow
-`config` folder. `run` derives the project root, loads and validates the
-project, expands tasks, creates the Workflow execution scope and progress
-reporter, delegates model-specific work to the template, and returns the
-completed `ExecutionScope`.
+The ordinary `prelude` exports `load_glv_project` and `GlvTemplate`. The caller
+loads the project, creates an `ExecutionScope`, constructs phases, and registers
+`GlvTemplate::run_task` as a progress workload. The template receives
+Workflow's `TaskContext` and the application-owned scope directly; GLV defines
+no parallel runtime, task, progress, or configuration wrapper.
 
 The separate `advanced::prelude` exposes the building blocks needed to create a
-custom composition. `GlvProjectTemplate` is the only extension contract. Its
-`run_task` method receives Workflow's existing `ExecutionScope`,
-`ProgressReporter`, and `TaskConfig` directly; GLV defines no parallel context,
-task, or configuration wrapper. The built-in `GlvTemplate` enum implements the
-same contract using the same advanced model/plugin APIs.
+custom application workload from concrete simulations, kernels, noise plugins,
+invariants, interaction facilities, and recording adapters. Custom composition
+does not require a GLV-owned orchestration trait.
 
 ## Orchestration and recording
 
-The single entry point owns this standard project flow:
+An application-owned Workflow phase drives this standard task flow:
 
 ```text
 ScientificProject
@@ -687,10 +684,10 @@ complete with final state and terminal metadata
 Every runnable model example supplies conventional
 `config/{fixed,sweep,paths,state}.json` inputs. Scientific parameters are
 decoded from `TaskConfig`; interaction files are resolved before construction
-and persisted once per execution scope. `run` iterates lazy task configurations
-sequentially and reports through `ProgressReporter` and `TaskProgress`.
-Example `main.rs` files only select a built-in template and pass their config
-folder.
+and persisted once per execution scope. Example `main.rs` files demonstrate
+project loading, execution-scope creation, phase registration, scheduling
+bounds, and runtime execution explicitly. GLV updates the supplied
+`TaskContext` while retaining ownership of all scientific I/O.
 
 After completion, examples reopen the checkpoint stream through
 `StoredStateSeriesReader` and compare it with the in-memory final state. The

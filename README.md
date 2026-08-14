@@ -1,9 +1,10 @@
 # General Lotka–Volterra for Rust
 
-`general-lotka-volterra-rs` runs ecological simulations from a configuration
-folder. Choose a built-in model, call one function, and GLV handles task
-expansion, evolution, progress, recording, terminal-state production, and
-final integrity checks.
+`general-lotka-volterra-rs` provides ecological models and their scientific I/O
+as workloads for an application-owned Scientific Workflow runtime. GLV handles
+model construction, evolution, recording, terminal-state production, and final
+integrity checks; the application owns task expansion, phases, scheduling, and
+runtime execution.
 
 The included models are:
 
@@ -17,30 +18,44 @@ Add the crate:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = "0.5.0"
+general-lotka-volterra-rs = "0.6.0"
+scientific-workflow = "0.3.3"
 ```
 
-Copy the configuration, inputs, and small `main.rs` from the example closest
-to your study. Ordinary applications then select a built-in template and point
-it at the project's `config` directory:
+Copy the configuration, inputs, and `main.rs` from the example closest to your
+study. Applications select a built-in GLV template and register it as a
+Workflow phase workload:
 
 ```rust,no_run
 use general_lotka_volterra_rs::prelude::*;
+use scientific_workflow::prelude::basics::ExecutionScope;
+use scientific_workflow::prelude::runtime::{Phase, WorkflowRuntime};
 
-# fn main() -> Result<(), Box<dyn std::error::Error>> {
-let execution = run(
-    GlvTemplate::MeanFieldReplicator,
-    "examples/mean_field_replicator/config",
-)?;
+# fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+let project = load_glv_project("examples/mean_field_replicator")?;
+let execution = ExecutionScope::create_generated(project.resolve_path("recordings")?)?;
+let task_execution = execution.clone();
+let template = GlvTemplate::MeanFieldReplicator;
+let simulation = Phase::builder(1, "mean-field replicator")
+    .progress_tasks_from_project(&project, template.as_str(), move |context| {
+        template.run_task(&task_execution, context)
+    })
+    .max_concurrent_workloads(1)
+    .queue_capacity(1)
+    .build()?;
+WorkflowRuntime::builder()
+    .phase(simulation)
+    .build()?
+    .run_phases([1])?;
 println!("results: {}", execution.directory().display());
 # Ok(())
 # }
 ```
 
-The ordinary prelude deliberately exports only `run` and `GlvTemplate`.
-`run` returns the completed execution scope, which identifies the newly
-created output directory. Paths, model parameters, sweeps, and recording
-settings live in the project files rather than in Rust code.
+The GLV prelude exports the built-in template and GLV-aware project loader.
+Workflow types are imported from Workflow itself, making ownership explicit.
+Paths, model parameters, sweeps, and recording settings remain in project files
+rather than in Rust code.
 
 The minimum supported toolchain is Rust 1.97 with edition 2024.
 
@@ -271,11 +286,12 @@ Its payload fixture is serialized by a Rust conformance test.
 
 ## Advanced composition
 
-Most users should stay with `prelude::{run, GlvTemplate}` and copy a complete
-example. Researchers who genuinely need a new model composition can import
-`advanced::prelude` and implement `GlvProjectTemplate` using the same concrete
-models, kernels, noise plugins, invariants, interaction facilities, recording
-adapter, and Workflow types used by the built-in templates.
+Most users should stay with `prelude::{load_glv_project, GlvTemplate}` and copy
+a complete runtime integration example. Researchers who genuinely need a new
+model composition can import `advanced::prelude` and assemble workloads using
+the same concrete models, kernels, noise plugins, invariants, interaction
+facilities, recording adapter, and Workflow types used by the built-in
+templates.
 
 The advanced API also exposes the no-I/O `TerminationMonitor` and
 `TerminalStateMonitor` for custom synchronous runners. Generated crate
