@@ -20,10 +20,13 @@ use thiserror::Error;
 use crate::interaction::{INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactDescriptor};
 use crate::reading::glv_json_decoders;
 use crate::simulation::SimulationKind;
-use crate::terminal_state::TerminalState;
-use crate::termination::{ConvergenceReason, FixedPointDiagnostics, OscillationDiagnostics};
 use crate::{AbundanceRepresentation, CHECKPOINT_STREAM, load_state_schema};
-use ecological_initial_state::{INITIAL_STATE_METADATA_KEY, InitialStateArtifactDescriptor};
+use ecological_model_core::initial_state::{
+    INITIAL_STATE_METADATA_KEY, InitialStateArtifactDescriptor,
+};
+use ecological_model_core::terminal_state::{
+    EquilibriumDiagnostics, PeriodicOrbitDiagnostics, TerminationSignal,
+};
 
 /// Creation-metadata key containing the concrete model identity.
 pub const MODEL_KIND_METADATA_KEY: &str = "model_kind";
@@ -175,9 +178,9 @@ pub enum TerminationReason {
     /// External orchestration requested a successful stop.
     Requested,
     /// A whole-window state and authoritative RHS residual test passed.
-    FixedPoint(FixedPointDiagnostics),
+    Equilibrium(EquilibriumDiagnostics),
     /// Multiple nontrivial recurrent cycles passed the orbit detector.
-    Oscillation(OscillationDiagnostics),
+    PeriodicOrbit(PeriodicOrbitDiagnostics),
 }
 
 impl TerminationReason {
@@ -188,25 +191,26 @@ impl TerminationReason {
             Self::Monoculture => "monoculture",
             Self::Extinction => "extinction",
             Self::Requested => "requested",
-            Self::FixedPoint(_) => "fixed_point",
-            Self::Oscillation(_) => "oscillation",
+            Self::Equilibrium(_) => "equilibrium",
+            Self::PeriodicOrbit(_) => "periodic_orbit",
         }
     }
 
     fn diagnostics(&self) -> Option<Value> {
         match self {
-            Self::FixedPoint(value) => serde_json::to_value(value).ok(),
-            Self::Oscillation(value) => serde_json::to_value(value).ok(),
+            Self::Equilibrium(value) => serde_json::to_value(value).ok(),
+            Self::PeriodicOrbit(value) => serde_json::to_value(value).ok(),
             _ => None,
         }
     }
 }
 
-impl From<ConvergenceReason> for TerminationReason {
-    fn from(reason: ConvergenceReason) -> Self {
+impl From<TerminationSignal> for TerminationReason {
+    fn from(reason: TerminationSignal) -> Self {
         match reason {
-            ConvergenceReason::FixedPoint(value) => Self::FixedPoint(value),
-            ConvergenceReason::Oscillation(value) => Self::Oscillation(value),
+            TerminationSignal::Equilibrium(value) => Self::Equilibrium(value),
+            TerminationSignal::PeriodicOrbit(value) => Self::PeriodicOrbit(value),
+            TerminationSignal::AbsorbingState(_) => Self::Monoculture,
         }
     }
 }
@@ -306,11 +310,32 @@ impl GlvRecording {
     }
 
     /// Records the final state exactly once and commits successful termination.
-    pub fn complete(
+    pub fn complete<T: Serialize>(
         self,
         final_state: &SystemState,
         reason: TerminationReason,
-        terminal_state: &TerminalState,
+        terminal_state: &T,
+    ) -> Result<CompletedRecording, GlvRecordingError> {
+        self.complete_inner(
+            final_state,
+            reason,
+            Some(serde_json::to_value(terminal_state).expect("terminal state serializes")),
+        )
+    }
+
+    pub fn complete_without_terminal(
+        self,
+        final_state: &SystemState,
+        reason: TerminationReason,
+    ) -> Result<CompletedRecording, GlvRecordingError> {
+        self.complete_inner(final_state, reason, None)
+    }
+
+    fn complete_inner(
+        self,
+        final_state: &SystemState,
+        reason: TerminationReason,
+        terminal_state: Option<Value>,
     ) -> Result<CompletedRecording, GlvRecordingError> {
         let mut terminal_metadata = Map::new();
         terminal_metadata.insert(
@@ -324,10 +349,9 @@ impl GlvRecording {
             COMPLETED_ITERATION_METADATA_KEY.to_owned(),
             Value::from(final_state.simulation_time().iteration()),
         );
-        terminal_metadata.insert(
-            TERMINAL_STATE_METADATA_KEY.to_owned(),
-            serde_json::to_value(terminal_state).expect("validated terminal state serializes"),
-        );
+        if let Some(terminal_state) = terminal_state {
+            terminal_metadata.insert(TERMINAL_STATE_METADATA_KEY.to_owned(), terminal_state);
+        }
         Ok(self
             .writer
             .complete_recording_with_final_state_and_terminal_metadata(

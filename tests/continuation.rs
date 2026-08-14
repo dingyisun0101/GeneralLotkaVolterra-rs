@@ -3,6 +3,11 @@ use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use ecological_model_core::terminal_state::StopReason;
+use ecological_model_core::trajectory::{
+    AbundanceView, EquilibriumEvidence, TerminalPolicy, TrajectoryObservation,
+    TrajectoryObservationPolicy, TrajectoryObserver,
+};
 use general_lotka_volterra_rs::interaction::{
     InteractionMatrix, load_verified_interaction_matrix, persist_interaction_matrix,
 };
@@ -11,8 +16,7 @@ use general_lotka_volterra_rs::recording::{GlvRecording, GlvRecordingMetadata, T
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, CHECKPOINT_STREAM, MeanFieldReplicator,
     MeanFieldReplicatorConfig, SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM, SpatialAbundance,
-    TOTAL_FIELD, TerminalState, TerminalStateMonitor, TerminalStatePolicy, TimeStep,
-    TotalAbundance,
+    TOTAL_FIELD, TerminalState, TimeStep, TotalAbundance,
 };
 use ndarray::{Array1, arr2};
 use scientific_workflow::configuration::{ParameterSpace, TaskParameters};
@@ -24,13 +28,30 @@ use scientific_workflow::time_series::StateSeries;
 static WORKSPACE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 fn terminal_state(state: &SystemState, reason: &TerminationReason) -> TerminalState {
-    let mut monitor = TerminalStateMonitor::new(TerminalStatePolicy {
-        sample_interval_iterations: 1,
-        trailing_window_samples: 1,
-    })
+    let mut monitor = TrajectoryObserver::from_policy(TrajectoryObservationPolicy::TerminalOnly(
+        TerminalPolicy {
+            sample_interval_iterations: 1,
+            trailing_window_samples: 1,
+        },
+    ))
     .unwrap();
-    monitor.observe(state).unwrap();
-    monitor.finish(state, reason).unwrap()
+    let mut monitor = monitor.take().unwrap();
+    let abundance = state
+        .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
+        .unwrap();
+    let observation = TrajectoryObservation {
+        iteration: state.simulation_time().iteration(),
+        physical_time: state.simulation_time().physical_time(),
+        abundance: AbundanceView::Continuous(abundance.as_slice().unwrap()),
+        detector_observable: None,
+        equilibrium_evidence: EquilibriumEvidence::Unavailable,
+    };
+    monitor.observe(observation).unwrap();
+    let stop = match reason {
+        TerminationReason::Requested => StopReason::Requested,
+        _ => StopReason::MaximumIterations,
+    };
+    monitor.finish(observation, stop).unwrap()
 }
 
 struct Workspace {

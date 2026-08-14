@@ -23,9 +23,10 @@ pub mod recording;
 pub mod simulation;
 mod template;
 pub mod terminal_state;
-pub mod termination;
+pub mod workload;
 
 pub use template::{GlvTemplate, TemplateTaskError};
+pub use workload::{GlvWorkload, GlvWorkloadError};
 
 pub use simulation::{
     MeanFieldReplicator, MeanFieldReplicatorConfig, SpatialGeneralLotkaVolterra,
@@ -38,8 +39,7 @@ pub use fixed_point::{
     open_accepted_fixed_point,
 };
 pub use terminal_state::{
-    TERMINAL_STATE_FORMAT, TerminalState, TerminalStateClassification, TerminalStateError,
-    TerminalStateMonitor, TerminalStatePolicy, open_terminal_state,
+    TERMINAL_STATE_FORMAT, TerminalState, TerminalStateOpenError, open_terminal_state,
 };
 
 /// Canonical field containing aggregate species abundance.

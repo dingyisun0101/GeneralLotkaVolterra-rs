@@ -118,8 +118,8 @@ fn generated_matrices_record_explicit_parameters_version_and_seed() {
     };
     assert_eq!(generator.identity(), "test.diagonal");
     assert_eq!(generator.version(), "1");
-    assert_eq!(generator.parameters()["diagonal"], -0.25);
-    assert_eq!(generator.rng_config().unwrap().seed(), Some(42));
+    assert_eq!(generator.recipe()["diagonal"], -0.25);
+    assert_eq!(generator.rng().unwrap().seed(), Some(42));
     let rng = resolved.generator_rng_record().unwrap().unwrap();
     assert_eq!(rng.namespace(), INTERACTION_GENERATOR_RNG_NAMESPACE);
     assert_eq!(rng.method(), "test.diagonal+small_rng");

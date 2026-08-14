@@ -1,8 +1,8 @@
 {
   "spatial_shape": [8, 8],
   "initialization": {
-    "source": "config",
-    "config": {
+    "source": "recipe",
+    "recipe": {
       "method": "random",
       "distribution": {"kind": "inline", "weights": [0.5, 0.3, 0.2]},
       "rng": {"seed": 101}
@@ -15,7 +15,7 @@
   "cutoff": 1e-9,
   "physical_time_increment": 0.003,
   "maximum_iterations": 100,
-  "termination": {"fixed_point": true, "oscillation": true},
+  "observation": {"mode": "detect", "equilibrium": true, "periodic_orbit": true},
   "recording": [
     {"name": "signal", "sampling_interval": 10, "fields": ["abundance", "total"], "storage_limits": [65536, 262144]},
     {"name": "space", "sampling_interval": 25, "fields": ["abundance", "space", "total"], "storage_limits": [262144, 1048576]},

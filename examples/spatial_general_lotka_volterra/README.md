@@ -41,13 +41,13 @@ Important values in `config/fixed.json` are:
 - `carrying_capacity`: a positive total capacity or `null`; and
 - `physical_time_increment`: RK2 time increment.
 
-Both deterministic automatic-termination detectors are enabled: fixed-point
-convergence and nontrivial recurrent oscillation. Their evidence policy is
+Both deterministic automatic-termination detectors are enabled: equilibrium
+convergence and a nontrivial periodic orbit. Their evidence policy is
 internal to GLV.
 
-The binary registers `GlvTemplate::SpatialGeneralLotkaVolterra::run_task` in an
-application-owned Workflow phase. It contains no model assembly or recording
-code. Pass another compatible Workflow `config` folder as the optional first
+The binary loads a `GlvWorkload` and registers its tasks in an application-owned
+Workflow phase. It contains no model assembly or recording code. Pass another
+compatible workload directory as the optional first
 argument.
 Every invocation creates new output and records aggregate, spatial, and
 checkpoint streams. The program verifies the final checkpoint before success.

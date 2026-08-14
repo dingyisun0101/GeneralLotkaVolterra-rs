@@ -18,7 +18,7 @@ Add the crate:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = "0.6.0"
+general-lotka-volterra-rs = "0.7.0"
 scientific-workflow = "0.3.3"
 ```
 
@@ -28,18 +28,14 @@ Workflow phase workload:
 
 ```rust,no_run
 use general_lotka_volterra_rs::prelude::*;
-use scientific_workflow::prelude::basics::ExecutionScope;
 use scientific_workflow::prelude::runtime::{Phase, WorkflowRuntime};
 
 # fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-let project = load_glv_project("examples/mean_field_replicator")?;
-let execution = ExecutionScope::create_generated(project.resolve_path("recordings")?)?;
-let task_execution = execution.clone();
 let template = GlvTemplate::MeanFieldReplicator;
-let simulation = Phase::builder(1, "mean-field replicator")
-    .progress_tasks_from_project(&project, template.as_str(), move |context| {
-        template.run_task(&task_execution, context)
-    })
+let workload = GlvWorkload::load("examples/mean_field_replicator", template)?;
+let execution = workload.execution().clone();
+let simulation = workload
+    .register(Phase::builder(1, "mean-field replicator"))
     .max_concurrent_workloads(1)
     .queue_capacity(1)
     .build()?;
@@ -92,7 +88,7 @@ cargo run --release -- /path/to/my-study/config
 ```
 
 Spatial templates consume categorical ecological lattices through the public
-`ecological-initial-state` crate. GLV owns only their explicit conversion to a
+`ecological-model-core` crate. GLV owns only their explicit conversion to a
 species-last continuous field: spatial replicator sites become one-hot
 frequency cells, while population GLV requires `initial_population_per_site`.
 An initialization may be generated from shared configuration or loaded from a
@@ -112,44 +108,44 @@ my-study/
     └── interaction.json
 ```
 
-- `fixed.json` contains common model, termination, and recording settings.
+- `fixed.json` contains common model, observation, and recording settings.
 - `sweep.json` defines task-varying parameter values.
 - `paths.json` names the interaction input and recording output root.
 - `interaction.json` is the versioned PiP interaction matrix.
 
 The examples are the configuration reference for their respective models.
 Their READMEs explain every model-specific field. Common fields include
-`maximum_iterations`, `physical_time_increment`, `termination`, and
+`maximum_iterations`, `physical_time_increment`, `observation`, and
 `recording`. Spatial examples additionally show lattice shape,
 initialization, diffusion, spacing, and boundary conditions.
 
 Relative paths are resolved from the project root. There is no separate output
 argument: `config/paths.json` is the sole path authority.
 
-### Automatic termination
+### Trajectory observation
 
-Built-in templates expose automatic termination as detector toggles:
+Built-in deterministic templates expose trajectory-observation modes and
+detector toggles:
 
 ```json
-"termination": {
-  "fixed_point": true,
-  "oscillation": false
+"observation": {
+  "mode": "detect",
+  "equilibrium": true,
+  "periodic_orbit": false
 }
 ```
 
-The `termination` object is optional. Either detector may be toggled
-independently; the deterministic examples enable both. Omitting the object, or
-setting both values to `false`, runs to `maximum_iterations`. The stochastic
-demographic example explicitly disables both because deterministic convergence
-classification does not apply to noisy trajectories.
+Deterministic GLV defaults to `detect`. The stochastic demographic model must
+explicitly select `terminal_only` or `disabled`. Observation cadence defaults
+to the canonical `signal` writer cadence.
 
-GLV owns the detector's sampling cadence, bounded windows, tolerances, and
-confirmation schedule. These are intentionally not ordinary project settings.
-The synchronous checker runs inside the solver loop after complete steps and
-is independent of recording cadence. Fixed-point acceptance requires stable
+GLV owns the detector's bounded windows, tolerances, and confirmation schedule.
+These are intentionally not ordinary project settings. The synchronous checker
+runs inside the solver loop after complete steps, at the signal writer cadence.
+Equilibrium acceptance requires stable
 support, confined Jensen–Shannon composition, stable mass, and an authoritative
 model RHS residual. A support change immediately starts a fresh confirmation
-window and retains the transition sample. Oscillation acceptance is separate
+window and retains the transition sample. Periodic-orbit acceptance is separate
 and requires repeated matching cycles with nontrivial amplitude.
 
 Replicator dynamics receive one safe fast path: GLV checks iteration zero and
@@ -159,19 +155,21 @@ makes that support absorbing and the authoritative RHS residual also passes.
 This shortcut applies to mean-field and spatial replicators, not generic
 population GLV.
 
-Terminal-state production is independent of automatic termination. Every
-successful built-in run embeds one normalized `ecological.terminal-state.v1`
+Unless observation is disabled, terminal-state production is independent of
+automatic termination. Every successful observed built-in run embeds one
+normalized `ecological.terminal-state.v1`
 product in completed recording metadata and publishes the same document as
 `task-NNNNNN-terminal-state.json` beside that task's recording directory. GLV
 samples global composition in a bounded internal window starting at iteration
 zero and always forces the final state into that window. If GLV
-accepted a fixed point, the product contains the exact normalized final state,
-has one represented sample, and is marked `accepted_fixed_point`. For every
-other completion reason—including an iteration cap, oscillation, a request, or
+accepted an equilibrium, the product contains the exact normalized final state,
+has one represented sample, and is marked `equilibrium`. For every
+other completion reason—including an iteration cap, periodic orbit, a request, or
 a stochastic run—the product contains the normalized mean of the internal
 trailing samples and is marked `trailing_average`. The classification is the
 authoritative distinction; downstream code must not infer fixed-point status
-from the vector alone.
+from the vector alone. Disabled observation allocates no observer and emits no
+terminal-state metadata or artifact.
 
 The internal details are recorded for auditability but are not project
 parameters. End users choose which outcomes to detect; GLV defines and applies
@@ -193,23 +191,24 @@ Every successful task also publishes a canonical terminal composition. Read it
 through GLV's public API:
 
 ```rust,no_run
-use general_lotka_volterra_rs::{
-    TerminalStateClassification,
-    open_terminal_state,
-};
+use ecological_model_core::terminal_state::TerminalClassification;
+use general_lotka_volterra_rs::open_terminal_state;
 
 # fn inspect() -> Result<(), Box<dyn std::error::Error>> {
 let terminal = open_terminal_state("path/to/task-recording")?;
 println!("composition: {:?}", terminal.composition());
 
 match terminal.classification() {
-    TerminalStateClassification::AcceptedFixedPoint => {
-        println!("GLV accepted a fixed point");
+    TerminalClassification::Equilibrium => {
+        println!("GLV accepted an equilibrium");
     }
-    TerminalStateClassification::AbsorbedState => {
+    TerminalClassification::AbsorbingState => {
         println!("the dynamics reached an absorbed state");
     }
-    TerminalStateClassification::TrailingAverage => {
+    TerminalClassification::PeriodicOrbit => {
+        println!("GLV detected a periodic orbit");
+    }
+    TerminalClassification::TrailingAverage => {
         println!("terminal vector is a trailing estimate");
     }
 }
@@ -261,8 +260,8 @@ Use `open_completed_glv_recording` to obtain a verified
 latest state. `verify_completed_glv_checkpoint` performs the standard final
 checkpoint comparison used by every example.
 
-`open_accepted_fixed_point` succeeds only when GLV's configured whole-window
-monitor terminated with `fixed_point`. It verifies that the terminal
+`open_accepted_fixed_point` succeeds only when the shared observer accepted an
+`equilibrium`. It verifies that the terminal
 diagnostics, completed iteration, and final checkpoint agree, then returns the
 normalized final state that directly passed the configured residual test. It
 does not apply an unrelated tail fraction or downstream extinction cutoff.
@@ -286,17 +285,16 @@ Its payload fixture is serialized by a Rust conformance test.
 
 ## Advanced composition
 
-Most users should stay with `prelude::{load_glv_project, GlvTemplate}` and copy
+Most users should stay with `prelude::{GlvWorkload, GlvTemplate}` and copy
 a complete runtime integration example. Researchers who genuinely need a new
 model composition can import `advanced::prelude` and assemble workloads using
 the same concrete models, kernels, noise plugins, invariants, interaction
 facilities, recording adapter, and Workflow types used by the built-in
 templates.
 
-The advanced API also exposes the no-I/O `TerminationMonitor` and
-`TerminalStateMonitor` for custom synchronous runners. Generated crate
-documentation is the signature reference for this larger API; it is kept out
-of the quick-start path intentionally.
+The advanced API exposes the shared `TrajectoryObserver` policies for custom
+synchronous runners. Generated crate documentation is the signature reference
+for this larger API; it is kept out of the quick-start path intentionally.
 
 ## Noise and reproducibility
 

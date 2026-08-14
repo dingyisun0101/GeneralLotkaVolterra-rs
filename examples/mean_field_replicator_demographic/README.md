@@ -32,8 +32,8 @@ Copy the entire directory and run:
 cargo run --release
 ```
 
-The binary registers `GlvTemplate::MeanFieldReplicatorDemographic::run_task`
-as a progress workload in an application-owned Workflow runtime. The checked-in
+The binary loads a `GlvWorkload` and registers its tasks in an application-owned
+Workflow runtime. The checked-in
 `config/sweep.json` runs the same scientific parameters with multiple complete
 PiP `RngConfig` values. Edit `sigma` in `config/fixed.json` to control noise
 strength, or pass another compatible configuration folder:
@@ -51,9 +51,8 @@ Each task receives its own recording directory. Signal, spatial, and checkpoint
 streams have independent sampling intervals and storage budgets. The final
 checkpoint is integrity-checked and compared with the final in-memory state.
 
-The configuration shows both automatic-termination toggles explicitly set to
-`false`. Deterministic fixed-point and oscillation classification is
-intentionally disabled for this noisy model; every successful run still
+The configuration explicitly selects `terminal_only`. Equilibrium and periodic-
+orbit detection are intentionally disabled for this noisy model; every successful run still
 publishes GLV's canonical trailing terminal-state estimate.
 
 Checkpoints currently preserve state but not the RNG cursor, so exact

@@ -31,10 +31,8 @@ The binary loads the GLV project, creates its execution scope, and registers the
 built-in model as a Workflow progress workload:
 
 ```rust
-let simulation = Phase::builder(1, "mean-field replicator")
-    .progress_tasks_from_project(&project, template.as_str(), move |context| {
-        template.run_task(&task_execution, context)
-    })
+let simulation = GlvWorkload::load(project_directory, template)?
+    .register(Phase::builder(1, "mean-field replicator"))
     .build()?;
 WorkflowRuntime::builder()
     .phase(simulation)
@@ -61,11 +59,11 @@ The main values to edit are:
 - `growth`: intrinsic fitness contribution for each species;
 - `physical_time_increment`: RK4 time increment;
 - `maximum_iterations`: hard iteration cap;
-- `termination`: automatic fixed-point and oscillation toggles; and
+- `observation`: terminal observation mode and detector toggles; and
 - `recording`: sampling cadence, fields, and chunk-size limits per stream.
 
 The checked-in deterministic configuration enables both automatic detectors:
-fixed-point convergence and nontrivial recurrent oscillation. GLV owns their
+equilibrium convergence and a nontrivial periodic orbit. GLV owns their
 internal evidence windows and publishes the resulting termination reason.
 
 ## Outputs

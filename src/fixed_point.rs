@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use crate::recording::{COMPLETED_ITERATION_METADATA_KEY, TERMINATION_DIAGNOSTICS_METADATA_KEY};
-use crate::terminal_state::{TerminalStateError, open_terminal_state};
-use crate::termination::FixedPointDiagnostics;
+use crate::terminal_state::{TerminalStateOpenError, open_terminal_state};
+use ecological_model_core::terminal_state::{EquilibriumDiagnostics, TerminalClassification};
 
 /// Versioned representation emitted for accepted GLV fixed points.
 pub const ACCEPTED_FIXED_POINT_FORMAT: &str = "general-lotka-volterra.accepted-fixed-point.v1";
@@ -21,7 +21,7 @@ pub struct AcceptedFixedPoint {
     iteration: u64,
     physical_time: Option<f64>,
     composition: Vec<f64>,
-    diagnostics: FixedPointDiagnostics,
+    diagnostics: EquilibriumDiagnostics,
 }
 
 impl AcceptedFixedPoint {
@@ -46,7 +46,7 @@ impl AcceptedFixedPoint {
     }
 
     /// Returns the monitor evidence committed with the recording.
-    pub const fn diagnostics(&self) -> &FixedPointDiagnostics {
+    pub const fn diagnostics(&self) -> &EquilibriumDiagnostics {
         &self.diagnostics
     }
 
@@ -77,7 +77,7 @@ impl AcceptedFixedPoint {
             || self.diagnostics.completed_windows == 0
             || self.diagnostics.final_window_samples == 0
             || [
-                self.diagnostics.maximum_composition_distance,
+                self.diagnostics.maximum_observable_distance,
                 self.diagnostics.relative_mass_range,
                 self.diagnostics.maximum_scaled_residual,
             ]
@@ -98,14 +98,14 @@ pub fn open_accepted_fixed_point(
 ) -> Result<AcceptedFixedPoint, AcceptedFixedPointError> {
     let recording = recording.as_ref();
     let terminal_state = open_terminal_state(recording)?;
-    if !terminal_state.is_accepted_fixed_point() {
+    if terminal_state.classification() != TerminalClassification::Equilibrium {
         return Err(AcceptedFixedPointError::NotAcceptedFixedPoint {
-            reason: terminal_state.termination_reason().to_owned(),
+            reason: format!("{:?}", terminal_state.stop_reason()),
         });
     }
     let reader = crate::reading::open_completed_glv_recording(recording)?;
     let terminal = reader.terminal_metadata();
-    let diagnostics: FixedPointDiagnostics = serde_json::from_value(
+    let diagnostics: EquilibriumDiagnostics = serde_json::from_value(
         terminal
             .get(TERMINATION_DIAGNOSTICS_METADATA_KEY)
             .cloned()
@@ -168,7 +168,7 @@ fn invalid_terminal(message: impl Into<String>) -> AcceptedFixedPointError {
 pub enum AcceptedFixedPointError {
     /// The canonical terminal-state product was unavailable or invalid.
     #[error(transparent)]
-    TerminalState(#[from] TerminalStateError),
+    TerminalState(#[from] TerminalStateOpenError),
     /// Workflow rejected recording integrity or decoding.
     #[error(transparent)]
     Storage(#[from] StorageError),
