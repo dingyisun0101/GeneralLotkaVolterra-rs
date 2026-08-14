@@ -4,8 +4,8 @@
     {
       "name": "rng",
       "values": [
-        {"seed": 7},
-        {"seed": 11}
+        {"seed": 7, "parallel_streams": 2},
+        {"seed": 11, "parallel_streams": 2}
       ]
     }
   ]

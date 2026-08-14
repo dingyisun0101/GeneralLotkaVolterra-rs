@@ -5,7 +5,7 @@
     "recipe": {
       "method": "random",
       "distribution": {"kind": "inline", "weights": [0.25, 0.2, 0.15]},
-      "rng": {"seed": 102}
+      "rng": {"seed": 102, "parallel_streams": 2}
     }
   },
   "initial_population_per_site": 1.0,
