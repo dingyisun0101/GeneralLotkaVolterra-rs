@@ -21,7 +21,7 @@ use general_lotka_volterra_rs::{
 use ndarray::{Array1, arr2};
 use scientific_workflow::configuration::{ParameterSpace, TaskParameters};
 use scientific_workflow::execution::ExecutionScope;
-use scientific_workflow::storage::{SamplingInterval, StateStreamConfig};
+use scientific_workflow::storage::{SamplingInterval, StateStreamConfig, StateStreamStorage};
 use scientific_workflow::system_state::SystemState;
 use scientific_workflow::time_series::StateSeries;
 
@@ -99,7 +99,7 @@ fn stream(name: &str, fields: &[&str], interval: u64) -> StateStreamConfig {
         name,
         fields.iter().copied(),
         SamplingInterval::iterations(interval).unwrap(),
-        Some((
+        Some(StateStreamStorage::chunked(
             NonZeroU64::new(1_024).unwrap(),
             NonZeroU64::new(8_192).unwrap(),
         )),

@@ -34,7 +34,9 @@ use physics_in_parallel::rng::RngConfig;
 use scientific_workflow::configuration::{ParameterSpace, TaskParameters};
 use scientific_workflow::execution::ExecutionScope;
 use scientific_workflow::rng_record::{RNG_RECORDS_METADATA_KEY, RngRecord};
-use scientific_workflow::storage::{SamplingInterval, StateStreamConfig, StorageError};
+use scientific_workflow::storage::{
+    SamplingInterval, StateStreamConfig, StateStreamStorage, StorageError,
+};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -120,7 +122,7 @@ fn stream(
         name,
         fields.iter().copied(),
         SamplingInterval::iterations(interval).unwrap(),
-        Some((
+        Some(StateStreamStorage::chunked(
             NonZeroU64::new(max_chunk_bytes).unwrap(),
             NonZeroU64::new(queue_bytes).unwrap(),
         )),

@@ -6,8 +6,8 @@
   "observation": {"mode": "detect", "equilibrium": true, "periodic_orbit": true},
   "interaction": {"path_key": "interaction_matrix"},
   "recording": [
-    {"name": "signal", "sampling_interval": 10, "fields": ["abundance", "total"], "storage_limits": [65536, 262144]},
-    {"name": "space", "sampling_interval": 25, "fields": ["abundance", "space", "total"], "storage_limits": [65536, 262144]},
-    {"name": "checkpoint", "sampling_interval": 50, "fields": ["abundance", "space", "total"], "storage_limits": [65536, 262144]}
+    {"name": "signal", "sampling_interval": 10, "fields": ["abundance", "total"], "storage":{"layout":{"kind":"chunked","target_bytes":65536},"queue_bytes":262144}},
+    {"name": "space", "sampling_interval": 25, "fields": ["abundance", "space", "total"], "storage":{"layout":{"kind":"chunked","target_bytes":65536},"queue_bytes":262144}},
+    {"name": "checkpoint", "sampling_interval": 50, "fields": ["abundance", "space", "total"], "storage":{"layout":{"kind":"individual_files"},"queue_bytes":262144}}
   ]
 }
