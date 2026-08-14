@@ -206,7 +206,7 @@ dependencies = [
 
 [[package]]
 name = "ecological-initial-state"
-version = "0.1.2"
+version = "0.2.0"
 dependencies = [
  "physics_in_parallel",
  "scientific-workflow",
