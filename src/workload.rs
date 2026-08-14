@@ -44,9 +44,18 @@ impl GlvWorkload {
 
     /// Adds every expanded GLV configuration to an application-owned phase.
     pub fn register(self, builder: PhaseBuilder) -> PhaseBuilder {
+        let kind = self.template.as_str();
+        self.register_as(builder, kind)
+    }
+
+    /// Adds every expanded configuration under an application-selected task namespace.
+    ///
+    /// This permits several independent GLV workload directories using the same
+    /// template to coexist in one Workflow phase without task-ID collisions.
+    pub fn register_as(self, builder: PhaseBuilder, kind: impl Into<String>) -> PhaseBuilder {
         let template = self.template;
         let execution = self.execution;
-        builder.progress_tasks_from_project(&self.project, template.as_str(), move |context| {
+        builder.progress_tasks_from_project(&self.project, kind, move |context| {
             template.run_task(&execution, context)
         })
     }
