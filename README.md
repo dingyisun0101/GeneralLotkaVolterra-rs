@@ -18,8 +18,8 @@ Add the crate:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = "0.7.0"
-scientific-workflow = "0.3.3"
+general-lotka-volterra-rs = "0.8.0"
+scientific-workflow = "0.4.0"
 ```
 
 Copy the configuration, inputs, and `main.rs` from the example closest to your
@@ -110,7 +110,10 @@ my-study/
 
 - `fixed.json` contains common model, observation, and recording settings.
 - `sweep.json` defines task-varying parameter values.
-- `paths.json` names the interaction input and recording output root.
+- `paths.json` names interaction inputs and the recording output root. The
+  `interaction.path_key` value in each resolved task selects which named
+  interaction path it uses, so a sweep may pair different model sizes with
+  different matrices inside one project.
 - `interaction.json` is the versioned PiP interaction matrix.
 
 The examples are the configuration reference for their respective models.

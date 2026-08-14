@@ -2,6 +2,7 @@
 
 use std::error::Error;
 use std::fs;
+use std::path::PathBuf;
 
 use ndarray::Array1;
 use physics_in_parallel::rng::RngConfig;
@@ -37,6 +38,24 @@ use ecological_model_core::trajectory::{
     ResidualTolerance, TerminalPolicy, TrajectoryObservation, TrajectoryObservationPolicy,
     TrajectoryObserver,
 };
+
+pub const INTERACTION_INPUT_KEY: &str = "interaction";
+
+/// Task-specific interaction input resolved through the workload path table.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InteractionInput {
+    pub path_key: String,
+}
+
+impl InteractionInput {
+    fn resolve(&self, task: &TaskConfig) -> Result<PathBuf, TemplateTaskError> {
+        if self.path_key.trim().is_empty() {
+            return Err("interaction path key must not be empty".into());
+        }
+        Ok(task.resolve_path(&self.path_key)?)
+    }
+}
 
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
@@ -157,8 +176,8 @@ fn run_mean_field(
 
     context.set_detail("resolving interaction matrix");
     let species = initial_abundance.len();
-    let interaction =
-        InteractionMatrix::load_json(task.resolve_path("interaction_matrix")?, species)?;
+    let interaction_input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY)?;
+    let interaction = InteractionMatrix::load_json(interaction_input.resolve(task)?, species)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
 
     context.set_detail("constructing simulation");
@@ -234,8 +253,8 @@ fn run_spatial_replicator(
     let initialization: InitialStateSource = task.decode_value("initialization")?;
 
     context.set_detail("resolving interaction matrix");
-    let interaction =
-        InteractionMatrix::load_json(task.resolve_path("interaction_matrix")?, species)?;
+    let interaction_input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY)?;
+    let interaction = InteractionMatrix::load_json(interaction_input.resolve(task)?, species)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
 
     context.set_detail("constructing simulation");
@@ -295,8 +314,8 @@ fn run_spatial_glv(
 
     context.set_detail("resolving interaction matrix");
     let species = growth.len();
-    let interaction =
-        InteractionMatrix::load_json(task.resolve_path("interaction_matrix")?, species)?;
+    let interaction_input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY)?;
+    let interaction = InteractionMatrix::load_json(interaction_input.resolve(task)?, species)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
 
     context.set_detail("constructing simulation");
@@ -701,6 +720,7 @@ mod tests {
                     "cutoff": 0.0,
                     "physical_time_increment": 0.1,
                     "maximum_iterations": 1200,
+                    "interaction": {"path_key": "interaction_matrix"},
                     "observation": {
                         "mode": "detect",
                         "equilibrium": true,
@@ -777,6 +797,7 @@ mod tests {
                 "carrying_capacity": 100.0,
                 "physical_time_increment": 0.01,
                 "maximum_iterations": 0,
+                "interaction": {"path_key": "interaction_matrix"},
                 "observation": {"mode":"detect","equilibrium":true,"periodic_orbit":false},
                 "recording": [
                     {"name":"signal","sampling_interval":10,"fields":["abundance","total"],"storage_limits":[65536,262144]},

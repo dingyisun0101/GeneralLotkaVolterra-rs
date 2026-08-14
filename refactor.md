@@ -27,6 +27,12 @@ workload directory resolves configuration once and returns runtime-ready GLV
 tasks. Both the standalone examples and Dispatcher call this same public entry
 point; neither duplicates GLV decoding or writer construction.
 
+One project represents every model in a GLV phase. A singleton `K` may live in
+`fixed.json`; multiple values belong in `sweep.json`. Each resolved task also
+selects its interaction input through `interaction.path_key`, allowing the
+project to pair each `K` with its correctly dimensioned matrix without
+per-`K` project directories.
+
 Dispatcher treats the directory as opaque. It supplies the path, receives the
 tasks, and registers them. GLV continues to own model assembly, recording,
 terminal products, checkpoint validation, and task progress.
@@ -40,6 +46,11 @@ GLV continues to own:
 - model/template selection;
 - recording streams, checkpoint continuation, and runtime task behavior;
 - model-specific stop reasons and fixed-point extraction policy.
+
+Recording construction uses Workflow's unified schema-source builder. New
+recordings pass their constructed live state; continuation passes the canonical
+schema before checkpoint reconstruction. GLV never asks an orchestrator to
+construct its writer.
 
 ## Initialization migration
 

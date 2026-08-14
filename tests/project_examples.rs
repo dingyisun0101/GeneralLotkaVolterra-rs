@@ -4,6 +4,7 @@ use general_lotka_volterra_rs::interaction::InteractionMatrix;
 use general_lotka_volterra_rs::kernel::BoundaryCondition;
 use general_lotka_volterra_rs::project::load_glv_project;
 use general_lotka_volterra_rs::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD};
+use general_lotka_volterra_rs::{INTERACTION_INPUT_KEY, InteractionInput};
 use physics_in_parallel::rng::RngConfig;
 use scientific_workflow::prelude::basics::{SamplingInterval, StateStreamConfig};
 
@@ -65,9 +66,9 @@ fn mean_field_example_is_a_complete_lazy_workflow_project() {
             SamplingInterval::iterations(50).unwrap()
         );
 
+        let input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY).unwrap();
         let matrix =
-            InteractionMatrix::load_json(task.resolve_path("interaction_matrix").unwrap(), 3)
-                .unwrap();
+            InteractionMatrix::load_json(task.resolve_path(&input.path_key).unwrap(), 3).unwrap();
         assert_eq!(matrix.species(), 3);
         assert_eq!(
             task.resolve_path("recordings").unwrap(),
@@ -98,7 +99,8 @@ fn every_user_example_is_an_independent_glv_crate_and_project() {
         for task in project.task_configs() {
             task.decode_value::<Vec<StateStreamConfig>>("recording")
                 .unwrap();
-            assert!(task.resolve_path("interaction_matrix").unwrap().is_file());
+            let input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY).unwrap();
+            assert!(task.resolve_path(&input.path_key).unwrap().is_file());
         }
     }
 }

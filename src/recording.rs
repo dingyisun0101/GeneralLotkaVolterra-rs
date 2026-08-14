@@ -12,6 +12,7 @@ use scientific_workflow::storage::{
     CompletedRecording, StateStreamConfig, StorageError, SystemStateWriter,
     SystemStateWriterBuilder, TimeAxisMetadata,
 };
+use scientific_workflow::system_state::StateSchemaSource;
 use scientific_workflow::system_state::{StateError, SystemState};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -273,8 +274,7 @@ impl GlvRecording {
         metadata: GlvRecordingMetadata,
         initial_state: &SystemState,
     ) -> Result<Self, GlvRecordingError> {
-        let schema = load_state_schema().map_err(GlvRecordingError::StateSchema)?;
-        let mut writer = recording_builder(directory.as_ref(), &schema, streams, metadata)
+        let mut writer = recording_builder(directory.as_ref(), initial_state, streams, metadata)
             .create_new_recording()?;
         writer.observe_state(initial_state)?;
         Ok(Self { writer })
@@ -377,13 +377,16 @@ impl GlvRecording {
     }
 }
 
-fn recording_builder(
+fn recording_builder<S>(
     directory: &Path,
-    schema: &scientific_workflow::system_state::SystemStateSchema,
+    state: &S,
     streams: Vec<StateStreamConfig>,
     metadata: GlvRecordingMetadata,
-) -> SystemStateWriterBuilder {
-    let mut builder = SystemStateWriter::builder(directory, schema)
+) -> SystemStateWriterBuilder
+where
+    S: StateSchemaSource + ?Sized,
+{
+    let mut builder = SystemStateWriter::builder(directory, state)
         .with_time_axis_metadata(
             TimeAxisMetadata::new("iteration").with_physical_time_name("physical_time"),
         )

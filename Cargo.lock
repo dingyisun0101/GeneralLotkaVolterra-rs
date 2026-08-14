@@ -206,7 +206,7 @@ dependencies = [
 
 [[package]]
 name = "ecological-model-core"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "physics_in_parallel",
  "scientific-workflow",
@@ -284,7 +284,7 @@ dependencies = [
 
 [[package]]
 name = "general-lotka-volterra-rs"
-version = "0.7.1"
+version = "0.8.0"
 dependencies = [
  "ecological-model-core",
  "ndarray",
@@ -735,7 +735,7 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "scientific-workflow"
-version = "0.3.3"
+version = "0.4.0"
 dependencies = [
  "console",
  "crossterm",

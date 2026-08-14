@@ -25,7 +25,7 @@ mod template;
 pub mod terminal_state;
 pub mod workload;
 
-pub use template::{GlvTemplate, TemplateTaskError};
+pub use template::{GlvTemplate, INTERACTION_INPUT_KEY, InteractionInput, TemplateTaskError};
 pub use workload::{GlvWorkload, GlvWorkloadError};
 
 pub use simulation::{
