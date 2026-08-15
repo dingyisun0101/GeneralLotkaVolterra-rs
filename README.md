@@ -162,7 +162,7 @@ Unless observation is disabled, terminal-state production is independent of
 automatic termination. Every successful observed built-in run embeds one
 normalized `ecological.terminal-state.v1`
 product in completed recording metadata and publishes the same document as
-`task-NNNNNN-terminal-state.json` beside that task's recording directory. GLV
+`terminal-state.json` inside that task's recording directory. GLV
 samples global composition in a bounded internal window starting at iteration
 zero and always forces the final state into that window. If GLV
 accepted an equilibrium, the product contains the exact normalized final state,
@@ -220,7 +220,7 @@ match terminal.classification() {
 ```
 
 The execution directory also contains a directly inspectable
-`task-NNNNNN-terminal-state.json`. This is a validated export of the canonical
+`terminal-state.json` inside the recording directory. This is a validated export of the canonical
 recording metadata, not a separately computed result.
 
 An accepted fixed point contains the exact normalized final composition. Any

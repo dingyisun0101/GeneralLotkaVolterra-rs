@@ -500,7 +500,7 @@ where
             initial_state.initial().rng_record(),
         )?;
     }
-    let recording_directory = scope.task_recording_directory(task.task_ordinal());
+    let recording_directory = task_recording_directory(scope, task)?;
     let mut recording =
         GlvRecording::start(&recording_directory, streams, metadata, simulation.state())?;
 
@@ -541,7 +541,7 @@ where
         });
     if let Some(terminal_state) = &terminal_state {
         recording.complete(simulation.state(), termination_reason, terminal_state)?;
-        publish_terminal_state(scope, task.task_ordinal(), terminal_state)?;
+        publish_terminal_state(&recording_directory, terminal_state)?;
     } else {
         recording.complete_without_terminal(simulation.state(), termination_reason)?;
     }
@@ -557,13 +557,10 @@ where
 }
 
 fn publish_terminal_state(
-    scope: &ExecutionScope,
-    task_ordinal: u64,
+    recording_directory: &std::path::Path,
     terminal_state: &ecological_model_core::terminal_state::TerminalState,
 ) -> Result<(), TemplateTaskError> {
-    let path = scope
-        .directory()
-        .join(format!("task-{task_ordinal:06}-terminal-state.json"));
+    let path = recording_directory.join("terminal-state.json");
     let temporary = path.with_extension(format!("json.tmp-{}", std::process::id()));
     fs::write(&temporary, serde_json::to_vec_pretty(terminal_state)?)?;
     fs::rename(&temporary, &path)?;
@@ -574,6 +571,19 @@ fn publish_terminal_state(
         return Err("published terminal-state JSON failed round-trip validation".into());
     }
     Ok(())
+}
+
+fn task_recording_directory(
+    scope: &ExecutionScope,
+    task: &TaskConfig,
+) -> Result<std::path::PathBuf, TemplateTaskError> {
+    match task.value("recording_name") {
+        Some(_) => {
+            let name = task.decode_value::<String>("recording_name")?;
+            Ok(scope.named_task_recording_directory(&name)?)
+        }
+        None => Ok(scope.task_recording_directory(task.task_ordinal())),
+    }
 }
 
 fn observe_glv<S>(
@@ -862,7 +872,12 @@ mod tests {
         assert_eq!(terminal.composition(), [1.0, 0.0]);
         assert_eq!(terminal.sample_count(), 1);
         let exported = crate::TerminalState::from_json_bytes(
-            &fs::read(scope.directory().join("task-000000-terminal-state.json")).unwrap(),
+            &fs::read(
+                scope
+                    .task_recording_directory(0)
+                    .join("terminal-state.json"),
+            )
+            .unwrap(),
         )
         .unwrap();
         assert_eq!(exported, terminal);
@@ -914,7 +929,12 @@ mod tests {
         assert_eq!(terminal.first_sample_iteration(), 0);
         assert_eq!(terminal.last_sample_iteration(), 3);
         let exported = crate::TerminalState::from_json_bytes(
-            &fs::read(scope.directory().join("task-000000-terminal-state.json")).unwrap(),
+            &fs::read(
+                scope
+                    .task_recording_directory(0)
+                    .join("terminal-state.json"),
+            )
+            .unwrap(),
         )
         .unwrap();
         assert_eq!(exported, terminal);

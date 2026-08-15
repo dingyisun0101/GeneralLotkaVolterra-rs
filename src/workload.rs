@@ -32,6 +32,21 @@ impl GlvWorkload {
         })
     }
 
+    /// Loads a workload whose semantic task directories live directly beneath
+    /// the configured recording root.
+    pub fn load_in_place(
+        directory: impl Into<PathBuf>,
+        template: GlvTemplate,
+    ) -> Result<Self, GlvWorkloadError> {
+        let project = load_glv_project(directory)?;
+        let execution = ExecutionScope::open_or_create(project.resolve_path("recordings")?)?;
+        Ok(Self {
+            project,
+            execution,
+            template,
+        })
+    }
+
     pub const fn project(&self) -> &ScientificProject {
         &self.project
     }

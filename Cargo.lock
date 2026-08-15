@@ -207,6 +207,8 @@ dependencies = [
 [[package]]
 name = "ecological-model-core"
 version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d933ae527f9d3d898176ac0344cf6d6afccdb357ed49d01c577c23c21918499"
 dependencies = [
  "physics_in_parallel",
  "scientific-workflow",
@@ -285,6 +287,22 @@ dependencies = [
 [[package]]
 name = "general-lotka-volterra-rs"
 version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd6bf889493158d8fa7b6f93f837aecd1b905411a84548636cca2decd6a8b38e"
+dependencies = [
+ "ecological-model-core",
+ "ndarray",
+ "physics_in_parallel",
+ "scientific-workflow",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
+name = "general-lotka-volterra-rs"
+version = "0.10.1"
 dependencies = [
  "ecological-model-core",
  "ndarray",
@@ -324,7 +342,7 @@ dependencies = [
 name = "glv-example-mean-field-replicator"
 version = "0.1.0"
 dependencies = [
- "general-lotka-volterra-rs",
+ "general-lotka-volterra-rs 0.10.0",
  "scientific-workflow",
 ]
 
@@ -332,7 +350,7 @@ dependencies = [
 name = "glv-example-mean-field-replicator-demographic"
 version = "0.1.0"
 dependencies = [
- "general-lotka-volterra-rs",
+ "general-lotka-volterra-rs 0.10.0",
  "scientific-workflow",
 ]
 
@@ -340,7 +358,7 @@ dependencies = [
 name = "glv-example-spatial-general-lotka-volterra"
 version = "0.1.0"
 dependencies = [
- "general-lotka-volterra-rs",
+ "general-lotka-volterra-rs 0.10.0",
  "scientific-workflow",
 ]
 
@@ -348,7 +366,7 @@ dependencies = [
 name = "glv-example-spatial-replicator"
 version = "0.1.0"
 dependencies = [
- "general-lotka-volterra-rs",
+ "general-lotka-volterra-rs 0.10.0",
  "scientific-workflow",
 ]
 
@@ -541,7 +559,8 @@ dependencies = [
 [[package]]
 name = "physics_in_parallel"
 version = "3.3.0"
-source = "git+https://github.com/dingyisun0101/Physics-in-Parallel.git?rev=704f797#704f797c2c5892ada30f7a33c178f3fec3a70a86"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5436a339019f9564b8ee55a53916cbdace6c53c46dfe64e33d1c8a8c3475ce17"
 dependencies = [
  "ahash",
  "erased-serde",
@@ -734,7 +753,9 @@ checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
 
 [[package]]
 name = "scientific-workflow"
-version = "0.6.0"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "593ec2db4584ebeacb0a2dc6be22c808771e3cf8d23b2c6eb0641b06f5c0d1e8"
 dependencies = [
  "console",
  "crossterm",
