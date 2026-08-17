@@ -1,34 +1,10 @@
-# Rust build output and package artifacts.
+# Compiled Rust artifacts.
 target/
-src/target/
+**/target/
 
-# Generated solver/example data.
-output/
-src/output/
-**/output/
-**/outputs/
-**/data/
-**/results/
-**/processed/
-**/plots/
-
-# Reconstructed read-only legacy source and immutable validation run outputs.
-validation/legacy-source/
-validation/legacy/
-validation/runs/
-
-# Python/runtime caches produced by examples or notebooks.
+# Compiled Python bytecode.
 __pycache__/
 *.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-**/build/
-**/dist/
-**/*.egg-info/
-**/.venv/
 
-# Local environment/editor files.
-.env
-.env.*
-.DS_Store
+# Generated JSON/JSONL output.
+**/output/
