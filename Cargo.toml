@@ -32,10 +32,10 @@ default-members = ["."]
 resolver = "3"
 
 [dependencies]
-ecological-model-core = { version = "0.4.1" }
+ecological-model-core = { path = "../eco_core", version = "0.5.0" }
 ndarray = { version = "0.17.2", features = ["serde"] }
-physics_in_parallel = { version = "3.3.0"}
-scientific-workflow = "0.6.1"
+physics_in_parallel = { path = "../pip", version = "3.3.0"}
+scientific-workflow = { path = "../workflow/rust", version = "0.6.2" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"

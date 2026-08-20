@@ -85,7 +85,7 @@ impl GlvRecordingMetadata {
             });
         }
         for key in RESERVED_CREATION_KEYS {
-            if task.contains(key) {
+            if task.contains(&format!("/{key}")) {
                 return Err(RecordingMetadataError::ReservedTaskParameter {
                     key: key.to_owned(),
                 });

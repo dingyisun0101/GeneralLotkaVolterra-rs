@@ -71,6 +71,16 @@ fn matrices_validate_domain_and_reuse_shared_storage() {
     assert_eq!(inline.provenance().kind(), InteractionSourceKind::Inline);
     assert_coefficients(&inline, &[0.0, 1.0, -1.0, 0.0]);
 
+    let transformed = InteractionMatrix::from_rows(vec![vec![1.0, 4.0], vec![-2.0, 3.0]], 2)
+        .unwrap()
+        .antisymmetrize()
+        .unwrap()
+        .scale(2.0)
+        .unwrap()
+        .normalize(3.0)
+        .unwrap();
+    assert_coefficients(&transformed, &[0.0, 3.0, -3.0, 0.0]);
+
     assert!(matches!(
         InteractionMatrix::from_rows(vec![vec![1.0, 2.0], vec![3.0]], 2),
         Err(InteractionMatrixError::RaggedRows { .. })
@@ -95,11 +105,7 @@ fn generated_matrices_record_explicit_parameters_version_and_seed() {
         "test.diagonal",
         "1",
         json!({"diagonal": -0.25}),
-        Some(RngConfig::new(
-            Some(42),
-            Some(RngMethod::SmallRng),
-            std::num::NonZeroUsize::new(1),
-        )),
+        Some(RngConfig::new(Some(42), Some(RngMethod::SmallRng))),
     )
     .unwrap();
     let resolved = InteractionMatrix::from_generated(
@@ -140,7 +146,7 @@ fn workflow_decodes_inline_values_and_resolves_pip_matrix_paths() {
     .unwrap();
     fs::write(
         configuration.join("sweep.json"),
-        br#"{"mode":"cartesian","axes":[]}"#,
+        br#"{"mode":"cartesian","axes":{}}"#,
     )
     .unwrap();
     fs::write(
@@ -162,7 +168,7 @@ fn workflow_decodes_inline_values_and_resolves_pip_matrix_paths() {
     let project = ScientificProject::load(directory.path()).unwrap();
     let task = project.task_config(0).unwrap();
     let inline = InteractionMatrix::from_rows(
-        task.decode_value::<Vec<Vec<f64>>>("interaction_matrix")
+        task.decode_value::<Vec<Vec<f64>>>("/interaction_matrix")
             .unwrap(),
         2,
     )

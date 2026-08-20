@@ -37,21 +37,28 @@ fn mean_field_example_is_a_complete_lazy_workflow_project() {
         let task = tasks.next().unwrap();
         assert_eq!(task.task_ordinal(), ordinal as u64);
         assert_eq!(
-            task.decode_value::<Vec<f64>>("initial_abundance").unwrap(),
+            task.decode_value::<Vec<f64>>("/initial_abundance").unwrap(),
             [0.5, 0.3, 0.2]
         );
         assert_eq!(
-            task.decode_value::<Vec<f64>>("growth").unwrap(),
+            task.decode_value::<Vec<f64>>("/growth").unwrap(),
             [0.0, 0.0, 0.0]
         );
-        assert_eq!(task.decode_value::<f64>("cutoff").unwrap(), expected_cutoff);
         assert_eq!(
-            task.decode_value::<f64>("physical_time_increment").unwrap(),
+            task.decode_value::<f64>("/cutoff").unwrap(),
+            expected_cutoff
+        );
+        assert_eq!(
+            task.decode_value::<f64>("/physical_time_increment")
+                .unwrap(),
             0.005
         );
-        assert_eq!(task.decode_value::<u64>("maximum_iterations").unwrap(), 100);
+        assert_eq!(
+            task.decode_value::<u64>("/maximum_iterations").unwrap(),
+            100
+        );
         let recording = task
-            .decode_value::<Vec<StateStreamConfig>>("recording")
+            .decode_value::<Vec<StateStreamConfig>>("/recording")
             .unwrap();
         assert_eq!(
             recording[0].sampling_interval(),
@@ -97,7 +104,7 @@ fn every_user_example_is_an_independent_glv_crate_and_project() {
         let project = load_glv_project(&root).unwrap();
         assert!(project.task_count() > 0, "{name} has at least one task");
         for task in project.task_configs() {
-            task.decode_value::<Vec<StateStreamConfig>>("recording")
+            task.decode_value::<Vec<StateStreamConfig>>("/recording")
                 .unwrap();
             let input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY).unwrap();
             assert!(task.resolve_path(&input.path_key).unwrap().is_file());
@@ -119,7 +126,7 @@ fn domain_configuration_decodes_without_application_mirror_types() {
     let project = load_glv_project(example_root("mean_field_replicator_demographic")).unwrap();
     let seeds = project
         .task_configs()
-        .map(|task| task.decode_value::<RngConfig>("rng").unwrap().seed())
+        .map(|task| task.decode_value::<RngConfig>("/rng").unwrap().seed())
         .collect::<Vec<_>>();
     assert_eq!(seeds, [Some(7), Some(11)]);
 }

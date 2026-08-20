@@ -93,7 +93,7 @@ impl Workspace {
         fs::write(config.join("fixed.json"), fixed).unwrap();
         fs::write(
             config.join("sweep.json"),
-            r#"{"mode":"cartesian","axes":[]}"#,
+            r#"{"mode":"cartesian","axes":{}}"#,
         )
         .unwrap();
         ParameterSpace::load(config).unwrap().task(0).unwrap()
@@ -185,7 +185,7 @@ fn make_stochastic_simulation(
         Noise::new(
             DemographicGaussian::new(
                 0.05,
-                RngConfig::new(Some(42), None, None),
+                RngConfig::new(Some(42), None),
                 NoiseDomain::aggregate(2).unwrap(),
             )
             .unwrap(),
@@ -363,7 +363,7 @@ fn workflow_records_all_glv_streams_metadata_terminal_state_and_integrity() {
         "relative_frequency"
     );
     assert_eq!(document["user_metadata"][TASK_ORDINAL_METADATA_KEY], 0);
-    assert_eq!(document["user_metadata"]["seed"], 7);
+    assert_eq!(document["user_metadata"]["/seed"], 7);
     assert_eq!(
         document["user_metadata"]["interaction_matrix"]["sha256"],
         persisted.descriptor().sha256()

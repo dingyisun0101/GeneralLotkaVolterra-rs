@@ -14,8 +14,8 @@ pub use shared::{
     INTERACTION_GENERATOR_RNG_NAMESPACE, INTERACTION_GENERATOR_VERSION, INTERACTION_MATRIX_FORMAT,
     INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactDescriptor, InteractionArtifactError,
     InteractionArtifactLoadError, InteractionMatrixError, InteractionMatrixRecipe,
-    InteractionProvenance, InteractionRecipeError, InteractionSourceKind, MatrixNormalization,
-    PersistedInteraction, SignStructure,
+    InteractionProvenance, InteractionRecipeError, InteractionSourceKind,
+    InteractionTransformation, MatrixNormalization, PersistedInteraction, SignStructure,
 };
 
 /// Shared core matrix with one GLV-local ndarray constructor.
@@ -105,6 +105,15 @@ impl InteractionMatrix {
     }
     pub const fn provenance(&self) -> &InteractionProvenance {
         self.0.provenance()
+    }
+    pub fn antisymmetrize(&self) -> Result<Self, InteractionMatrixError> {
+        Ok(Self(self.0.antisymmetrize()?))
+    }
+    pub fn scale(&self, scalar: f64) -> Result<Self, InteractionMatrixError> {
+        Ok(Self(self.0.scale(scalar)?))
+    }
+    pub fn normalize(&self, threshold: f64) -> Result<Self, InteractionMatrixError> {
+        Ok(Self(self.0.normalize(threshold)?))
     }
     pub fn generator_rng_record(&self) -> Result<Option<RngRecord>, RngRecordError> {
         self.0.generator_rng_record()

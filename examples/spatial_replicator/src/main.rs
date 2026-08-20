@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let execution = workload.execution().clone();
     let simulation = workload
         .register(Phase::builder(1, "spatial replicator"))
-        .display_tasks_by(template.as_str(), ["cutoff"])
+        .display_tasks_by(template.as_str(), ["/cutoff"])
         .max_concurrent_workloads(1)
         .queue_capacity(1)
         .build()?;

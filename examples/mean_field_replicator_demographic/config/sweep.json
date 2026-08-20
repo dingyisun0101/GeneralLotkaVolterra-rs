@@ -1,12 +1,8 @@
 {
   "mode": "cartesian",
-  "axes": [
-    {
-      "name": "rng",
-      "values": [
-        {"seed": 7, "parallel_streams": 2},
-        {"seed": 11, "parallel_streams": 2}
-      ]
+  "axes": {
+    "rng": {
+      "seed": {"values": [7, 11]}
     }
-  ]
+  }
 }

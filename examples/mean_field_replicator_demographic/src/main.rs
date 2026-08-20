@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let execution = workload.execution().clone();
     let simulation = workload
         .register(Phase::builder(1, "demographic mean-field replicator"))
-        .display_tasks_by(template.as_str(), ["rng"])
+        .display_tasks_by(template.as_str(), ["/rng/seed"])
         .max_concurrent_workloads(1)
         .queue_capacity(1)
         .build()?;

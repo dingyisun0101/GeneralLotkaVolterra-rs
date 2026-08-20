@@ -79,7 +79,7 @@ impl Workspace {
         .unwrap();
         fs::write(
             config.join("sweep.json"),
-            r#"{"mode":"cartesian","axes":[]}"#,
+            r#"{"mode":"cartesian","axes":{}}"#,
         )
         .unwrap();
         ParameterSpace::load(config).unwrap().task(0).unwrap()

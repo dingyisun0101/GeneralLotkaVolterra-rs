@@ -278,7 +278,7 @@ fn mean_field_accepts_compatible_custom_kernel_and_noise_plugins() {
     };
     let noise = ProportionalGaussian::new(
         0.0,
-        RngConfig::new(Some(42), None, None),
+        RngConfig::new(Some(42), None),
         NoiseDomain::aggregate(2).unwrap(),
     )
     .unwrap();

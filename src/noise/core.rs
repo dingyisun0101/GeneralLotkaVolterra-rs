@@ -2,7 +2,6 @@
 
 use std::error::Error;
 use std::fmt;
-use std::num::NonZeroUsize;
 
 use physics_in_parallel::math::tensor::{RandType, TensorRandError, TensorRandFiller};
 use physics_in_parallel::rng::{RngConfig, RngConfigError, RngMethod};
@@ -139,7 +138,6 @@ impl GaussianWorkspace {
                     RngMethod::ChaCha12,
                     RngMethod::ChaCha20,
                 ],
-                NonZeroUsize::new(1),
             )
             .map_err(NoisePluginError::RngConfig)?;
         let filler = TensorRandFiller::try_new(
@@ -153,14 +151,6 @@ impl GaussianWorkspace {
         let rng = filler.rng_config();
         let method = rng.method().expect("PiP resolves the noise RNG method");
         let mut parameters = serde_json::Map::new();
-        parameters.insert(
-            "parallel_streams".to_owned(),
-            serde_json::Value::from(
-                rng.parallel_streams()
-                    .expect("PiP resolves the noise stream count")
-                    .get(),
-            ),
-        );
         parameters.insert(
             "distribution".to_owned(),
             serde_json::Value::from("standard_normal"),
