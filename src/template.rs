@@ -39,7 +39,7 @@ use ecological_model_core::trajectory::{
     TrajectoryObserver,
 };
 
-pub const INTERACTION_INPUT_KEY: &str = "interaction";
+pub const INTERACTION_INPUT_KEY: &str = "/interaction";
 
 /// Task-specific interaction input resolved through the workload path table.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -130,7 +130,7 @@ impl GlvTemplate {
         context: &TaskContext,
     ) -> Result<(), TemplateTaskError> {
         let task = context.configuration();
-        let maximum_iterations = task.decode_value("maximum_iterations")?;
+        let maximum_iterations = task.decode_value("/maximum_iterations")?;
         context.set_iteration(0)?;
         context.set_target_iteration(maximum_iterations)?;
         match self {
@@ -148,28 +148,28 @@ fn run_mean_field(
     context: &TaskContext,
     demographic: bool,
 ) -> Result<(), TemplateTaskError> {
-    let initial_abundance = if task.value("K").is_some() {
-        let species = task.decode_value::<usize>("K")?;
+    let initial_abundance = if task.value("/K").is_some() {
+        let species = task.decode_value::<usize>("/K")?;
         if species == 0 {
             return Err("mean-field well-mixed species count `K` must be nonzero".into());
         }
         Array1::from_elem(species, 1.0 / species as f64)
     } else {
-        Array1::from_vec(task.decode_value("initial_abundance")?)
+        Array1::from_vec(task.decode_value("/initial_abundance")?)
     };
-    let growth = match task.value("growth").and_then(serde_json::Value::as_f64) {
+    let growth = match task.value("/growth").and_then(serde_json::Value::as_f64) {
         Some(value) => Array1::from_elem(initial_abundance.len(), value),
-        None => Array1::from_vec(task.decode_value("growth")?),
+        None => Array1::from_vec(task.decode_value("/growth")?),
     };
-    let cutoff = task.decode_value("cutoff")?;
-    let time_step = TimeStep::new(task.decode_value("physical_time_increment")?)?;
-    let maximum_iterations = task.decode_value("maximum_iterations")?;
-    let streams: Vec<StateStreamConfig> = task.decode_value("recording")?;
+    let cutoff = task.decode_value("/cutoff")?;
+    let time_step = TimeStep::new(task.decode_value("/physical_time_increment")?)?;
+    let maximum_iterations = task.decode_value("/maximum_iterations")?;
+    let streams: Vec<StateStreamConfig> = task.decode_value("/recording")?;
     let noise = demographic
         .then(|| {
             Ok::<_, TemplateTaskError>((
-                task.decode_value::<f64>("sigma")?,
-                task.decode_value::<RngConfig>("rng")?,
+                task.decode_value::<f64>("/sigma")?,
+                task.decode_value::<RngConfig>("/rng")?,
             ))
         })
         .transpose()?;
@@ -233,24 +233,24 @@ fn run_spatial_replicator(
     task: &TaskConfig,
     context: &TaskContext,
 ) -> Result<(), TemplateTaskError> {
-    let spatial_shape: Vec<usize> = task.decode_value("spatial_shape")?;
+    let spatial_shape: Vec<usize> = task.decode_value("/spatial_shape")?;
     let species = task
-        .value("K")
-        .map(|_| task.decode_value::<usize>("K"))
+        .value("/K")
+        .map(|_| task.decode_value::<usize>("/K"))
         .transpose()?;
     if species == Some(0) {
         return Err("spatial species count `K` must be nonzero".into());
     }
-    let growth = decode_species_values(task, "growth", species)?;
+    let growth = decode_species_values(task, "/growth", species)?;
     let species = species.unwrap_or(growth.len());
-    let diffusion_coefficients = decode_species_values(task, "diffusion", Some(species))?;
-    let spacing: Vec<f64> = task.decode_value("spacing")?;
-    let boundary = task.decode_value("boundary")?;
-    let cutoff = task.decode_value("cutoff")?;
-    let time_step = TimeStep::new(task.decode_value("physical_time_increment")?)?;
-    let maximum_iterations = task.decode_value("maximum_iterations")?;
-    let streams: Vec<StateStreamConfig> = task.decode_value("recording")?;
-    let initialization: InitialStateSource = task.decode_value("initialization")?;
+    let diffusion_coefficients = decode_species_values(task, "/diffusion", Some(species))?;
+    let spacing: Vec<f64> = task.decode_value("/spacing")?;
+    let boundary = task.decode_value("/boundary")?;
+    let cutoff = task.decode_value("/cutoff")?;
+    let time_step = TimeStep::new(task.decode_value("/physical_time_increment")?)?;
+    let maximum_iterations = task.decode_value("/maximum_iterations")?;
+    let streams: Vec<StateStreamConfig> = task.decode_value("/recording")?;
+    let initialization: InitialStateSource = task.decode_value("/initialization")?;
 
     context.set_detail("resolving interaction matrix");
     let interaction_input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY)?;
@@ -289,7 +289,11 @@ fn decode_species_values(
         species,
     ) {
         (Some(value), Some(species)) => Ok(Array1::from_elem(species, value)),
-        (Some(_), None) => Err(format!("scalar `{name}` requires species count `K`").into()),
+        (Some(_), None) => Err(format!(
+            "scalar `{}` requires species count `K`",
+            name.trim_start_matches('/')
+        )
+        .into()),
         (None, _) => Ok(Array1::from_vec(task.decode_value(name)?)),
     }
 }
@@ -299,18 +303,18 @@ fn run_spatial_glv(
     task: &TaskConfig,
     context: &TaskContext,
 ) -> Result<(), TemplateTaskError> {
-    let spatial_shape: Vec<usize> = task.decode_value("spatial_shape")?;
-    let growth = Array1::from_vec(task.decode_value("growth")?);
-    let diffusion_coefficients = Array1::from_vec(task.decode_value("diffusion")?);
-    let spacing: Vec<f64> = task.decode_value("spacing")?;
-    let boundary = task.decode_value("boundary")?;
-    let cutoff = task.decode_value("cutoff")?;
-    let carrying_capacity = task.decode_value("carrying_capacity")?;
-    let initial_population_per_site: f64 = task.decode_value("initial_population_per_site")?;
-    let time_step = TimeStep::new(task.decode_value("physical_time_increment")?)?;
-    let maximum_iterations = task.decode_value("maximum_iterations")?;
-    let streams: Vec<StateStreamConfig> = task.decode_value("recording")?;
-    let initialization: InitialStateSource = task.decode_value("initialization")?;
+    let spatial_shape: Vec<usize> = task.decode_value("/spatial_shape")?;
+    let growth = Array1::from_vec(task.decode_value("/growth")?);
+    let diffusion_coefficients = Array1::from_vec(task.decode_value("/diffusion")?);
+    let spacing: Vec<f64> = task.decode_value("/spacing")?;
+    let boundary = task.decode_value("/boundary")?;
+    let cutoff = task.decode_value("/cutoff")?;
+    let carrying_capacity = task.decode_value("/carrying_capacity")?;
+    let initial_population_per_site: f64 = task.decode_value("/initial_population_per_site")?;
+    let time_step = TimeStep::new(task.decode_value("/physical_time_increment")?)?;
+    let maximum_iterations = task.decode_value("/maximum_iterations")?;
+    let streams: Vec<StateStreamConfig> = task.decode_value("/recording")?;
+    let initialization: InitialStateSource = task.decode_value("/initialization")?;
 
     context.set_detail("resolving interaction matrix");
     let species = growth.len();
@@ -473,8 +477,8 @@ where
     S: StandardTemplateSimulation,
 {
     let observation_config: ObservationConfig = task
-        .value("observation")
-        .map(|_| task.decode_value("observation"))
+        .value("/observation")
+        .map(|_| task.decode_value("/observation"))
         .transpose()?
         .unwrap_or_default();
     if matches!(observation_config, ObservationConfig::Detect { .. })
@@ -577,9 +581,9 @@ fn task_recording_directory(
     scope: &ExecutionScope,
     task: &TaskConfig,
 ) -> Result<std::path::PathBuf, TemplateTaskError> {
-    match task.value("recording_name") {
+    match task.value("/recording_name") {
         Some(_) => {
-            let name = task.decode_value::<String>("recording_name")?;
+            let name = task.decode_value::<String>("/recording_name")?;
             Ok(scope.named_task_recording_directory(&name)?)
         }
         None => Ok(scope.task_recording_directory(task.task_ordinal())),
@@ -746,7 +750,7 @@ mod tests {
             .unwrap();
             fs::write(
                 root.join("config/sweep.json"),
-                r#"{"mode":"cartesian","axes":[]}"#,
+                r#"{"mode":"cartesian","axes":{}}"#,
             )
             .unwrap();
             fs::write(

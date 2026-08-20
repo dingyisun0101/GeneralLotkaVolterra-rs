@@ -88,7 +88,7 @@ mod tests {
             },
             seed_taxon: 1,
             seed_radius: 0,
-            rng: RngConfig::new(Some(9), None, None),
+            rng: RngConfig::new(Some(9), None),
         }
         .create(SquareLatticeConfig::periodic(&[3]), 2)
         .unwrap();

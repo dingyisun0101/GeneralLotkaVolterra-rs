@@ -29,7 +29,7 @@ fn spatial(values: Vec<f64>) -> SpatialAbundance {
 }
 
 fn rng(seed: u64) -> RngConfig {
-    RngConfig::new(Some(seed), None, None)
+    RngConfig::new(Some(seed), None)
 }
 
 #[test]
@@ -69,7 +69,6 @@ fn demographic_noise_is_seeded_reproducible_and_reuses_scratch() {
     assert_eq!(record.version(), "rand_chacha-0.10");
     assert_eq!(record.key_encoding(), "u64_decimal");
     assert_eq!(record.key(), "17");
-    assert_eq!(record.parameters()["parallel_streams"], 1);
     let mut state_a = state(vec![4.0, 9.0, 16.0], None, 29.0);
     let mut state_b = state(vec![4.0, 9.0, 16.0], None, 29.0);
     let initial_time = state_a.simulation_time();
