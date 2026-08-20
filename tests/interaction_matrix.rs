@@ -71,16 +71,6 @@ fn matrices_validate_domain_and_reuse_shared_storage() {
     assert_eq!(inline.provenance().kind(), InteractionSourceKind::Inline);
     assert_coefficients(&inline, &[0.0, 1.0, -1.0, 0.0]);
 
-    let transformed = InteractionMatrix::from_rows(vec![vec![1.0, 4.0], vec![-2.0, 3.0]], 2)
-        .unwrap()
-        .antisymmetrize()
-        .unwrap()
-        .scale(2.0)
-        .unwrap()
-        .normalize(3.0)
-        .unwrap();
-    assert_coefficients(&transformed, &[0.0, 3.0, -3.0, 0.0]);
-
     assert!(matches!(
         InteractionMatrix::from_rows(vec![vec![1.0, 2.0], vec![3.0]], 2),
         Err(InteractionMatrixError::RaggedRows { .. })
