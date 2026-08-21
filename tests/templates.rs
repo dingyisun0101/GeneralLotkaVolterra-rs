@@ -1,6 +1,6 @@
-use general_lotka_volterra_rs::advanced::prelude::{
-    ExecutionScope, GlvTemplate, TaskContext, TemplateTaskError,
-};
+use general_lotka_volterra_rs::advanced::prelude::{GlvTemplate, TemplateTaskError};
+use scientific_workflow::prelude::basics::ExecutionScope;
+use scientific_workflow::prelude::runtime::TaskContext;
 
 #[test]
 fn built_in_template_exposes_a_runtime_workload_contract() {

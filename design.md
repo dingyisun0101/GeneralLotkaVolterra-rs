@@ -22,7 +22,7 @@ implementation on `sw-version`.
 
 ## Non-goals
 
-- No parallel GLV state, solver dispatcher, task API, or recording format.
+- No parallel GLV state, solver dispatch layer, task API, or recording format.
 - No second GLV storage, configuration, progress, or execution abstraction
   beside Scientific Workflow.
 - No process-global runtime or writer manager.
@@ -206,9 +206,9 @@ checkpoint can therefore select every schema field and encode non-spatial
 space as JSON `null`.
 
 The schema is model-owned: GLV supplies it through
-`ScientificProject::load_with_state_schema`. User projects and Dispatcher
-stages contain only `fixed.json`, `sweep.json`, and `paths.json`; they cannot
-drift by copying or overriding `state.json`.
+`ScientificProject::load_with_state_schema`. User projects contain only
+`fixed.json`, `sweep.json`, and `paths.json`; they cannot drift by copying or
+overriding `state.json`.
 
 ### Authoritative state and numerical scratch
 

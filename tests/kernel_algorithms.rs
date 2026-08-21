@@ -1,4 +1,3 @@
-use general_lotka_volterra_rs::interaction::InteractionMatrix;
 use general_lotka_volterra_rs::kernel::{
     BoundaryCondition, Diffusion, Kernel, KernelAlgorithmError, KernelCore,
     SpatialGeneralLotkaVolterraRk2, SpatialReplicatorRk2,
@@ -7,8 +6,9 @@ use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, load_state_schema,
 };
 use ndarray::{Array1, Array2, ArrayD, IxDyn};
-use physics_in_parallel::space::discrete::square_lattice::SquareLatticeConfig;
+use physics_in_parallel::prelude::basic::SquareLatticeConfig;
 use scientific_workflow::system_state::{SimulationTime, SystemState};
+use support::interaction_from_array;
 
 fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemState {
     let time = SimulationTime::from_iteration_and_physical_time(0, 0.0).unwrap();
@@ -23,7 +23,7 @@ fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemStat
 
 #[test]
 fn spatial_facilities_validate_layout_diffusion_and_stability() {
-    let space = SquareLatticeConfig::new(&[2], BoundaryCondition::Neumann, None);
+    let space = SquareLatticeConfig::try_new(&[2], BoundaryCondition::Neumann, None).unwrap();
     assert!(matches!(
         Diffusion::new(Array1::from_vec(vec![-0.1]), space.clone()),
         Err(KernelAlgorithmError::InvalidDiffusion { .. })
@@ -57,7 +57,7 @@ fn spatial_kernel_rejects_non_contiguous_storage() {
     values.swap_axes(0, 1);
     assert!(values.as_slice().is_none());
 
-    let interaction = InteractionMatrix::from_array(Array2::zeros((3, 3)), 3).unwrap();
+    let interaction = interaction_from_array(Array2::zeros((3, 3))).unwrap();
     let algorithm = SpatialReplicatorRk2::new(
         Array1::zeros(3),
         Diffusion::unit_spacing(Array1::zeros(3), &[2, 2], BoundaryCondition::Periodic).unwrap(),
@@ -75,3 +75,4 @@ fn spatial_kernel_rejects_non_contiguous_storage() {
         )
     ));
 }
+mod support;

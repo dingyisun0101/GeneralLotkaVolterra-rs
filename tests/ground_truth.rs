@@ -1,5 +1,13 @@
-use general_lotka_volterra_rs::advanced::prelude::*;
+mod support;
+
+use general_lotka_volterra_rs::advanced::prelude::{
+    ABUNDANCE_FIELD, AggregateAbundance, BoundaryCondition, Diffusion, MeanFieldReplicator,
+    MeanFieldReplicatorConfig, SPACE_FIELD, SpatialAbundance, SpatialGeneralLotkaVolterra,
+    SpatialGeneralLotkaVolterraConfig, TimeStep,
+};
+use ndarray::{Array1, Array2, ArrayD, IxDyn};
 use serde_json::Value;
+use support::interaction_from_array;
 
 const GROUND_TRUTH: &str = include_str!("fixtures/ground_truth.json");
 
@@ -35,7 +43,7 @@ fn mean_field_replicator_matches_independent_high_resolution_ground_truth() {
     let initial = values(&case["initial_abundance"]);
     let species = initial.len();
     let matrix = Array2::from_shape_vec((species, species), values(&case["interaction"])).unwrap();
-    let interaction = InteractionMatrix::from_array(matrix, species).unwrap();
+    let interaction = interaction_from_array(matrix).unwrap();
     let time_step = TimeStep::new(fixture["rust_time_step"].as_f64().unwrap()).unwrap();
     let mut simulation = MeanFieldReplicator::new(
         Array1::from_vec(initial),
@@ -78,7 +86,7 @@ fn spatial_glv_matches_independent_ground_truth_with_and_without_diffusion() {
         let species = *shape.last().unwrap();
         let matrix =
             Array2::from_shape_vec((species, species), values(&case["interaction"])).unwrap();
-        let interaction = InteractionMatrix::from_array(matrix, species).unwrap();
+        let interaction = interaction_from_array(matrix).unwrap();
         let initial =
             ArrayD::from_shape_vec(IxDyn(&shape), values(&case["initial_space"])).unwrap();
         let boundary: BoundaryCondition = serde_json::from_value(case["boundary"].clone()).unwrap();

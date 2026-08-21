@@ -6,8 +6,7 @@
 
 use std::path::PathBuf;
 
-use scientific_workflow::project::{ScientificProject, ScientificProjectError};
-use scientific_workflow::system_state::StateError;
+use scientific_workflow::prelude::basics::{ScientificProject, ScientificProjectError, StateError};
 use thiserror::Error;
 
 use crate::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD, load_state_schema};

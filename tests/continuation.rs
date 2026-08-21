@@ -24,6 +24,7 @@ use scientific_workflow::execution::ExecutionScope;
 use scientific_workflow::storage::{SamplingInterval, StateStreamConfig, StateStreamStorage};
 use scientific_workflow::system_state::SystemState;
 use scientific_workflow::time_series::StateSeries;
+use support::interaction_from_array;
 
 static WORKSPACE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -131,7 +132,7 @@ fn simulation_config() -> MeanFieldReplicatorConfig {
 }
 
 fn interaction() -> InteractionMatrix {
-    InteractionMatrix::from_array(arr2(&[[-0.2, 0.7], [-0.4, 0.1]]), 2).unwrap()
+    interaction_from_array(arr2(&[[-0.2, 0.7], [-0.4, 0.1]])).unwrap()
 }
 
 fn advance(
@@ -254,13 +255,9 @@ fn deterministic_continuation_matches_uninterrupted_state_and_samples() {
     )
     .unwrap();
     assert_eq!(checkpoint.simulation_time().iteration(), 3);
-    let mut resumed = MeanFieldReplicator::from_state(
-        checkpoint,
-        general_lotka_volterra_rs::AbundanceRepresentation::RelativeFrequency,
-        verified_interaction,
-        simulation_config(),
-    )
-    .unwrap();
+    let mut resumed =
+        MeanFieldReplicator::from_state(checkpoint, verified_interaction, simulation_config())
+            .unwrap();
     advance(&mut resumed, &mut resumed_recording, 6);
     let reason = TerminationReason::MaximumIterations;
     let terminal = terminal_state(resumed.state(), &reason);
@@ -284,3 +281,4 @@ fn deterministic_continuation_matches_uninterrupted_state_and_samples() {
         );
     }
 }
+mod support;

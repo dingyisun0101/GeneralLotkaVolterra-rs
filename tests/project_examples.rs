@@ -5,7 +5,7 @@ use general_lotka_volterra_rs::kernel::BoundaryCondition;
 use general_lotka_volterra_rs::project::load_glv_project;
 use general_lotka_volterra_rs::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD};
 use general_lotka_volterra_rs::{INTERACTION_INPUT_KEY, InteractionInput};
-use physics_in_parallel::rng::RngConfig;
+use physics_in_parallel::prelude::basic::RngConfig;
 use scientific_workflow::prelude::basics::{SamplingInterval, StateStreamConfig};
 
 fn example_root(name: &str) -> PathBuf {
@@ -60,22 +60,19 @@ fn mean_field_example_is_a_complete_lazy_workflow_project() {
         let recording = task
             .decode_value::<Vec<StateStreamConfig>>("/recording")
             .unwrap();
+        assert_eq!(recording.len(), 2);
         assert_eq!(
             recording[0].sampling_interval(),
             SamplingInterval::iterations(10).unwrap()
         );
         assert_eq!(
             recording[1].sampling_interval(),
-            SamplingInterval::iterations(25).unwrap()
-        );
-        assert_eq!(
-            recording[2].sampling_interval(),
             SamplingInterval::iterations(50).unwrap()
         );
 
         let input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY).unwrap();
         let matrix =
-            InteractionMatrix::load_json(task.resolve_path(&input.path_key).unwrap(), 3).unwrap();
+            InteractionMatrix::load_json(task.resolve_path(&input.path_key).unwrap()).unwrap();
         assert_eq!(matrix.species(), 3);
         assert_eq!(
             task.resolve_path("recordings").unwrap(),

@@ -13,7 +13,7 @@
 //! let simulation = workload
 //!     .register(Phase::builder(1, "GLV simulation"))
 //!     .build()?;
-//! WorkflowRuntime::builder()
+//! WorkflowRuntime::builder(workload.execution_record_path())
 //!     .phase(simulation)
 //!     .build()?
 //!     .run_phases([1])?;

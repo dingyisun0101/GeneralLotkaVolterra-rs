@@ -5,8 +5,8 @@ use std::fmt;
 use std::sync::Arc;
 
 use ndarray::{ArrayD, ArrayView1, ArrayViewD};
-use physics_in_parallel::math::prelude::{DenseMatrix, MatrixError};
-use scientific_workflow::system_state::{StateError, SystemState};
+use physics_in_parallel::prelude::basic::{DenseMatrix, MatrixError};
+use scientific_workflow::prelude::basics::{StateError, SystemState};
 use thiserror::Error as ThisError;
 
 use crate::interaction::{InteractionMatrix, InteractionProvenance};
@@ -38,22 +38,17 @@ pub enum KernelCoreError {
 #[derive(Clone, Debug)]
 pub struct KernelCore {
     interaction: InteractionMatrix,
-    species: usize,
 }
 
 impl KernelCore {
     /// Takes ownership of an already-resolved and validated interaction matrix.
     pub fn new(interaction: InteractionMatrix) -> Self {
-        let species = interaction.species();
-        Self {
-            interaction,
-            species,
-        }
+        Self { interaction }
     }
 
     /// Returns the validated species dimension.
-    pub const fn species(&self) -> usize {
-        self.species
+    pub fn species(&self) -> usize {
+        self.interaction.species()
     }
 
     /// Borrows the exact immutable interaction matrix.
@@ -82,15 +77,16 @@ impl KernelCore {
         input: &[f64],
         output: &mut [f64],
     ) -> Result<(), KernelCoreError> {
-        if input.len() != self.species {
+        let species = self.species();
+        if input.len() != species {
             return Err(KernelCoreError::InputLength {
-                expected: self.species,
+                expected: species,
                 actual: input.len(),
             });
         }
-        if output.len() != self.species {
+        if output.len() != species {
             return Err(KernelCoreError::OutputLength {
-                expected: self.species,
+                expected: species,
                 actual: output.len(),
             });
         }
@@ -105,6 +101,16 @@ impl KernelCore {
                 }
                 _ => unreachable!("matrix was validated before kernel construction"),
             })
+    }
+
+    /// Applies the interaction matrix to contiguous species vectors in one
+    /// PiP-backed batch.
+    pub(crate) fn apply_interactions(
+        &self,
+        input: &[f64],
+        output: &mut [f64],
+    ) -> Result<(), MatrixError> {
+        self.interaction.mul_vectors_into(input, output)
     }
 }
 

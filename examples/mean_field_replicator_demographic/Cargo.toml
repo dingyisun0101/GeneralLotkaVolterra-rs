@@ -6,5 +6,5 @@ rust-version = "1.97"
 publish = false
 
 [dependencies]
-general-lotka-volterra-rs = { path = "../..", version = "0.10.1" }
-scientific-workflow = { path = "../../../workflow/rust", version = "0.6.2" }
+general-lotka-volterra-rs = { path = "../..", version = "0.12.0" }
+scientific-workflow = "0.7.0"

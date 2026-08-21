@@ -30,7 +30,7 @@ use general_lotka_volterra_rs::{
     TimeStep, TotalAbundance,
 };
 use ndarray::{Array1, Array2, ArrayD, IxDyn};
-use physics_in_parallel::rng::RngConfig;
+use physics_in_parallel::prelude::basic::RngConfig;
 use scientific_workflow::configuration::{ParameterSpace, TaskParameters};
 use scientific_workflow::execution::ExecutionScope;
 use scientific_workflow::rng_record::{RNG_RECORDS_METADATA_KEY, RngRecord};
@@ -39,6 +39,7 @@ use scientific_workflow::storage::{
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use support::interaction_from_array;
 
 static WORKSPACE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -177,7 +178,6 @@ fn make_stochastic_simulation(
     .into_state();
     MeanFieldReplicator::from_plugins(
         state,
-        AbundanceRepresentation::RelativeFrequency,
         Kernel::new(
             KernelCore::new(interaction),
             MeanFieldReplicatorRk4::new(Array1::zeros(2)).unwrap(),
@@ -288,7 +288,7 @@ fn workflow_records_all_glv_streams_metadata_terminal_state_and_integrity() {
     let scope = ExecutionScope::create_named(&workspace.root, "execution").unwrap();
     let task =
         workspace.task_parameters(r#"{"seed":7,"physical_time_increment":0.1}"#, "task-config");
-    let interaction = InteractionMatrix::from_array(Array2::zeros((2, 2)), 2).unwrap();
+    let interaction = interaction_from_array(Array2::zeros((2, 2))).unwrap();
     let persisted = persist_interaction_matrix(&scope, &interaction).unwrap();
     let mut simulation = make_simulation(interaction);
     let creation = GlvRecordingMetadata::new(
@@ -500,7 +500,7 @@ fn stochastic_noise_identity_is_written_once_in_creation_metadata() {
     let workspace = Workspace::new("rng-record");
     let scope = ExecutionScope::create_named(&workspace.root, "execution").unwrap();
     let task = workspace.task_parameters(r#"{"seed":42,"noise_sigma":0.05}"#, "task-config");
-    let interaction = InteractionMatrix::from_array(Array2::zeros((2, 2)), 2).unwrap();
+    let interaction = interaction_from_array(Array2::zeros((2, 2))).unwrap();
     let persisted = persist_interaction_matrix(&scope, &interaction).unwrap();
     let simulation = make_stochastic_simulation(interaction);
     let creation = GlvRecordingMetadata::new(
@@ -556,7 +556,7 @@ fn recording_metadata_and_failure_lifecycle_fail_closed() {
     let workspace = Workspace::new("lifecycle");
     let scope = ExecutionScope::create_named(&workspace.root, "execution").unwrap();
     let task = workspace.task_parameters(r#"{"seed":9}"#, "task-config");
-    let interaction = InteractionMatrix::from_array(Array2::zeros((2, 2)), 2).unwrap();
+    let interaction = interaction_from_array(Array2::zeros((2, 2))).unwrap();
     let persisted = persist_interaction_matrix(&scope, &interaction).unwrap();
     let mut simulation = make_simulation(interaction);
 
@@ -630,7 +630,7 @@ fn recording_metadata_and_failure_lifecycle_fail_closed() {
 
     let bounded_directory = scope.task_recording_directory(3);
     let bounded_simulation =
-        make_simulation(InteractionMatrix::from_array(Array2::zeros((2, 2)), 2).unwrap());
+        make_simulation(interaction_from_array(Array2::zeros((2, 2))).unwrap());
     let bounded_error = match GlvRecording::start(
         &bounded_directory,
         recording_config(1),
@@ -655,7 +655,7 @@ fn completed_reader_round_trips_populated_spatial_payload_and_exact_time() {
     let workspace = Workspace::new("spatial-read");
     let scope = ExecutionScope::create_named(&workspace.root, "execution").unwrap();
     let task = workspace.task_parameters(r#"{"seed":11}"#, "task-config");
-    let interaction = InteractionMatrix::from_array(Array2::zeros((2, 2)), 2).unwrap();
+    let interaction = interaction_from_array(Array2::zeros((2, 2))).unwrap();
     let persisted = persist_interaction_matrix(&scope, &interaction).unwrap();
     let initial_space = ArrayD::from_shape_vec(IxDyn(&[1, 2]), vec![0.4, 0.6]).unwrap();
     let mut simulation = SpatialReplicator::new(
@@ -735,3 +735,4 @@ fn completed_reader_round_trips_populated_spatial_payload_and_exact_time() {
         );
     }
 }
+mod support;

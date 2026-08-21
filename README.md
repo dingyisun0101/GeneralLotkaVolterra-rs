@@ -1,5 +1,8 @@
 # General Lotka–Volterra for Rust
 
+> This crate is pre-1.0 alpha software. Every release may contain intentional
+> breaking changes; older releases should be treated as incompatible.
+
 `general-lotka-volterra-rs` provides ecological models and their scientific I/O
 as workloads for an application-owned Scientific Workflow runtime. GLV handles
 model construction, evolution, recording, terminal-state production, and final
@@ -18,8 +21,8 @@ Add the crate:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = "0.9.0"
-scientific-workflow = "0.5.0"
+general-lotka-volterra-rs = "0.12.0"
+scientific-workflow = "0.7.0"
 ```
 
 Copy the configuration, inputs, and `main.rs` from the example closest to your
@@ -33,17 +36,14 @@ use scientific_workflow::prelude::runtime::{Phase, WorkflowRuntime};
 # fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 let template = GlvTemplate::MeanFieldReplicator;
 let workload = GlvWorkload::load("examples/mean_field_replicator", template)?;
-let execution = workload.execution().clone();
 let simulation = workload
     .register(Phase::builder(1, "mean-field replicator"))
-    .max_concurrent_workloads(1)
-    .queue_capacity(1)
     .build()?;
-WorkflowRuntime::builder()
+WorkflowRuntime::builder(workload.execution_record_path())
     .phase(simulation)
     .build()?
     .run_phases([1])?;
-println!("results: {}", execution.directory().display());
+println!("results: {}", workload.execution().directory().display());
 # Ok(())
 # }
 ```
@@ -52,6 +52,11 @@ The GLV prelude exports the built-in template and GLV-aware project loader.
 Workflow types are imported from Workflow itself, making ownership explicit.
 Paths, model parameters, sweeps, and recording settings remain in project files
 rather than in Rust code.
+
+Custom template authors may import GLV extension contracts from
+`advanced::prelude`. Generic arrays, matrices, randomness, ecological data, and
+Workflow runtime types remain available from their owning crates rather than
+being duplicated through GLV.
 
 The minimum supported toolchain is Rust 1.97 with edition 2024.
 
@@ -122,6 +127,21 @@ Their READMEs explain every model-specific field. Common fields include
 `recording`. Spatial examples additionally show lattice shape,
 initialization, diffusion, spacing, and boundary conditions.
 
+The interaction matrix is the sole authority for species count. GLV ignores a
+study-level `K` value, allowing it to remain useful metadata without becoming
+duplicated model configuration. A scalar `growth` or `diffusion` value applies
+to every inferred species. Mean-field models default to uniform initial
+abundance when `initial_abundance` is absent. Spatial models default to unit
+spacing when `spacing` is absent, and population GLV applies no global capacity
+when `carrying_capacity` is absent.
+
+Mean-field `initial_abundance` accepts either an inline vector or
+`{ "path_key": "<key>" }`. The latter resolves a JSON vector through the
+project's `paths.json`, allowing an upstream scientific-input phase to provide
+the exact same aggregate frequencies used to construct a categorical lattice.
+GLV validates and normalizes the resolved vector through its ordinary invariant
+boundary; it does not infer or regenerate the lattice initialization.
+
 Relative paths are resolved from the project root. There is no separate output
 argument: `config/paths.json` is the sole path authority.
 
@@ -181,13 +201,12 @@ their evidence policy consistently.
 ## Outputs and terminal states
 
 Every invocation creates a collision-resistant execution directory beneath the
-configured recording root. Each task has three independently configured state
-streams:
+configured recording root. Recording streams are explicit and model-specific:
 
 | Stream | Intended use |
 | --- | --- |
 | `signal` | frequent aggregate abundance and total |
-| `space` | full spatial state for analysis |
+| `space` | optional full spatial state for spatial analysis |
 | `checkpoint` | complete state for integrity checks and deterministic restart |
 
 Every successful task also publishes a canonical terminal composition. Read it
@@ -252,9 +271,17 @@ state contract. Workflow embeds the resolved schema in every recording.
 ## Interaction matrices
 
 Interaction matrices use PiP's standard versioned matrix JSON. Rows are
-affected species and columns are contributing species. GLV validates the shape
-and values before evolving a task, preserves the resolved matrix as a verified
-input artifact, and records its identity and digest with the output.
+affected species and columns are contributing species. Matrix construction,
+transformation, persistence, and multiplication are owned by
+`ecological-model-core` and PiP; GLV consumes their `InteractionMatrix`
+directly and adds no competing matrix wrapper. The matrix dimensions determine
+the species count, so callers never supply it separately. GLV validates the
+matrix against the selected model before evolving a task, preserves it as a
+verified input artifact, and records its identity and digest with the output.
+
+Spatial interaction is evaluated as one species-last batch. PiP owns the
+bounded internal parallel work, and GLV compares this path against independent
+per-cell ndarray linear algebra in its correctness tests.
 
 ## Recording and reading
 

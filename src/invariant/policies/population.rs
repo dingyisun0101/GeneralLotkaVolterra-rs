@@ -104,11 +104,14 @@ impl InvariantPolicy for PopulationInvariant {
         validate_abundance_values(abundance)?;
         let values = self.spatial_layout(space)?;
         validate_space_values(values)?;
+        let mut totals = vec![0.0; self.species];
+        for cell in values.chunks_exact(self.species) {
+            for (species, value) in cell.iter().copied().enumerate() {
+                totals[species] += value;
+            }
+        }
         for species in 0..self.species {
-            let expected = values
-                .chunks_exact(self.species)
-                .map(|cell| cell[species])
-                .sum::<f64>();
+            let expected = totals[species];
             if !close(expected, abundance[species]) {
                 return Err(InvariantPolicyError::AggregateMismatch {
                     species,

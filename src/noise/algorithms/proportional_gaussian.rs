@@ -1,12 +1,12 @@
 //! Gaussian fluctuations proportional to local abundance.
 
 use crate::{AggregateAbundance, SpatialAbundance, TimeStep};
-use physics_in_parallel::rng::RngConfig;
+use physics_in_parallel::prelude::basic::RngConfig;
 
 use crate::noise::core::{
     GaussianKind, GaussianWorkspace, NoiseAlgorithm, NoiseDomain, NoisePluginError,
 };
-use scientific_workflow::rng_record::RngRecord;
+use scientific_workflow::prelude::basics::RngRecord;
 
 /// Workflow metadata namespace for proportional Gaussian RNG provenance.
 pub const PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE: &str = "glv.noise.proportional_gaussian";
@@ -45,9 +45,9 @@ impl ProportionalGaussian {
         self.workspace.domain()
     }
 
-    /// Returns the reusable normal-sample and proposal capacities.
-    pub fn scratch_capacities(&self) -> (usize, usize) {
-        self.workspace.scratch_capacities()
+    /// Returns the reusable proposal-buffer capacity.
+    pub fn scratch_capacity(&self) -> usize {
+        self.workspace.scratch_capacity()
     }
 }
 
@@ -58,12 +58,17 @@ impl NoiseAlgorithm for ProportionalGaussian {
         Some(self.workspace.rng_record())
     }
 
+    fn is_noop(&self) -> bool {
+        self.sigma() == 0.0
+    }
+
     fn validate(
         &self,
         abundance: &AggregateAbundance,
         space: &SpatialAbundance,
     ) -> Result<(), Self::Error> {
-        self.workspace.validate(abundance, space)
+        self.workspace
+            .validate(abundance, space, GaussianKind::Proportional)
     }
 
     fn apply(

@@ -31,10 +31,10 @@ cargo run --release
 The default `fixed.json` uses `ecological-model-core` to sample one
 categorical taxon per site, then converts each site to a one-hot frequency
 cell. Its explicit PiP RNG configuration is recorded as provenance.
-Change `spatial_shape`, per-species `diffusion`, per-axis `spacing`, or
-`boundary` to define another lattice. The final array axis is inferred from the
-length of `growth`; the interaction matrix and initialization distribution
-must have the same dimension.
+Change `spatial_shape`, scalar or per-species `diffusion`, optional per-axis
+`spacing`, or `boundary` to define another lattice. The interaction matrix
+defines the final species axis; growth, diffusion, and the initialization
+distribution must resolve to that dimension. Omitted spacing is unit spacing.
 
 Both deterministic automatic-termination detectors are enabled: equilibrium
 convergence and a nontrivial periodic orbit. GLV owns their evidence

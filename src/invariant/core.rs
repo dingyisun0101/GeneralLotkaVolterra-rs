@@ -3,7 +3,7 @@
 use std::error::Error;
 use std::fmt;
 
-use scientific_workflow::system_state::{StateError, SystemState};
+use scientific_workflow::prelude::basics::{StateError, SystemState};
 use thiserror::Error as ThisError;
 
 use crate::{
@@ -31,6 +31,9 @@ pub trait InvariantPolicy {
     ) -> Result<(), Self::Error>;
 
     /// Restores the policy's domain and synchronizes derived payloads.
+    ///
+    /// Enforcement must be idempotent: applying it again without an
+    /// intervening state change must produce the same payload values.
     ///
     /// Implementations must finish fallible calculations and validation before
     /// mutating payloads. Returning an error after a partial mutation violates

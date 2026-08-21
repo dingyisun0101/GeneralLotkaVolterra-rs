@@ -13,7 +13,7 @@ use std::error::Error;
 use std::fmt;
 
 use ndarray::{Array1, ArrayD};
-use scientific_workflow::system_state::{
+use scientific_workflow::prelude::basics::{
     PayloadInsertError, SimulationTime, StateError, SystemState,
 };
 use serde::{Deserialize, Serialize};
@@ -92,13 +92,6 @@ pub enum StateAssemblyError {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum SimulationBuildError<KE, NE> {
-    /// Reconstruction metadata names an incompatible abundance representation.
-    RepresentationMismatch {
-        /// Representation structurally required by the concrete model.
-        expected: AbundanceRepresentation,
-        /// Representation supplied by reconstruction metadata.
-        actual: AbundanceRepresentation,
-    },
     /// The shared engine rejected the state or plugin composition.
     Composition(EngineBuildError<KE, NE, InvariantPolicyError>),
 }
@@ -110,12 +103,6 @@ where
 {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::RepresentationMismatch { expected, actual } => write!(
-                formatter,
-                "simulation requires abundance representation {}, found {}",
-                expected.as_str(),
-                actual.as_str()
-            ),
             Self::Composition(error) => fmt::Display::fmt(error, formatter),
         }
     }
@@ -128,7 +115,6 @@ where
 {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::RepresentationMismatch { .. } => None,
             Self::Composition(error) => Some(error),
         }
     }
@@ -214,17 +200,6 @@ pub(crate) fn aggregate_spatial(
         abundance.mapv_inplace(|value| value / cells as f64);
     }
     Ok(abundance)
-}
-
-pub(crate) fn require_representation<KE, NE>(
-    actual: AbundanceRepresentation,
-    expected: AbundanceRepresentation,
-) -> Result<(), SimulationBuildError<KE, NE>> {
-    if actual == expected {
-        Ok(())
-    } else {
-        Err(SimulationBuildError::RepresentationMismatch { expected, actual })
-    }
 }
 
 pub(crate) fn composition_error<KE, NE>(

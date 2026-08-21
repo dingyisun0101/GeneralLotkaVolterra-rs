@@ -3,10 +3,10 @@
 use std::error::Error;
 use std::fmt;
 
-use physics_in_parallel::math::tensor::{RandType, TensorRandError, TensorRandFiller};
-use physics_in_parallel::rng::{RngConfig, RngConfigError, RngMethod};
-use scientific_workflow::rng_record::{RngRecord, RngRecordError};
-use scientific_workflow::system_state::{StateError, SystemState};
+use physics_in_parallel::prelude::basic::{
+    RandType, RngConfig, RngConfigError, RngMethod, TensorRandError, TensorRandFiller,
+};
+use scientific_workflow::prelude::basics::{RngRecord, RngRecordError, StateError, SystemState};
 use thiserror::Error as ThisError;
 
 use crate::{ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TimeStep};
@@ -97,7 +97,6 @@ pub(crate) struct GaussianWorkspace {
     sigma: f64,
     rng_record: RngRecord,
     filler: TensorRandFiller,
-    eta: Vec<f64>,
     proposed: Vec<f64>,
 }
 
@@ -108,7 +107,6 @@ impl fmt::Debug for GaussianWorkspace {
             .field("domain", &self.domain)
             .field("sigma", &self.sigma)
             .field("rng", &self.filler.rng_config())
-            .field("eta_len", &self.eta.len())
             .field("proposed_len", &self.proposed.len())
             .finish_non_exhaustive()
     }
@@ -124,7 +122,6 @@ impl GaussianWorkspace {
         if !sigma.is_finite() || sigma < 0.0 {
             return Err(NoisePluginError::InvalidSigma { value: sigma });
         }
-        let species = domain.species();
         let elements = domain.elements();
         let rng = rng
             .resolve_for(
@@ -155,6 +152,10 @@ impl GaussianWorkspace {
             "distribution".to_owned(),
             serde_json::Value::from("standard_normal"),
         );
+        parameters.insert(
+            "sampling_layout".to_owned(),
+            serde_json::Value::from("flat_species_last_v1"),
+        );
         let rng_record = RngRecord::new(
             namespace,
             format!("{}+standard_normal", method.name()),
@@ -169,7 +170,6 @@ impl GaussianWorkspace {
             sigma,
             rng_record,
             filler,
-            eta: vec![0.0; species],
             proposed: vec![0.0; elements],
         })
     }
@@ -190,31 +190,42 @@ impl GaussianWorkspace {
         &self.rng_record
     }
 
-    pub(crate) fn scratch_capacities(&self) -> (usize, usize) {
-        (self.eta.capacity(), self.proposed.capacity())
+    pub(crate) fn scratch_capacity(&self) -> usize {
+        self.proposed.capacity()
     }
 
     pub(crate) fn validate(
         &self,
         abundance: &AggregateAbundance,
         space: &SpatialAbundance,
+        kind: GaussianKind,
     ) -> Result<(), NoisePluginError> {
+        self.validate_target(abundance, space, kind)?;
+        Ok(())
+    }
+
+    fn validate_target<'a>(
+        &self,
+        abundance: &'a AggregateAbundance,
+        space: &'a SpatialAbundance,
+        kind: GaussianKind,
+    ) -> Result<&'a [f64], NoisePluginError> {
         if abundance.len() != self.domain.species() {
             return Err(NoisePluginError::SpeciesMismatch {
                 expected: self.domain.species(),
                 actual: abundance.len(),
             });
         }
-        validate_noise_values(ABUNDANCE_FIELD, abundance.iter().copied())?;
         let target = self.target(abundance, space)?;
-        validate_noise_values(
-            if self.domain.is_spatial() {
-                SPACE_FIELD
-            } else {
-                ABUNDANCE_FIELD
-            },
-            target.iter().copied(),
-        )
+        let field = if self.domain.is_spatial() {
+            SPACE_FIELD
+        } else {
+            ABUNDANCE_FIELD
+        };
+        for (cell, values) in target.chunks_exact(self.domain.species()).enumerate() {
+            validate_cell(values, kind, field, cell, self.domain.species())?;
+        }
+        Ok(target)
     }
 
     pub(crate) fn apply(
@@ -224,7 +235,7 @@ impl GaussianWorkspace {
         time_step: TimeStep,
         kind: GaussianKind,
     ) -> Result<(), NoisePluginError> {
-        self.validate(abundance, space)?;
+        let target = self.validate_target(abundance, space, kind)?;
         let scale = self.sigma * time_step.get().sqrt();
         if !scale.is_finite() {
             return Err(NoisePluginError::ScaleOverflow {
@@ -235,25 +246,19 @@ impl GaussianWorkspace {
         if self.sigma == 0.0 {
             return Ok(());
         }
-        let target = self.target(abundance, space)?;
-        self.proposed.copy_from_slice(target);
-        for (cell_index, cell) in self
-            .proposed
+        self.filler
+            .try_fill_slice(&mut self.proposed)
+            .map_err(NoisePluginError::TensorRng)?;
+        for (values, eta) in target
             .chunks_exact(self.domain.species())
-            .enumerate()
+            .zip(self.proposed.chunks_exact_mut(self.domain.species()))
         {
-            preflight_cell(cell, kind, cell_index)?;
-        }
-        for cell in self.proposed.chunks_exact_mut(self.domain.species()) {
-            self.filler
-                .try_fill_slice(&mut self.eta)
-                .map_err(NoisePluginError::TensorRng)?;
             match kind {
                 GaussianKind::Demographic => {
-                    apply_demographic(cell, &self.eta, scale);
+                    apply_demographic(values, eta, scale);
                 }
                 GaussianKind::Proportional => {
-                    apply_proportional(cell, &self.eta, scale);
+                    apply_proportional(values, eta, scale);
                 }
             }
         }
@@ -302,68 +307,16 @@ impl GaussianWorkspace {
     }
 }
 
-fn preflight_cell(values: &[f64], kind: GaussianKind, cell: usize) -> Result<(), NoisePluginError> {
-    let statistic = match kind {
-        GaussianKind::Proportional => values.iter().sum::<f64>(),
-        GaussianKind::Demographic => values.iter().map(|value| value.sqrt()).sum::<f64>(),
-    };
-    if statistic.is_finite() {
-        Ok(())
-    } else {
-        Err(NoisePluginError::CellStatisticOverflow { cell })
-    }
-}
-
-fn apply_proportional(values: &mut [f64], eta: &[f64], scale: f64) {
-    let total = values.iter().sum::<f64>();
-    let eta_bar = if total > 0.0 {
-        values
-            .iter()
-            .zip(eta)
-            .map(|(value, eta)| value / total * eta)
-            .sum()
-    } else {
-        0.0
-    };
-    for (value, eta) in values.iter_mut().zip(eta) {
-        let current = *value;
-        let proposed = current * (1.0 + scale * (*eta - eta_bar));
-        *value = if proposed.is_finite() && proposed > 0.0 {
-            proposed
-        } else {
-            0.0
-        };
-    }
-}
-
-fn apply_demographic(values: &mut [f64], eta: &[f64], scale: f64) {
-    let denominator = values.iter().map(|value| value.sqrt()).sum::<f64>();
-    let eta_bar = if denominator > 0.0 {
-        values
-            .iter()
-            .zip(eta)
-            .map(|(value, eta)| value.sqrt() * eta)
-            .sum::<f64>()
-            / denominator
-    } else {
-        0.0
-    };
-    for (value, eta) in values.iter_mut().zip(eta) {
-        let current = *value;
-        let proposed = current + scale * current.sqrt() * (*eta - eta_bar);
-        *value = if proposed.is_finite() && proposed > 0.0 {
-            proposed
-        } else {
-            0.0
-        };
-    }
-}
-
-fn validate_noise_values(
+fn validate_cell(
+    values: &[f64],
+    kind: GaussianKind,
     field: &'static str,
-    values: impl Iterator<Item = f64>,
+    cell: usize,
+    species: usize,
 ) -> Result<(), NoisePluginError> {
-    for (linear_index, value) in values.enumerate() {
+    let mut statistic = 0.0;
+    for (index, value) in values.iter().copied().enumerate() {
+        let linear_index = cell * species + index;
         if !value.is_finite() {
             return Err(NoisePluginError::NonFiniteInput {
                 field,
@@ -378,8 +331,59 @@ fn validate_noise_values(
                 value,
             });
         }
+        statistic += match kind {
+            GaussianKind::Proportional => value,
+            GaussianKind::Demographic => value.sqrt(),
+        };
     }
-    Ok(())
+    if statistic.is_finite() {
+        Ok(())
+    } else {
+        Err(NoisePluginError::CellStatisticOverflow { cell })
+    }
+}
+
+fn apply_proportional(values: &[f64], eta: &mut [f64], scale: f64) {
+    let total = values.iter().sum::<f64>();
+    let eta_bar = if total > 0.0 {
+        values
+            .iter()
+            .zip(eta.iter())
+            .map(|(value, eta)| value / total * *eta)
+            .sum()
+    } else {
+        0.0
+    };
+    for (value, eta) in values.iter().zip(eta.iter_mut()) {
+        let proposed = *value * (1.0 + scale * (*eta - eta_bar));
+        *eta = if proposed.is_finite() && proposed > 0.0 {
+            proposed
+        } else {
+            0.0
+        };
+    }
+}
+
+fn apply_demographic(values: &[f64], eta: &mut [f64], scale: f64) {
+    let denominator = values.iter().map(|value| value.sqrt()).sum::<f64>();
+    let eta_bar = if denominator > 0.0 {
+        values
+            .iter()
+            .zip(eta.iter())
+            .map(|(value, eta)| value.sqrt() * *eta)
+            .sum::<f64>()
+            / denominator
+    } else {
+        0.0
+    };
+    for (value, eta) in values.iter().zip(eta.iter_mut()) {
+        let proposed = *value + scale * value.sqrt() * (*eta - eta_bar);
+        *eta = if proposed.is_finite() && proposed > 0.0 {
+            proposed
+        } else {
+            0.0
+        };
+    }
 }
 
 /// Configuration and state-domain failures for built-in noise algorithms.
@@ -491,6 +495,12 @@ pub trait NoiseAlgorithm {
     /// Returns immutable RNG provenance, or explicitly declares deterministic behavior.
     fn rng_record(&self) -> Option<&RngRecord>;
 
+    /// Reports whether applying this algorithm would leave every payload
+    /// unchanged. The conservative default keeps custom plugins active.
+    fn is_noop(&self) -> bool {
+        false
+    }
+
     /// Validates a state domain before evolution begins.
     fn validate(
         &self,
@@ -543,6 +553,11 @@ impl<N> Noise<N>
 where
     N: NoiseAlgorithm,
 {
+    /// Reports whether the selected algorithm can be skipped for this run.
+    pub fn is_noop(&self) -> bool {
+        self.algorithm.is_noop()
+    }
+
     /// Returns the algorithm's immutable RNG provenance when it is stochastic.
     pub fn rng_record(&self) -> Option<&RngRecord> {
         self.algorithm.rng_record()

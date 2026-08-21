@@ -7,9 +7,7 @@ use general_lotka_volterra_rs::kernel::{
     KernelUpdate,
 };
 use general_lotka_volterra_rs::noise::{Noise, NoiseDomain, ProportionalGaussian};
-use general_lotka_volterra_rs::simulation::{
-    DefaultSimulationBuildError, SimulationBuildError, SimulationKind,
-};
+use general_lotka_volterra_rs::simulation::SimulationKind;
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AbundanceRepresentation, AggregateAbundance, MeanFieldReplicator,
     MeanFieldReplicatorConfig, SPACE_FIELD, SpatialAbundance, SpatialGeneralLotkaVolterra,
@@ -17,10 +15,11 @@ use general_lotka_volterra_rs::{
     TimeStep, TotalAbundance,
 };
 use ndarray::{Array1, Array2, ArrayD, IxDyn};
-use physics_in_parallel::rng::RngConfig;
+use physics_in_parallel::prelude::basic::RngConfig;
+use support::interaction_from_array;
 
 fn interaction(species: usize) -> InteractionMatrix {
-    InteractionMatrix::from_array(Array2::zeros((species, species)), species).unwrap()
+    interaction_from_array(Array2::zeros((species, species))).unwrap()
 }
 
 fn time_step() -> TimeStep {
@@ -123,13 +122,8 @@ fn root_mean_field_api_constructs_steps_and_reconstructs() {
 
     assert_eq!(simulation.step().unwrap().iteration(), 1);
     let state = simulation.into_state();
-    let mut reconstructed = MeanFieldReplicator::from_state(
-        state,
-        AbundanceRepresentation::RelativeFrequency,
-        interaction(2),
-        mean_field_config(2),
-    )
-    .unwrap();
+    let mut reconstructed =
+        MeanFieldReplicator::from_state(state, interaction(2), mean_field_config(2)).unwrap();
     assert_eq!(reconstructed.step().unwrap().iteration(), 2);
     assert_eq!(
         reconstructed
@@ -169,7 +163,6 @@ fn root_spatial_apis_derive_canonical_aggregates_and_step() {
     );
     let mut replicator = SpatialReplicator::from_state(
         replicator.into_state(),
-        AbundanceRepresentation::RelativeFrequency,
         interaction(2),
         spatial_replicator_config(&[2, 2]),
     )
@@ -209,7 +202,6 @@ fn root_spatial_apis_derive_canonical_aggregates_and_step() {
     );
     let mut glv = SpatialGeneralLotkaVolterra::from_state(
         glv.into_state(),
-        AbundanceRepresentation::AbsoluteCount,
         interaction(2),
         spatial_general_lotka_volterra_config(&[2, 2]),
     )
@@ -218,26 +210,7 @@ fn root_spatial_apis_derive_canonical_aggregates_and_step() {
 }
 
 #[test]
-fn construction_rejects_representation_shape_and_matrix_mismatches() {
-    let simulation = MeanFieldReplicator::new(
-        Array1::from_vec(vec![0.5, 0.5]),
-        interaction(2),
-        mean_field_config(2),
-    )
-    .unwrap();
-    let state = simulation.into_state();
-    assert!(matches!(
-        MeanFieldReplicator::from_state(
-            state,
-            AbundanceRepresentation::AbsoluteCount,
-            interaction(2),
-            mean_field_config(2),
-        ),
-        Err(DefaultSimulationBuildError::Composition(
-            SimulationBuildError::RepresentationMismatch { .. }
-        ))
-    ));
-
+fn construction_rejects_shape_and_matrix_mismatches() {
     assert!(
         MeanFieldReplicator::new(
             Array1::from_vec(vec![0.5, 0.5]),
@@ -256,7 +229,6 @@ fn construction_rejects_representation_shape_and_matrix_mismatches() {
     assert!(
         SpatialReplicator::from_state(
             spatial.into_state(),
-            AbundanceRepresentation::RelativeFrequency,
             interaction(2),
             spatial_replicator_config(&[1, 2]),
         )
@@ -284,7 +256,6 @@ fn mean_field_accepts_compatible_custom_kernel_and_noise_plugins() {
     .unwrap();
     let mut simulation = MeanFieldReplicator::from_plugins(
         state,
-        AbundanceRepresentation::RelativeFrequency,
         Kernel::new(KernelCore::new(interaction(2)), algorithm),
         Noise::new(noise),
         FrequencyInvariant::new(2, 0.0).unwrap(),
@@ -301,3 +272,4 @@ fn mean_field_accepts_compatible_custom_kernel_and_noise_plugins() {
         &Array1::from_vec(vec![0.25, 0.75])
     );
 }
+mod support;

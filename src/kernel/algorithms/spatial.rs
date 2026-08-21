@@ -1,9 +1,7 @@
 //! Shared species-last layout, diffusion, and midpoint RK2 facilities.
 
 use ndarray::{Array1, ArrayD, IxDyn};
-use physics_in_parallel::space::discrete::square_lattice::{
-    BoundaryCondition, SquareLatticeConfig,
-};
+use physics_in_parallel::prelude::basic::{BoundaryCondition, SquareLatticeConfig};
 
 use crate::kernel::core::{KernelCore, KernelStateView};
 use crate::{ABUNDANCE_FIELD, SPACE_FIELD, TimeStep};
@@ -86,7 +84,6 @@ pub(super) struct SpatialRk2 {
     k1: ArrayD<f64>,
     temporary: ArrayD<f64>,
     output: ArrayD<f64>,
-    interaction_output: Vec<f64>,
 }
 
 impl SpatialRk2 {
@@ -130,7 +127,6 @@ impl SpatialRk2 {
             k1: ArrayD::zeros(dynamic_shape.clone()),
             temporary: ArrayD::zeros(dynamic_shape.clone()),
             output: ArrayD::zeros(dynamic_shape),
-            interaction_output: vec![0.0; species],
         })
     }
 
@@ -159,6 +155,23 @@ impl SpatialRk2 {
         core: &KernelCore,
         state: KernelStateView<'_>,
     ) -> Result<(), KernelAlgorithmError> {
+        self.validate_layout(core, state)?;
+        validate_values(ABUNDANCE_FIELD, state.abundance().iter().copied())?;
+        validate_values(
+            SPACE_FIELD,
+            state
+                .space()
+                .expect("spatial layout was validated")
+                .iter()
+                .copied(),
+        )
+    }
+
+    fn validate_layout(
+        &self,
+        core: &KernelCore,
+        state: KernelStateView<'_>,
+    ) -> Result<(), KernelAlgorithmError> {
         if core.species() != self.species {
             return Err(KernelAlgorithmError::CoreSpeciesMismatch {
                 expected: self.species,
@@ -171,7 +184,6 @@ impl SpatialRk2 {
                 actual: state.abundance().len(),
             });
         }
-        validate_values(ABUNDANCE_FIELD, state.abundance().iter().copied())?;
         let space = state.space().ok_or(KernelAlgorithmError::SpaceRequired)?;
         if space.shape() != self.shape() {
             return Err(KernelAlgorithmError::SpaceShapeMismatch {
@@ -182,7 +194,7 @@ impl SpatialRk2 {
         if space.as_slice().is_none() {
             return Err(KernelAlgorithmError::NonStandardLayout);
         }
-        validate_values(SPACE_FIELD, space.iter().copied())
+        Ok(())
     }
 
     pub(super) fn validate_time_step(
@@ -207,7 +219,7 @@ impl SpatialRk2 {
         time_step: TimeStep,
         dynamics: SpatialDynamics,
     ) -> Result<ndarray::ArrayViewD<'algorithm, f64>, KernelAlgorithmError> {
-        self.validate(core, state)?;
+        self.validate_layout(core, state)?;
         self.validate_time_step(time_step)?;
         let space = state.space().expect("spatial state was validated");
         rhs(
@@ -217,7 +229,7 @@ impl SpatialRk2 {
             dynamics,
             space,
             &mut self.k1,
-            &mut self.interaction_output,
+            &mut self.output,
         )?;
         let input = space.as_slice().expect("spatial state was validated");
         let first_stage = self.k1.as_slice().expect("scratch is standard contiguous");
@@ -236,7 +248,7 @@ impl SpatialRk2 {
             dynamics,
             &self.temporary,
             &mut self.k1,
-            &mut self.interaction_output,
+            &mut self.output,
         )?;
         let second_stage = self.k1.as_slice().expect("scratch is standard contiguous");
         let output = self
@@ -256,7 +268,7 @@ impl SpatialRk2 {
         state: KernelStateView<'_>,
         dynamics: SpatialDynamics,
     ) -> Result<ndarray::ArrayViewD<'algorithm, f64>, KernelAlgorithmError> {
-        self.validate(core, state)?;
+        self.validate_layout(core, state)?;
         rhs(
             core,
             &self.growth,
@@ -264,7 +276,7 @@ impl SpatialRk2 {
             dynamics,
             state.space().expect("spatial state was validated"),
             &mut self.k1,
-            &mut self.interaction_output,
+            &mut self.output,
         )?;
         Ok(self.k1.view())
     }
@@ -277,7 +289,7 @@ fn rhs(
     dynamics: SpatialDynamics,
     space: &ArrayD<f64>,
     output: &mut ArrayD<f64>,
-    interaction_output: &mut [f64],
+    interaction_output: &mut ArrayD<f64>,
 ) -> Result<(), KernelAlgorithmError> {
     let species_count = growth.len();
     let cells = diffusion.space.num_sites();
@@ -287,19 +299,23 @@ fn rhs(
     let target = output
         .as_slice_mut()
         .expect("spatial scratch is standard contiguous");
+    let interactions = interaction_output
+        .as_slice_mut()
+        .expect("interaction scratch is standard contiguous");
+    core.apply_interactions(input, interactions)
+        .expect("kernel and spatial species dimensions were validated");
     diffusion
         .space
         .laplacian(input, species_count, target)
         .map_err(KernelAlgorithmError::SpaceConfig)?;
     for cell in 0..cells {
         let base = cell * species_count;
-        core.apply_interaction(&input[base..base + species_count], interaction_output)
-            .expect("kernel and spatial species dimensions were validated");
+        let cell_interactions = &interactions[base..base + species_count];
         let mean_fitness = match dynamics {
             SpatialDynamics::Glv => 0.0,
             SpatialDynamics::Replicator => (0..species_count)
                 .map(|species| {
-                    input[base + species] * (growth[species] + interaction_output[species])
+                    input[base + species] * (growth[species] + cell_interactions[species])
                 })
                 .sum(),
         };
@@ -307,7 +323,7 @@ fn rhs(
         for species in 0..species_count {
             let center_index = base + species;
             let center = input[center_index];
-            let interaction = interaction_output[species];
+            let interaction = cell_interactions[species];
             let laplacian = target[center_index];
             let reaction = match dynamics {
                 SpatialDynamics::Glv => center * (growth[species] + interaction),
@@ -319,4 +335,83 @@ fn rhs(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::interaction::InteractionMatrix;
+    use ndarray::{Array2, IxDyn};
+    use physics_in_parallel::prelude::basic::DenseMatrix;
+
+    fn assert_close(actual: &[f64], expected: &[f64]) {
+        assert_eq!(actual.len(), expected.len());
+        for (index, (&actual, &expected)) in actual.iter().zip(expected).enumerate() {
+            let tolerance = 1.0e-12 * (1.0 + expected.abs());
+            assert!(
+                (actual - expected).abs() <= tolerance,
+                "value {index}: {actual} != {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn batched_interactions_match_per_cell_ndarray_linalg() {
+        for species in [1, 2, 5] {
+            let matrix = Array2::from_shape_fn((species, species), |(row, column)| {
+                ((row * species + column + 1) as f64).sin() / species as f64
+            });
+            let interaction = InteractionMatrix::from_matrix(DenseMatrix::from_ndarray(&matrix))
+                .expect("test matrix is square and finite");
+            let core = KernelCore::new(interaction);
+            let growth = Array1::from_shape_fn(species, |index| 0.1 * (index + 1) as f64);
+
+            for cells in [1, 3, 17] {
+                let lattice =
+                    SquareLatticeConfig::try_new(&[cells], BoundaryCondition::Periodic, None)
+                        .unwrap();
+                let diffusion = Diffusion::new(Array1::zeros(species), lattice).unwrap();
+                let shape = IxDyn(&[cells, species]);
+                let space = ArrayD::from_shape_fn(shape.clone(), |index| {
+                    0.25 + (index[0] * species + index[1] + 1) as f64 / 37.0
+                });
+
+                for dynamics in [SpatialDynamics::Glv, SpatialDynamics::Replicator] {
+                    let mut actual = ArrayD::zeros(shape.clone());
+                    let mut interaction_scratch = ArrayD::zeros(shape.clone());
+                    rhs(
+                        &core,
+                        &growth,
+                        &diffusion,
+                        dynamics,
+                        &space,
+                        &mut actual,
+                        &mut interaction_scratch,
+                    )
+                    .unwrap();
+
+                    let mut expected = Vec::with_capacity(cells * species);
+                    for cell in space.as_slice().unwrap().chunks_exact(species) {
+                        let interaction = matrix.dot(&Array1::from_vec(cell.to_vec()));
+                        let mean_fitness = match dynamics {
+                            SpatialDynamics::Glv => 0.0,
+                            SpatialDynamics::Replicator => cell
+                                .iter()
+                                .enumerate()
+                                .map(|(index, value)| value * (growth[index] + interaction[index]))
+                                .sum(),
+                        };
+                        expected.extend(cell.iter().enumerate().map(|(index, value)| {
+                            let fitness = growth[index] + interaction[index];
+                            match dynamics {
+                                SpatialDynamics::Glv => value * fitness,
+                                SpatialDynamics::Replicator => value * (fitness - mean_fitness),
+                            }
+                        }));
+                    }
+                    assert_close(actual.as_slice().unwrap(), &expected);
+                }
+            }
+        }
+    }
 }

@@ -5,14 +5,12 @@ use std::fs;
 use std::path::PathBuf;
 
 use ndarray::Array1;
-use physics_in_parallel::rng::RngConfig;
-use physics_in_parallel::space::discrete::square_lattice::SquareLatticeConfig;
-use scientific_workflow::configuration::TaskConfig;
-use scientific_workflow::execution::ExecutionScope;
-use scientific_workflow::rng_record::RngRecord;
-use scientific_workflow::runtime::TaskContext;
-use scientific_workflow::storage::{SamplingInterval, StateStreamConfig};
-use scientific_workflow::system_state::{SimulationTime, SystemState};
+use physics_in_parallel::prelude::basic::{RngConfig, SquareLatticeConfig};
+use scientific_workflow::prelude::basics::{
+    ExecutionScope, RngRecord, SamplingInterval, SimulationTime, StateStreamConfig, SystemState,
+    TaskConfig,
+};
+use scientific_workflow::prelude::runtime::TaskContext;
 use serde::{Deserialize, Serialize};
 
 use crate::initialization::{
@@ -26,6 +24,7 @@ use crate::kernel::{Diffusion, Kernel, KernelAlgorithm, KernelCore, MeanFieldRep
 use crate::noise::{DemographicGaussian, Noise, NoiseAlgorithm, NoiseDomain};
 use crate::reading::verify_completed_glv_checkpoint;
 use crate::recording::{GlvRecording, GlvRecordingMetadata, TerminationReason};
+use crate::simulation::assemble_initial_state;
 use crate::simulation::{
     MeanFieldReplicator, MeanFieldReplicatorConfig, SimulationKind, SpatialGeneralLotkaVolterra,
     SpatialGeneralLotkaVolterraConfig, SpatialReplicator, SpatialReplicatorConfig,
@@ -46,6 +45,29 @@ pub const INTERACTION_INPUT_KEY: &str = "/interaction";
 #[serde(deny_unknown_fields)]
 pub struct InteractionInput {
     pub path_key: String,
+}
+
+/// Inline or path-resolved aggregate frequencies for a mean-field initial state.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+enum InitialAbundanceInput {
+    Inline(Vec<f64>),
+    Path { path_key: String },
+}
+
+impl InitialAbundanceInput {
+    fn resolve(self, task: &TaskConfig) -> Result<Vec<f64>, TemplateTaskError> {
+        match self {
+            Self::Inline(values) => Ok(values),
+            Self::Path { path_key } => {
+                if path_key.trim().is_empty() {
+                    return Err("initial-abundance path key must not be empty".into());
+                }
+                let path = task.resolve_path(&path_key)?;
+                Ok(serde_json::from_slice(&fs::read(path)?)?)
+            }
+        }
+    }
 }
 
 impl InteractionInput {
@@ -148,19 +170,6 @@ fn run_mean_field(
     context: &TaskContext,
     demographic: bool,
 ) -> Result<(), TemplateTaskError> {
-    let initial_abundance = if task.value("/K").is_some() {
-        let species = task.decode_value::<usize>("/K")?;
-        if species == 0 {
-            return Err("mean-field well-mixed species count `K` must be nonzero".into());
-        }
-        Array1::from_elem(species, 1.0 / species as f64)
-    } else {
-        Array1::from_vec(task.decode_value("/initial_abundance")?)
-    };
-    let growth = match task.value("/growth").and_then(serde_json::Value::as_f64) {
-        Some(value) => Array1::from_elem(initial_abundance.len(), value),
-        None => Array1::from_vec(task.decode_value("/growth")?),
-    };
     let cutoff = task.decode_value("/cutoff")?;
     let time_step = TimeStep::new(task.decode_value("/physical_time_increment")?)?;
     let maximum_iterations = task.decode_value("/maximum_iterations")?;
@@ -175,16 +184,22 @@ fn run_mean_field(
         .transpose()?;
 
     context.set_detail("resolving interaction matrix");
-    let species = initial_abundance.len();
     let interaction_input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY)?;
-    let interaction = InteractionMatrix::load_json(interaction_input.resolve(task)?, species)?;
+    let interaction = InteractionMatrix::load_json(interaction_input.resolve(task)?)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
+    let species = interaction.species();
+    let initial_abundance = task
+        .value("/initial_abundance")
+        .map(|_| task.decode_value::<InitialAbundanceInput>("/initial_abundance"))
+        .transpose()?
+        .map(|input| input.resolve(task).map(Array1::from_vec))
+        .transpose()?
+        .unwrap_or_else(|| Array1::from_elem(species, 1.0 / species as f64));
+    let growth = decode_species_values(task, "/growth", species)?;
 
     context.set_detail("constructing simulation");
-    let config = MeanFieldReplicatorConfig::new(growth.clone(), cutoff, time_step);
     if let Some((sigma, rng)) = noise {
-        let initial_state =
-            MeanFieldReplicator::new(initial_abundance, interaction.clone(), config)?.into_state();
+        let initial_state = assemble_initial_state(initial_abundance, None, 1.0)?;
         let kernel = Kernel::new(
             KernelCore::new(interaction),
             MeanFieldReplicatorRk4::new(growth)?,
@@ -195,14 +210,8 @@ fn run_mean_field(
             NoiseDomain::aggregate(species)?,
         )?);
         let invariant = FrequencyInvariant::new(species, cutoff)?;
-        let simulation = MeanFieldReplicator::from_plugins(
-            initial_state,
-            AbundanceRepresentation::RelativeFrequency,
-            kernel,
-            noise,
-            invariant,
-            time_step,
-        )?;
+        let simulation =
+            MeanFieldReplicator::from_plugins(initial_state, kernel, noise, invariant, time_step)?;
         finish_task(
             scope,
             task,
@@ -214,6 +223,7 @@ fn run_mean_field(
             simulation,
         )
     } else {
+        let config = MeanFieldReplicatorConfig::new(growth, cutoff, time_step);
         let simulation = MeanFieldReplicator::new(initial_abundance, interaction, config)?;
         finish_task(
             scope,
@@ -234,17 +244,10 @@ fn run_spatial_replicator(
     context: &TaskContext,
 ) -> Result<(), TemplateTaskError> {
     let spatial_shape: Vec<usize> = task.decode_value("/spatial_shape")?;
-    let species = task
-        .value("/K")
-        .map(|_| task.decode_value::<usize>("/K"))
+    let spacing = task
+        .value("/spacing")
+        .map(|_| task.decode_value::<Vec<f64>>("/spacing"))
         .transpose()?;
-    if species == Some(0) {
-        return Err("spatial species count `K` must be nonzero".into());
-    }
-    let growth = decode_species_values(task, "/growth", species)?;
-    let species = species.unwrap_or(growth.len());
-    let diffusion_coefficients = decode_species_values(task, "/diffusion", Some(species))?;
-    let spacing: Vec<f64> = task.decode_value("/spacing")?;
     let boundary = task.decode_value("/boundary")?;
     let cutoff = task.decode_value("/cutoff")?;
     let time_step = TimeStep::new(task.decode_value("/physical_time_increment")?)?;
@@ -254,11 +257,14 @@ fn run_spatial_replicator(
 
     context.set_detail("resolving interaction matrix");
     let interaction_input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY)?;
-    let interaction = InteractionMatrix::load_json(interaction_input.resolve(task)?, species)?;
+    let interaction = InteractionMatrix::load_json(interaction_input.resolve(task)?)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
+    let species = interaction.species();
+    let growth = decode_species_values(task, "/growth", species)?;
+    let diffusion_coefficients = decode_species_values(task, "/diffusion", species)?;
 
     context.set_detail("constructing simulation");
-    let lattice = SquareLatticeConfig::try_new(&spatial_shape, boundary, Some(&spacing))?;
+    let lattice = SquareLatticeConfig::try_new(&spatial_shape, boundary, spacing.as_deref())?;
     let resolved = resolve_spatial_initial_state(&initialization, scope, lattice.clone(), species)?;
     let initial_space = categorical_to_species_field(resolved.initial(), 1.0)?;
     let diffusion = Diffusion::new(diffusion_coefficients, lattice)?;
@@ -282,19 +288,11 @@ fn run_spatial_replicator(
 fn decode_species_values(
     task: &TaskConfig,
     name: &str,
-    species: Option<usize>,
+    species: usize,
 ) -> Result<Array1<f64>, TemplateTaskError> {
-    match (
-        task.value(name).and_then(serde_json::Value::as_f64),
-        species,
-    ) {
-        (Some(value), Some(species)) => Ok(Array1::from_elem(species, value)),
-        (Some(_), None) => Err(format!(
-            "scalar `{}` requires species count `K`",
-            name.trim_start_matches('/')
-        )
-        .into()),
-        (None, _) => Ok(Array1::from_vec(task.decode_value(name)?)),
+    match task.value(name).and_then(serde_json::Value::as_f64) {
+        Some(value) => Ok(Array1::from_elem(species, value)),
+        None => Ok(Array1::from_vec(task.decode_value(name)?)),
     }
 }
 
@@ -304,12 +302,16 @@ fn run_spatial_glv(
     context: &TaskContext,
 ) -> Result<(), TemplateTaskError> {
     let spatial_shape: Vec<usize> = task.decode_value("/spatial_shape")?;
-    let growth = Array1::from_vec(task.decode_value("/growth")?);
-    let diffusion_coefficients = Array1::from_vec(task.decode_value("/diffusion")?);
-    let spacing: Vec<f64> = task.decode_value("/spacing")?;
+    let spacing = task
+        .value("/spacing")
+        .map(|_| task.decode_value::<Vec<f64>>("/spacing"))
+        .transpose()?;
     let boundary = task.decode_value("/boundary")?;
     let cutoff = task.decode_value("/cutoff")?;
-    let carrying_capacity = task.decode_value("/carrying_capacity")?;
+    let carrying_capacity = task
+        .value("/carrying_capacity")
+        .map(|_| task.decode_value::<f64>("/carrying_capacity"))
+        .transpose()?;
     let initial_population_per_site: f64 = task.decode_value("/initial_population_per_site")?;
     let time_step = TimeStep::new(task.decode_value("/physical_time_increment")?)?;
     let maximum_iterations = task.decode_value("/maximum_iterations")?;
@@ -317,13 +319,15 @@ fn run_spatial_glv(
     let initialization: InitialStateSource = task.decode_value("/initialization")?;
 
     context.set_detail("resolving interaction matrix");
-    let species = growth.len();
     let interaction_input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY)?;
-    let interaction = InteractionMatrix::load_json(interaction_input.resolve(task)?, species)?;
+    let interaction = InteractionMatrix::load_json(interaction_input.resolve(task)?)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
+    let species = interaction.species();
+    let growth = decode_species_values(task, "/growth", species)?;
+    let diffusion_coefficients = decode_species_values(task, "/diffusion", species)?;
 
     context.set_detail("constructing simulation");
-    let lattice = SquareLatticeConfig::try_new(&spatial_shape, boundary, Some(&spacing))?;
+    let lattice = SquareLatticeConfig::try_new(&spatial_shape, boundary, spacing.as_deref())?;
     let resolved = resolve_spatial_initial_state(&initialization, scope, lattice.clone(), species)?;
     let initial_space =
         categorical_to_species_field(resolved.initial(), initial_population_per_site)?;
@@ -700,11 +704,9 @@ mod tests {
             .progress_tasks_from_project(&project, template.as_str(), move |context| {
                 template.run_task(&task_scope, context)
             })
-            .max_concurrent_workloads(1)
-            .queue_capacity(1)
             .build()
             .unwrap();
-        WorkflowRuntime::builder()
+        WorkflowRuntime::builder(root.join("execution-record.json"))
             .phase(phase)
             .hidden()
             .build()
@@ -741,9 +743,9 @@ mod tests {
                         "periodic_orbit": false
                     },
                     "recording": [
-                        {"name":"signal","sampling_interval":10,"fields":["abundance","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"queue_bytes":262144}},
-                        {"name":"space","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"queue_bytes":262144}},
-                        {"name":"checkpoint","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"individual_files"},"queue_bytes":262144}}
+                        {"name":"signal","sampling_interval":10,"fields":["abundance","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"storage_queue_bytes":262144}},
+                        {"name":"space","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"storage_queue_bytes":262144}},
+                        {"name":"checkpoint","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"individual_files"},"storage_queue_bytes":262144}}
                     ]
                 }"#,
             )
@@ -776,6 +778,35 @@ mod tests {
             project
         }
 
+        fn inferred_uniform() -> Self {
+            let project = Self::stationary();
+            let path = project.0.join("config/fixed.json");
+            let mut config: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            config.as_object_mut().unwrap().remove("initial_abundance");
+            config["growth"] = Value::from(0.0);
+            fs::write(path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+            project
+        }
+
+        fn path_abundance() -> Self {
+            let project = Self::stationary();
+            let fixed_path = project.0.join("config/fixed.json");
+            let mut config: Value =
+                serde_json::from_slice(&fs::read(&fixed_path).unwrap()).unwrap();
+            config["initial_abundance"] = serde_json::json!({"path_key":"initial_abundance"});
+            fs::write(fixed_path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+            let paths_path = project.0.join("config/paths.json");
+            let mut paths: Value = serde_json::from_slice(&fs::read(&paths_path).unwrap()).unwrap();
+            paths["initial_abundance"] = Value::from("inputs/initial-abundance.json");
+            fs::write(paths_path, serde_json::to_vec_pretty(&paths).unwrap()).unwrap();
+            fs::write(
+                project.0.join("inputs/initial-abundance.json"),
+                b"[0.25,0.75]",
+            )
+            .unwrap();
+            project
+        }
+
         fn collapses_at_cap() -> Self {
             let project = Self::stationary();
             let path = project.0.join("config/fixed.json");
@@ -804,19 +835,17 @@ mod tests {
                 },
                 "initial_population_per_site": 1.0,
                 "growth": [0.35, 0.0],
-                "diffusion": [0.0, 0.0],
-                "spacing": [1.0, 1.0],
+                "diffusion": 0.0,
                 "boundary": "neumann",
                 "cutoff": 0.0,
-                "carrying_capacity": 100.0,
                 "physical_time_increment": 0.01,
                 "maximum_iterations": 0,
                 "interaction": {"path_key": "interaction_matrix"},
                 "observation": {"mode":"detect","equilibrium":true,"periodic_orbit":false},
                 "recording": [
-                    {"name":"signal","sampling_interval":10,"fields":["abundance","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"queue_bytes":262144}},
-                    {"name":"space","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"queue_bytes":262144}},
-                    {"name":"checkpoint","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"individual_files"},"queue_bytes":262144}}
+                    {"name":"signal","sampling_interval":10,"fields":["abundance","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"storage_queue_bytes":262144}},
+                    {"name":"space","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"storage_queue_bytes":262144}},
+                    {"name":"checkpoint","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"individual_files"},"storage_queue_bytes":262144}}
                 ]
             });
             fs::write(path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
@@ -840,6 +869,16 @@ mod tests {
             GlvTemplate::MeanFieldReplicatorDemographic.as_str(),
             "mean_field_replicator_demographic"
         );
+    }
+
+    #[test]
+    fn mean_field_accepts_path_resolved_initial_abundance() {
+        let _guard = RUN_LOCK.lock().unwrap();
+        let project = TestProject::path_abundance();
+        let scope = run_project(GlvTemplate::MeanFieldReplicator, &project.0);
+        let fixed_point =
+            crate::open_accepted_fixed_point(scope.task_recording_directory(0)).unwrap();
+        assert_eq!(fixed_point.composition(), [0.25, 0.75]);
     }
 
     #[test]
@@ -885,6 +924,15 @@ mod tests {
         )
         .unwrap();
         assert_eq!(exported, terminal);
+    }
+
+    #[test]
+    fn mean_field_infers_species_and_uniform_initial_state_from_interaction() {
+        let _guard = RUN_LOCK.lock().unwrap();
+        let project = TestProject::inferred_uniform();
+        let scope = run_project(GlvTemplate::MeanFieldReplicator, &project.0);
+        let terminal = crate::open_terminal_state(scope.task_recording_directory(0)).unwrap();
+        assert_eq!(terminal.composition(), [0.5, 0.5]);
     }
 
     #[test]

@@ -19,7 +19,6 @@ pub struct MeanFieldReplicatorRk4 {
     k4: Array1<f64>,
     temporary: Array1<f64>,
     interaction: Array1<f64>,
-    drift: Array1<f64>,
     output: Array1<f64>,
 }
 
@@ -46,7 +45,6 @@ impl MeanFieldReplicatorRk4 {
             k4: Array1::zeros(species),
             temporary: Array1::zeros(species),
             interaction: Array1::zeros(species),
-            drift: Array1::zeros(species),
             output: Array1::zeros(species),
         })
     }
@@ -62,7 +60,7 @@ impl MeanFieldReplicatorRk4 {
     }
 
     /// Returns every fixed scratch length for allocation-reuse checks.
-    pub fn scratch_lengths(&self) -> [usize; 8] {
+    pub fn scratch_lengths(&self) -> [usize; 7] {
         [
             self.k1.len(),
             self.k2.len(),
@@ -70,7 +68,6 @@ impl MeanFieldReplicatorRk4 {
             self.k4.len(),
             self.temporary.len(),
             self.interaction.len(),
-            self.drift.len(),
             self.output.len(),
         ]
     }
@@ -80,25 +77,7 @@ impl KernelAlgorithm for MeanFieldReplicatorRk4 {
     type Error = KernelAlgorithmError;
 
     fn validate(&self, core: &KernelCore, state: KernelStateView<'_>) -> Result<(), Self::Error> {
-        let species = self.growth.len();
-        if core.species() != species {
-            return Err(KernelAlgorithmError::CoreSpeciesMismatch {
-                expected: species,
-                actual: core.species(),
-            });
-        }
-        if state.abundance().len() != species {
-            return Err(KernelAlgorithmError::SpeciesMismatch {
-                expected: species,
-                actual: state.abundance().len(),
-            });
-        }
-        if state.space().is_some() {
-            return Err(KernelAlgorithmError::UnexpectedSpace);
-        }
-        if state.abundance().as_slice().is_none() {
-            return Err(KernelAlgorithmError::NonStandardLayout);
-        }
+        self.validate_layout(core, state)?;
         validate_values(ABUNDANCE_FIELD, state.abundance().iter().copied())
     }
 
@@ -108,7 +87,7 @@ impl KernelAlgorithm for MeanFieldReplicatorRk4 {
         state: KernelStateView<'_>,
         time_step: TimeStep,
     ) -> Result<KernelUpdate<'algorithm>, Self::Error> {
-        self.validate(core, state)?;
+        self.validate_layout(core, state)?;
         let abundance = state.abundance();
         let dt = time_step.get();
         let half_dt = 0.5 * dt;
@@ -118,7 +97,6 @@ impl KernelAlgorithm for MeanFieldReplicatorRk4 {
             &self.growth,
             abundance,
             &mut self.interaction,
-            &mut self.drift,
             &mut self.k1,
         )?;
         for species in 0..abundance.len() {
@@ -129,7 +107,6 @@ impl KernelAlgorithm for MeanFieldReplicatorRk4 {
             &self.growth,
             &self.temporary,
             &mut self.interaction,
-            &mut self.drift,
             &mut self.k2,
         )?;
         for species in 0..abundance.len() {
@@ -140,7 +117,6 @@ impl KernelAlgorithm for MeanFieldReplicatorRk4 {
             &self.growth,
             &self.temporary,
             &mut self.interaction,
-            &mut self.drift,
             &mut self.k3,
         )?;
         for species in 0..abundance.len() {
@@ -151,7 +127,6 @@ impl KernelAlgorithm for MeanFieldReplicatorRk4 {
             &self.growth,
             &self.temporary,
             &mut self.interaction,
-            &mut self.drift,
             &mut self.k4,
         )?;
         let dt_over_six = dt / 6.0;
@@ -176,16 +151,44 @@ impl KernelAlgorithm for MeanFieldReplicatorRk4 {
         core: &KernelCore,
         state: KernelStateView<'_>,
     ) -> Result<Option<KernelResidual<'algorithm>>, Self::Error> {
-        self.validate(core, state)?;
+        self.validate_layout(core, state)?;
         rhs(
             core,
             &self.growth,
             state.abundance(),
             &mut self.interaction,
-            &mut self.drift,
             &mut self.k1,
         )?;
         Ok(Some(KernelResidual::Abundance(self.k1.view())))
+    }
+}
+
+impl MeanFieldReplicatorRk4 {
+    fn validate_layout(
+        &self,
+        core: &KernelCore,
+        state: KernelStateView<'_>,
+    ) -> Result<(), KernelAlgorithmError> {
+        let species = self.growth.len();
+        if core.species() != species {
+            return Err(KernelAlgorithmError::CoreSpeciesMismatch {
+                expected: species,
+                actual: core.species(),
+            });
+        }
+        if state.abundance().len() != species {
+            return Err(KernelAlgorithmError::SpeciesMismatch {
+                expected: species,
+                actual: state.abundance().len(),
+            });
+        }
+        if state.space().is_some() {
+            return Err(KernelAlgorithmError::UnexpectedSpace);
+        }
+        if state.abundance().as_slice().is_none() {
+            return Err(KernelAlgorithmError::NonStandardLayout);
+        }
+        Ok(())
     }
 }
 
@@ -194,7 +197,6 @@ fn rhs(
     growth: &Array1<f64>,
     abundance: &Array1<f64>,
     interaction: &mut Array1<f64>,
-    drift: &mut Array1<f64>,
     output: &mut Array1<f64>,
 ) -> Result<(), KernelAlgorithmError> {
     core.apply_interaction(
@@ -210,10 +212,8 @@ fn rhs(
         mean_fitness += abundance[species] * (growth[species] + interaction[species]);
     }
     for species in 0..abundance.len() {
-        drift[species] = growth[species] + interaction[species] - mean_fitness;
-    }
-    for species in 0..abundance.len() {
-        output[species] = abundance[species] * drift[species];
+        output[species] =
+            abundance[species] * (growth[species] + interaction[species] - mean_fitness);
     }
     Ok(())
 }

@@ -10,7 +10,7 @@ use thiserror::Error;
 use super::core::KernelCoreError;
 
 pub use mean_field_replicator_rk4::MeanFieldReplicatorRk4;
-pub use physics_in_parallel::space::discrete::square_lattice::BoundaryCondition;
+pub use physics_in_parallel::prelude::basic::BoundaryCondition;
 pub use spatial::Diffusion;
 pub use spatial_general_lotka_volterra_rk2::SpatialGeneralLotkaVolterraRk2;
 pub use spatial_replicator_rk2::SpatialReplicatorRk2;
@@ -107,9 +107,7 @@ pub enum KernelAlgorithmError {
     },
     /// PiP rejected lattice geometry or finite-difference layout.
     #[error("invalid lattice configuration: {0}")]
-    SpaceConfig(
-        #[from] physics_in_parallel::space::discrete::square_lattice::SquareLatticeConfigError,
-    ),
+    SpaceConfig(#[from] physics_in_parallel::prelude::basic::SquareLatticeConfigError),
     /// Explicit diffusion would exceed the conservative stability limit.
     #[error("time step {actual} exceeds explicit diffusion stability limit {maximum}")]
     UnstableTimeStep {

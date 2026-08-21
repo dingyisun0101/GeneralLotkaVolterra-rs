@@ -1,8 +1,7 @@
 //! Concrete mean-field replicator simulation.
 
 use ndarray::Array1;
-use scientific_workflow::rng_record::RngRecord;
-use scientific_workflow::system_state::{SimulationTime, SystemState};
+use scientific_workflow::prelude::basics::{RngRecord, SimulationTime, SystemState};
 
 use crate::engine::{Engine, EngineStepError};
 use crate::interaction::InteractionMatrix;
@@ -14,7 +13,7 @@ use crate::{AbundanceRepresentation, TimeStep};
 
 use super::{
     DefaultSimulationBuildError, SimulationBuildError, SimulationKind, assemble_initial_state,
-    composition_error, require_representation,
+    composition_error,
 };
 
 /// Immutable inputs that distinguish one mean-field replicator simulation.
@@ -65,18 +64,12 @@ impl MeanFieldReplicator {
         config: MeanFieldReplicatorConfig,
     ) -> Result<Self, DefaultSimulationBuildError> {
         let state = assemble_initial_state(initial_abundance, None, 1.0)?;
-        Self::from_state(
-            state,
-            AbundanceRepresentation::RelativeFrequency,
-            interaction,
-            config,
-        )
+        Self::from_state(state, interaction, config)
     }
 
     /// Reconstructs the default deterministic composition around an existing state.
     pub fn from_state(
         state: SystemState,
-        representation: AbundanceRepresentation,
         interaction: InteractionMatrix,
         config: MeanFieldReplicatorConfig,
     ) -> Result<Self, DefaultSimulationBuildError> {
@@ -92,7 +85,6 @@ impl MeanFieldReplicator {
             .map_err(DefaultSimulationBuildError::Invariant)?;
         Self::from_plugins(
             state,
-            representation,
             Kernel::new(KernelCore::new(interaction), algorithm),
             Noise::new(NoNoise),
             invariant,
@@ -110,13 +102,11 @@ where
     /// Validates and owns a custom mean-field kernel/noise composition.
     pub fn from_plugins(
         state: SystemState,
-        representation: AbundanceRepresentation,
         kernel: Kernel<A>,
         noise: Noise<N>,
         invariant: FrequencyInvariant,
         time_step: TimeStep,
     ) -> Result<Self, SimulationBuildError<A::Error, N::Error>> {
-        require_representation(representation, AbundanceRepresentation::RelativeFrequency)?;
         let engine =
             Engine::new(state, kernel, noise, invariant, time_step).map_err(composition_error)?;
         Ok(Self { engine })

@@ -31,10 +31,11 @@ The binary loads the GLV project, creates its execution scope, and registers the
 built-in model as a Workflow progress workload:
 
 ```rust
-let simulation = GlvWorkload::load(project_directory, template)?
+let workload = GlvWorkload::load(project_directory, template)?;
+let simulation = workload
     .register(Phase::builder(1, "mean-field replicator"))
     .build()?;
-WorkflowRuntime::builder()
+WorkflowRuntime::builder(workload.execution_record_path())
     .phase(simulation)
     .build()?
     .run_phases([1])?;
@@ -55,8 +56,8 @@ species and columns as contributing species.
 
 The main values to edit are:
 
-- `initial_abundance`: starting species frequencies, normalized by the model;
-- `growth`: intrinsic fitness contribution for each species;
+- `initial_abundance`: optional starting frequencies; omission uses a uniform state;
+- `growth`: one intrinsic value per species, or one scalar shared by all species;
 - `physical_time_increment`: RK4 time increment;
 - `maximum_iterations`: hard iteration cap;
 - `observation`: terminal observation mode and detector toggles; and
@@ -72,7 +73,6 @@ Every invocation creates a new collision-resistant execution directory beneath
 `output/`. Each task records:
 
 - `signal`: aggregate abundance and total;
-- `space`: the complete canonical state; and
 - `checkpoint`: restart-quality complete states.
 
 Sampling and storage limits are configured independently under `recording`.

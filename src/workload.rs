@@ -2,9 +2,10 @@
 
 use std::path::PathBuf;
 
-use scientific_workflow::execution::{ExecutionScope, ExecutionScopeError};
-use scientific_workflow::project::ScientificProject;
-use scientific_workflow::runtime::PhaseBuilder;
+use scientific_workflow::prelude::basics::{
+    ExecutionScope, ExecutionScopeError, ScientificProject,
+};
+use scientific_workflow::prelude::runtime::PhaseBuilder;
 use thiserror::Error;
 
 use crate::GlvTemplate;
@@ -57,8 +58,13 @@ impl GlvWorkload {
         self.template
     }
 
+    /// Returns the conventional execution-record path for this workload.
+    pub fn execution_record_path(&self) -> PathBuf {
+        self.execution.directory().join("execution-record.json")
+    }
+
     /// Adds every expanded GLV configuration to an application-owned phase.
-    pub fn register(self, builder: PhaseBuilder) -> PhaseBuilder {
+    pub fn register(&self, builder: PhaseBuilder) -> PhaseBuilder {
         let kind = self.template.as_str();
         self.register_as(builder, kind)
     }
@@ -67,9 +73,9 @@ impl GlvWorkload {
     ///
     /// This permits several independent GLV workload directories using the same
     /// template to coexist in one Workflow phase without task-ID collisions.
-    pub fn register_as(self, builder: PhaseBuilder, kind: impl Into<String>) -> PhaseBuilder {
+    pub fn register_as(&self, builder: PhaseBuilder, kind: impl Into<String>) -> PhaseBuilder {
         let template = self.template;
-        let execution = self.execution;
+        let execution = self.execution.clone();
         builder.progress_tasks_from_project(&self.project, kind, move |context| {
             template.run_task(&execution, context)
         })

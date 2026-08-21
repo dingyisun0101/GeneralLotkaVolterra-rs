@@ -9,7 +9,7 @@ use general_lotka_volterra_rs::{
     TotalAbundance, load_state_schema,
 };
 use ndarray::{Array1, ArrayD, IxDyn};
-use physics_in_parallel::rng::RngConfig;
+use physics_in_parallel::prelude::basic::RngConfig;
 use scientific_workflow::system_state::{SimulationTime, SystemState};
 
 fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemState {
@@ -60,7 +60,7 @@ fn demographic_noise_is_seeded_reproducible_and_reuses_scratch() {
     let domain = NoiseDomain::aggregate(3).unwrap();
     let algorithm_a = DemographicGaussian::new(0.2, rng(17), domain.clone()).unwrap();
     let algorithm_b = DemographicGaussian::new(0.2, rng(17), domain).unwrap();
-    let capacities = algorithm_a.scratch_capacities();
+    let capacity = algorithm_a.scratch_capacity();
     let mut noise_a = Noise::new(algorithm_a);
     let mut noise_b = Noise::new(algorithm_b);
     let record = noise_a.rng_record().unwrap();
@@ -95,7 +95,7 @@ fn demographic_noise_is_seeded_reproducible_and_reuses_scratch() {
             .unwrap(),
         &Array1::from_vec(vec![4.0, 9.0, 16.0])
     );
-    assert_eq!(noise_a.algorithm().scratch_capacities(), capacities);
+    assert_eq!(noise_a.algorithm().scratch_capacity(), capacity);
     assert_eq!(state_a.simulation_time(), initial_time);
     assert_eq!(
         *state_a.payload::<TotalAbundance>(TOTAL_FIELD).unwrap(),

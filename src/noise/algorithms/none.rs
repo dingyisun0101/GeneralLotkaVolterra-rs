@@ -3,7 +3,7 @@
 use std::convert::Infallible;
 
 use crate::{AggregateAbundance, SpatialAbundance, TimeStep};
-use scientific_workflow::rng_record::RngRecord;
+use scientific_workflow::prelude::basics::RngRecord;
 
 use crate::noise::core::NoiseAlgorithm;
 
@@ -16,6 +16,10 @@ impl NoiseAlgorithm for NoNoise {
 
     fn rng_record(&self) -> Option<&RngRecord> {
         None
+    }
+
+    fn is_noop(&self) -> bool {
+        true
     }
 
     fn validate(

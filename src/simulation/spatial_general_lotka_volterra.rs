@@ -1,8 +1,7 @@
 //! Concrete spatial General Lotka–Volterra population simulation.
 
 use ndarray::{Array1, ArrayD};
-use scientific_workflow::rng_record::RngRecord;
-use scientific_workflow::system_state::{SimulationTime, SystemState};
+use scientific_workflow::prelude::basics::{RngRecord, SimulationTime, SystemState};
 
 use crate::engine::{Engine, EngineStepError};
 use crate::interaction::InteractionMatrix;
@@ -15,7 +14,7 @@ use crate::{AbundanceRepresentation, TimeStep};
 
 use super::{
     DefaultSimulationBuildError, SimulationBuildError, SimulationKind, aggregate_spatial,
-    assemble_initial_state, composition_error, require_representation,
+    assemble_initial_state, composition_error,
 };
 
 /// Immutable inputs that distinguish one spatial General Lotka–Volterra simulation.
@@ -111,7 +110,6 @@ impl SpatialGeneralLotkaVolterra {
             .map_err(DefaultSimulationBuildError::Invariant)?;
         Self::from_plugins(
             state,
-            AbundanceRepresentation::AbsoluteCount,
             Kernel::new(KernelCore::new(interaction), algorithm),
             Noise::new(NoNoise),
             invariant,
@@ -123,7 +121,6 @@ impl SpatialGeneralLotkaVolterra {
     /// Reconstructs the default deterministic composition around an existing state.
     pub fn from_state(
         state: SystemState,
-        representation: AbundanceRepresentation,
         interaction: InteractionMatrix,
         config: SpatialGeneralLotkaVolterraConfig,
     ) -> Result<Self, DefaultSimulationBuildError> {
@@ -143,7 +140,6 @@ impl SpatialGeneralLotkaVolterra {
             .map_err(DefaultSimulationBuildError::Invariant)?;
         Self::from_plugins(
             state,
-            representation,
             Kernel::new(KernelCore::new(interaction), algorithm),
             Noise::new(NoNoise),
             invariant,
@@ -161,13 +157,11 @@ where
     /// Validates and owns a custom spatial-GLV kernel/noise composition.
     pub fn from_plugins(
         state: SystemState,
-        representation: AbundanceRepresentation,
         kernel: Kernel<A>,
         noise: Noise<N>,
         invariant: PopulationInvariant,
         time_step: TimeStep,
     ) -> Result<Self, SimulationBuildError<A::Error, N::Error>> {
-        require_representation(representation, AbundanceRepresentation::AbsoluteCount)?;
         let engine =
             Engine::new(state, kernel, noise, invariant, time_step).map_err(composition_error)?;
         Ok(Self { engine })

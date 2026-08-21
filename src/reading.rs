@@ -5,10 +5,9 @@
 
 use std::path::{Path, PathBuf};
 
-use scientific_workflow::storage::{
-    JsonPayloadDecoderRegistry, StorageError, StoredStateSeriesReader,
+use scientific_workflow::prelude::basics::{
+    JsonPayloadDecoderRegistry, StateError, StorageError, StoredStateSeriesReader, SystemState,
 };
-use scientific_workflow::system_state::{StateError, SystemState};
 use thiserror::Error;
 
 use crate::{

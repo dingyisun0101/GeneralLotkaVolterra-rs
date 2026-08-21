@@ -9,8 +9,7 @@ use general_lotka_volterra_rs::interaction::{
     InteractionArtifactLoadError, InteractionMatrix, InteractionMatrixError, InteractionProvenance,
     InteractionSourceKind, load_verified_interaction_matrix, persist_interaction_matrix,
 };
-use physics_in_parallel::math::prelude::DenseMatrix;
-use physics_in_parallel::rng::{RngConfig, RngMethod};
+use physics_in_parallel::prelude::basic::{DenseMatrix, RngConfig, RngMethod};
 use scientific_workflow::artifact::{ArtifactError, ArtifactLoadError};
 use scientific_workflow::execution::ExecutionScope;
 use scientific_workflow::project::ScientificProject;
@@ -63,28 +62,24 @@ fn assert_coefficients(actual: &InteractionMatrix, expected: &[f64]) {
 #[test]
 fn matrices_validate_domain_and_reuse_shared_storage() {
     let allocation = Arc::new(matrix(2, 2, vec![1.0, 2.0, 3.0, 4.0]));
-    let resolved = InteractionMatrix::from_shared(Arc::clone(&allocation), 2).unwrap();
+    let resolved = InteractionMatrix::from_shared(Arc::clone(&allocation)).unwrap();
     assert!(Arc::ptr_eq(&allocation, &resolved.shared_values()));
     assert_eq!(resolved.species(), 2);
 
-    let inline = InteractionMatrix::from_rows(vec![vec![0.0, 1.0], vec![-1.0, 0.0]], 2).unwrap();
+    let inline = InteractionMatrix::from_rows(vec![vec![0.0, 1.0], vec![-1.0, 0.0]]).unwrap();
     assert_eq!(inline.provenance().kind(), InteractionSourceKind::Inline);
     assert_coefficients(&inline, &[0.0, 1.0, -1.0, 0.0]);
 
     assert!(matches!(
-        InteractionMatrix::from_rows(vec![vec![1.0, 2.0], vec![3.0]], 2),
+        InteractionMatrix::from_rows(vec![vec![1.0, 2.0], vec![3.0]]),
         Err(InteractionMatrixError::RaggedRows { .. })
     ));
     assert!(matches!(
-        InteractionMatrix::from_matrix(matrix(2, 3, vec![0.0; 6]), 2),
+        InteractionMatrix::from_matrix(matrix(2, 3, vec![0.0; 6])),
         Err(InteractionMatrixError::NonSquare { .. })
     ));
     assert!(matches!(
-        InteractionMatrix::from_matrix(matrix(2, 2, vec![1.0, 0.0, 0.0, 1.0]), 3),
-        Err(InteractionMatrixError::SpeciesMismatch { .. })
-    ));
-    assert!(matches!(
-        InteractionMatrix::from_matrix(matrix(1, 1, vec![f64::INFINITY]), 1),
+        InteractionMatrix::from_matrix(matrix(1, 1, vec![f64::INFINITY])),
         Err(InteractionMatrixError::NonFiniteEntry { .. })
     ));
 }
@@ -104,7 +99,6 @@ fn generated_matrices_record_explicit_parameters_version_and_seed() {
             3,
             vec![-0.25, 0.0, 0.0, 0.0, -0.25, 0.0, 0.0, 0.0, -0.25],
         ),
-        3,
         provenance,
     )
     .unwrap();
@@ -160,11 +154,10 @@ fn workflow_decodes_inline_values_and_resolves_pip_matrix_paths() {
     let inline = InteractionMatrix::from_rows(
         task.decode_value::<Vec<Vec<f64>>>("/interaction_matrix")
             .unwrap(),
-        2,
     )
     .unwrap();
     let path = task.resolve_path("interaction_matrix_file").unwrap();
-    let file = InteractionMatrix::load_json(&path, 2).unwrap();
+    let file = InteractionMatrix::load_json(&path).unwrap();
     assert_coefficients(&inline, &[1.0, 0.0, 0.0, 1.0]);
     assert_coefficients(&file, &[0.0, 1.0, -1.0, 0.0]);
     assert!(matches!(
@@ -178,9 +171,9 @@ fn artifacts_use_pip_json_and_workflow_content_addressing() {
     let directory = TestDirectory::new("artifact-reuse");
     let scope = ExecutionScope::create_named(directory.path(), "execution").unwrap();
     let first_matrix =
-        InteractionMatrix::from_matrix(matrix(2, 2, vec![2.0, -1.0, 0.5, 3.0]), 2).unwrap();
+        InteractionMatrix::from_matrix(matrix(2, 2, vec![2.0, -1.0, 0.5, 3.0])).unwrap();
     let second_matrix =
-        InteractionMatrix::from_matrix(matrix(2, 2, vec![2.0, -1.0, 0.5, 3.0]), 2).unwrap();
+        InteractionMatrix::from_matrix(matrix(2, 2, vec![2.0, -1.0, 0.5, 3.0])).unwrap();
 
     let first = persist_interaction_matrix(&scope, &first_matrix).unwrap();
     let second = persist_interaction_matrix(&scope, &second_matrix).unwrap();
@@ -227,7 +220,7 @@ fn malformed_json_and_artifact_collisions_fail_closed() {
     let malformed = directory.path().join("malformed.json");
     fs::write(&malformed, b"{").unwrap();
     assert!(matches!(
-        InteractionMatrix::load_json(&malformed, 1),
+        InteractionMatrix::load_json(&malformed),
         Err(InteractionMatrixError::Json { .. })
     ));
 
@@ -238,12 +231,12 @@ fn malformed_json_and_artifact_collisions_fail_closed() {
     )
     .unwrap();
     assert!(matches!(
-        InteractionMatrix::load_json(&wrong_count, 2),
+        InteractionMatrix::load_json(&wrong_count),
         Err(InteractionMatrixError::Json { .. })
     ));
 
     let scope = ExecutionScope::create_named(directory.path(), "execution").unwrap();
-    let matrix = InteractionMatrix::from_matrix(matrix(1, 1, vec![1.0]), 1).unwrap();
+    let matrix = InteractionMatrix::from_matrix(matrix(1, 1, vec![1.0])).unwrap();
     let persisted = persist_interaction_matrix(&scope, &matrix).unwrap();
     let path = scope.directory().join(persisted.descriptor().path());
     fs::write(&path, b"different bytes").unwrap();

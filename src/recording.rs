@@ -6,14 +6,11 @@
 
 use std::path::Path;
 
-use scientific_workflow::configuration::TaskParameters;
-use scientific_workflow::rng_record::{RNG_RECORDS_METADATA_KEY, RngRecord, RngRecordError};
-use scientific_workflow::storage::{
-    CompletedRecording, StateStreamConfig, StorageError, SystemStateWriter,
-    SystemStateWriterBuilder, TimeAxisMetadata,
+use scientific_workflow::prelude::basics::{
+    CompletedRecording, RNG_RECORDS_METADATA_KEY, RngRecord, RngRecordError, StateError,
+    StateSchemaSource, StateStreamConfig, StorageError, SystemState, SystemStateWriter,
+    SystemStateWriterBuilder, TaskParameters, TimeAxisMetadata,
 };
-use scientific_workflow::system_state::StateSchemaSource;
-use scientific_workflow::system_state::{StateError, SystemState};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;

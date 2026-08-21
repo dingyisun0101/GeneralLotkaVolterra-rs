@@ -42,13 +42,13 @@ strength, or pass another compatible configuration folder:
 cargo run --release -- /path/to/project/config
 ```
 
-Other main values in `fixed.json` are `initial_abundance`, `growth`, `cutoff`,
-`physical_time_increment`, `maximum_iterations`, and the three recording
-streams. Each sweep RNG configuration creates a reproducible task with its own
+Other main values in `fixed.json` are optional `initial_abundance`, scalar or
+per-species `growth`, `cutoff`, `physical_time_increment`,
+`maximum_iterations`, and the recording streams. Each sweep RNG configuration creates a reproducible task with its own
 recorded seed provenance.
 
-Each task receives its own recording directory. Signal, spatial, and checkpoint
-streams have independent sampling intervals and storage budgets. The final
+Each task receives its own recording directory. Signal and checkpoint streams
+have independent sampling intervals and storage budgets. The final
 checkpoint is integrity-checked and compared with the final in-memory state.
 
 The configuration explicitly selects `terminal_only`. Equilibrium and periodic-

@@ -1,4 +1,3 @@
-use general_lotka_volterra_rs::interaction::InteractionMatrix;
 use general_lotka_volterra_rs::kernel::{
     Kernel, KernelAlgorithm, KernelCore, KernelStateView, KernelStepError, KernelUpdate,
     KernelUpdateError,
@@ -9,6 +8,7 @@ use general_lotka_volterra_rs::{
 };
 use ndarray::{Array1, ArrayD, IxDyn, arr2};
 use scientific_workflow::system_state::{SimulationTime, SystemState};
+use support::interaction_from_array;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -59,7 +59,7 @@ fn spatial_state() -> SystemState {
 
 #[test]
 fn invalid_multi_payload_update_commits_nothing() {
-    let matrix = InteractionMatrix::from_array(arr2(&[[1.0, 0.0], [0.0, 1.0]]), 2).unwrap();
+    let matrix = interaction_from_array(arr2(&[[1.0, 0.0], [0.0, 1.0]])).unwrap();
     let algorithm = InvalidBothUpdate {
         abundance: Array1::zeros(2),
         space: ArrayD::zeros(IxDyn(&[1, 2])),
@@ -87,3 +87,4 @@ fn invalid_multi_payload_update_commits_nothing() {
     );
     assert_eq!(state.simulation_time(), initial_time);
 }
+mod support;

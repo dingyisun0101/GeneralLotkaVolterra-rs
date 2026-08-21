@@ -3,13 +3,12 @@
 use std::path::Path;
 
 use ndarray::{Array1, ArrayD};
-use scientific_workflow::system_state::{StateError, SystemStateSchema};
+use scientific_workflow::prelude::basics::{StateError, SystemStateSchema};
 use serde::{Deserialize, Serialize};
 
 pub mod advanced;
 pub mod core;
-#[doc(hidden)]
-pub mod engine;
+mod engine;
 pub mod fixed_point;
 pub mod initialization;
 pub mod interaction;

@@ -35,10 +35,10 @@ Important values in `config/fixed.json` are:
 - `initialization`: shared categorical ecological initial-state source;
 - `initial_population_per_site`: explicit population assigned to the selected
   taxon at each categorical site;
-- `growth` and `diffusion`: one value per species;
-- `spacing`: one value per spatial axis;
+- `growth` and `diffusion`: one value per species or one shared scalar;
+- `spacing`: optional values per spatial axis; omission uses unit spacing;
 - `boundary`: `periodic` or `neumann`;
-- `carrying_capacity`: a positive total capacity or `null`; and
+- `carrying_capacity`: an optional positive total capacity; and
 - `physical_time_increment`: RK2 time increment.
 
 Both deterministic automatic-termination detectors are enabled: equilibrium

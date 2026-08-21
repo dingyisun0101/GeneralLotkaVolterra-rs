@@ -86,18 +86,19 @@ impl InvariantPolicy for LocalFrequencyInvariant {
         validate_abundance_values(abundance)?;
         let (values, cells) = self.spatial_layout(space)?;
         validate_space_values(values)?;
+        let mut totals = vec![0.0; self.species];
         for (cell, values) in values.chunks_exact(self.species).enumerate() {
-            let sum = values.iter().sum();
+            let mut sum = 0.0;
+            for (species, value) in values.iter().copied().enumerate() {
+                sum += value;
+                totals[species] += value;
+            }
             if !close(1.0, sum) {
                 return Err(InvariantPolicyError::SimplexViolation { cell, sum });
             }
         }
         for species in 0..self.species {
-            let expected = values
-                .chunks_exact(self.species)
-                .map(|cell| cell[species])
-                .sum::<f64>()
-                / cells as f64;
+            let expected = totals[species] / cells as f64;
             if !close(expected, abundance[species]) {
                 return Err(InvariantPolicyError::AggregateMismatch {
                     species,

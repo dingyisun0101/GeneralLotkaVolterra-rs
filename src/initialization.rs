@@ -5,8 +5,8 @@ use ecological_model_core::initial_state::{
     PersistedInitialState, persist_initial_state,
 };
 use ndarray::{ArrayD, IxDyn};
-use physics_in_parallel::space::discrete::square_lattice::SquareLatticeConfig;
-use scientific_workflow::execution::ExecutionScope;
+use physics_in_parallel::prelude::basic::SquareLatticeConfig;
+use scientific_workflow::prelude::basics::ExecutionScope;
 use thiserror::Error;
 
 /// Resolves, validates, and republishes one core categorical input.
@@ -78,7 +78,7 @@ pub enum SpatialInitializationError {
 mod tests {
     use super::*;
     use ecological_model_core::initial_state::{DistributionSource, InitialStateRecipe};
-    use physics_in_parallel::rng::RngConfig;
+    use physics_in_parallel::prelude::basic::RngConfig;
 
     #[test]
     fn categorical_conversion_is_species_last_and_explicitly_scaled() {

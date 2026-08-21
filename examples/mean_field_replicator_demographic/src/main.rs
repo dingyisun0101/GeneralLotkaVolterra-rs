@@ -13,17 +13,14 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
     let template = GlvTemplate::MeanFieldReplicatorDemographic;
     let workload = GlvWorkload::load(workload_directory, template)?;
-    let execution = workload.execution().clone();
     let simulation = workload
         .register(Phase::builder(1, "demographic mean-field replicator"))
         .display_tasks_by(template.as_str(), ["/rng/seed"])
-        .max_concurrent_workloads(1)
-        .queue_capacity(1)
         .build()?;
-    WorkflowRuntime::builder()
+    WorkflowRuntime::builder(workload.execution_record_path())
         .phase(simulation)
         .build()?
         .run_phases([1])?;
-    println!("results: {}", execution.directory().display());
+    println!("results: {}", workload.execution().directory().display());
     Ok(())
 }

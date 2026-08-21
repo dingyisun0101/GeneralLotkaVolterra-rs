@@ -7,8 +7,7 @@
 use std::error::Error;
 use std::fmt;
 
-use scientific_workflow::rng_record::RngRecord;
-use scientific_workflow::system_state::{SimulationTime, StateError, SystemState};
+use scientific_workflow::prelude::basics::{RngRecord, SimulationTime, StateError, SystemState};
 
 use crate::TimeStep;
 use crate::invariant::{self, InvariantError, InvariantPolicy};
@@ -115,11 +114,12 @@ where
 
     /// Performs one complete scientific step in the shared model order.
     ///
-    /// The exact sequence is deterministic kernel, invariant, noise,
-    /// invariant, and finally one Workflow time advancement. A failed phase
-    /// stops the sequence and leaves time unchanged. Individual plugins are
-    /// responsible for their documented phase-level commit guarantees; the
-    /// engine does not clone the full state for global rollback.
+    /// The exact sequence is deterministic kernel, invariant, active noise,
+    /// invariant, and finally one Workflow time advancement. A no-op noise
+    /// plugin and its redundant final invariant pass are skipped. A failed
+    /// phase stops the sequence and leaves time unchanged. Individual plugins
+    /// are responsible for their documented phase-level commit guarantees;
+    /// the engine does not clone the full state for global rollback.
     pub fn step(&mut self) -> EngineStepResult<A, N, I> {
         self.state
             .simulation_time()
@@ -130,11 +130,13 @@ where
             .map_err(EngineStepError::Kernel)?;
         invariant::enforce_state(&mut self.invariant, &mut self.state)
             .map_err(EngineStepError::InvariantAfterKernel)?;
-        self.noise
-            .apply(&mut self.state, self.time_step)
-            .map_err(EngineStepError::Noise)?;
-        invariant::enforce_state(&mut self.invariant, &mut self.state)
-            .map_err(EngineStepError::InvariantAfterNoise)?;
+        if !self.noise.is_noop() {
+            self.noise
+                .apply(&mut self.state, self.time_step)
+                .map_err(EngineStepError::Noise)?;
+            invariant::enforce_state(&mut self.invariant, &mut self.state)
+                .map_err(EngineStepError::InvariantAfterNoise)?;
+        }
         self.state
             .advance_simulation_time(Some(self.time_step.get()))
             .map_err(EngineStepError::Time)
@@ -240,5 +242,261 @@ where
             Self::Noise(error) => Some(error),
             Self::InvariantAfterNoise(error) => Some(error),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, Mutex};
+
+    use ndarray::Array1;
+    use scientific_workflow::prelude::basics::{
+        RngRecord, SimulationTime, StateError, SystemState,
+    };
+    use thiserror::Error;
+
+    use super::{Engine, EngineBuildError, EngineStepError};
+    use crate::interaction::InteractionMatrix;
+    use crate::invariant::InvariantPolicy;
+    use crate::kernel::{Kernel, KernelAlgorithm, KernelCore, KernelStateView, KernelUpdate};
+    use crate::noise::{Noise, NoiseAlgorithm};
+    use crate::{
+        ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TimeStep,
+        TotalAbundance, load_state_schema,
+    };
+
+    type CallLog = Arc<Mutex<Vec<&'static str>>>;
+
+    #[derive(Clone, Copy, Debug, Error)]
+    #[error("controlled test failure")]
+    struct TestError;
+
+    #[derive(Debug)]
+    struct TestKernel {
+        scratch: Array1<f64>,
+        calls: CallLog,
+    }
+
+    impl KernelAlgorithm for TestKernel {
+        type Error = TestError;
+
+        fn validate(
+            &self,
+            core: &KernelCore,
+            state: KernelStateView<'_>,
+        ) -> Result<(), Self::Error> {
+            (state.abundance().len() == core.species())
+                .then_some(())
+                .ok_or(TestError)
+        }
+
+        fn compute<'a>(
+            &'a mut self,
+            _core: &KernelCore,
+            state: KernelStateView<'_>,
+            _time_step: TimeStep,
+        ) -> Result<KernelUpdate<'a>, Self::Error> {
+            self.calls.lock().unwrap().push("kernel");
+            self.scratch.assign(state.abundance());
+            self.scratch.mapv_inplace(|value| value + 1.0);
+            Ok(KernelUpdate::abundance(self.scratch.view()))
+        }
+    }
+
+    #[derive(Debug)]
+    struct TestNoise {
+        calls: CallLog,
+        fail: bool,
+        noop: bool,
+    }
+
+    impl NoiseAlgorithm for TestNoise {
+        type Error = TestError;
+
+        fn rng_record(&self) -> Option<&RngRecord> {
+            None
+        }
+
+        fn is_noop(&self) -> bool {
+            self.noop
+        }
+
+        fn validate(
+            &self,
+            _abundance: &AggregateAbundance,
+            _space: &SpatialAbundance,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn apply(
+            &mut self,
+            abundance: &mut AggregateAbundance,
+            _space: &mut SpatialAbundance,
+            _time_step: TimeStep,
+        ) -> Result<(), Self::Error> {
+            self.calls.lock().unwrap().push("noise");
+            if self.fail {
+                return Err(TestError);
+            }
+            abundance.mapv_inplace(|value| value + 2.0);
+            Ok(())
+        }
+    }
+
+    #[derive(Debug)]
+    struct TestInvariant(CallLog);
+
+    impl InvariantPolicy for TestInvariant {
+        type Error = TestError;
+
+        fn validate(
+            &self,
+            _abundance: &AggregateAbundance,
+            _space: &SpatialAbundance,
+            _total: &TotalAbundance,
+        ) -> Result<(), Self::Error> {
+            Ok(())
+        }
+
+        fn enforce(
+            &mut self,
+            abundance: &mut AggregateAbundance,
+            _space: &mut SpatialAbundance,
+            total: &mut TotalAbundance,
+        ) -> Result<(), Self::Error> {
+            self.0.lock().unwrap().push("invariant");
+            *total = abundance.sum();
+            Ok(())
+        }
+    }
+
+    fn state(time: SimulationTime) -> SystemState {
+        let mut state = load_state_schema().unwrap().create_empty_state(time);
+        state
+            .insert_payload(ABUNDANCE_FIELD, Array1::from_vec(vec![1.0]))
+            .unwrap();
+        state
+            .insert_payload(SPACE_FIELD, SpatialAbundance::None)
+            .unwrap();
+        state.insert_payload(TOTAL_FIELD, 1.0_f64).unwrap();
+        state
+    }
+
+    fn engine(
+        time: SimulationTime,
+        calls: CallLog,
+        fail: bool,
+        noop: bool,
+    ) -> Engine<TestKernel, TestNoise, TestInvariant> {
+        let interaction = InteractionMatrix::from_rows(vec![vec![0.0]]).unwrap();
+        Engine::new(
+            state(time),
+            Kernel::new(
+                KernelCore::new(interaction),
+                TestKernel {
+                    scratch: Array1::zeros(1),
+                    calls: Arc::clone(&calls),
+                },
+            ),
+            Noise::new(TestNoise {
+                calls: Arc::clone(&calls),
+                fail,
+                noop,
+            }),
+            TestInvariant(calls),
+            TimeStep::new(0.5).unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn active_noise_preserves_shared_step_order() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let initial = SimulationTime::from_iteration_and_physical_time(3, 1.0).unwrap();
+        let mut engine = engine(initial, Arc::clone(&calls), false, false);
+        let advanced = engine.step().unwrap();
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            ["kernel", "invariant", "noise", "invariant"]
+        );
+        assert_eq!(advanced.iteration(), 4);
+        assert_eq!(advanced.physical_time(), Some(1.5));
+        assert_eq!(
+            engine
+                .state()
+                .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
+                .unwrap()[0],
+            4.0
+        );
+        assert_eq!(engine.into_state().simulation_time(), advanced);
+    }
+
+    #[test]
+    fn noop_noise_skips_application_and_second_invariant() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let time = SimulationTime::from_iteration_and_physical_time(0, 0.0).unwrap();
+        let mut engine = engine(time, Arc::clone(&calls), false, true);
+        engine.step().unwrap();
+        assert_eq!(calls.lock().unwrap().as_slice(), ["kernel", "invariant"]);
+    }
+
+    #[test]
+    fn noise_failure_stops_later_work_without_advancing_time() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let time = SimulationTime::from_iteration_and_physical_time(0, 0.0).unwrap();
+        let mut engine = engine(time, Arc::clone(&calls), true, false);
+        assert!(matches!(engine.step(), Err(EngineStepError::Noise(_))));
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            ["kernel", "invariant", "noise"]
+        );
+        assert_eq!(engine.state().simulation_time(), time);
+    }
+
+    #[test]
+    fn impossible_time_advance_fails_before_scientific_mutation() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let time = SimulationTime::from_iteration_and_physical_time(u64::MAX - 1, 0.0).unwrap();
+        let mut engine = engine(time, Arc::clone(&calls), false, false);
+        engine.step().unwrap();
+        calls.lock().unwrap().clear();
+        assert!(matches!(
+            engine.step(),
+            Err(EngineStepError::Time(StateError::IterationOverflow {
+                iteration: u64::MAX
+            }))
+        ));
+        assert!(calls.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn missing_physical_time_is_rejected_before_validation() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let interaction = InteractionMatrix::from_rows(vec![vec![0.0]]).unwrap();
+        let result = Engine::new(
+            state(SimulationTime::from_iteration(7)),
+            Kernel::new(
+                KernelCore::new(interaction),
+                TestKernel {
+                    scratch: Array1::zeros(1),
+                    calls: Arc::clone(&calls),
+                },
+            ),
+            Noise::new(TestNoise {
+                calls: Arc::clone(&calls),
+                fail: false,
+                noop: false,
+            }),
+            TestInvariant(Arc::clone(&calls)),
+            TimeStep::new(0.5).unwrap(),
+        );
+        assert!(matches!(
+            result,
+            Err(EngineBuildError::Time(StateError::MissingPhysicalTime {
+                iteration: 7
+            }))
+        ));
+        assert!(calls.lock().unwrap().is_empty());
     }
 }
