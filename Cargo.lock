@@ -305,6 +305,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "general-lotka-volterra-rs"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "249e77ed18898367a94c0d9edbbb074a30aafc5d2d1648cc93241815690fcd79"
+dependencies = [
+ "ecological-model-core",
+ "ndarray",
+ "physics_in_parallel",
+ "scientific-workflow",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -332,7 +348,7 @@ dependencies = [
 name = "glv-example-mean-field-replicator"
 version = "0.1.0"
 dependencies = [
- "general-lotka-volterra-rs",
+ "general-lotka-volterra-rs 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "scientific-workflow",
 ]
 
@@ -340,7 +356,7 @@ dependencies = [
 name = "glv-example-mean-field-replicator-demographic"
 version = "0.1.0"
 dependencies = [
- "general-lotka-volterra-rs",
+ "general-lotka-volterra-rs 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "scientific-workflow",
 ]
 
@@ -348,7 +364,7 @@ dependencies = [
 name = "glv-example-spatial-general-lotka-volterra"
 version = "0.1.0"
 dependencies = [
- "general-lotka-volterra-rs",
+ "general-lotka-volterra-rs 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "scientific-workflow",
 ]
 
@@ -356,7 +372,7 @@ dependencies = [
 name = "glv-example-spatial-replicator"
 version = "0.1.0"
 dependencies = [
- "general-lotka-volterra-rs",
+ "general-lotka-volterra-rs 0.12.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "scientific-workflow",
 ]
 
