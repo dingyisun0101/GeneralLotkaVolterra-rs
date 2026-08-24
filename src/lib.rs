@@ -24,7 +24,7 @@ mod template;
 pub mod terminal_state;
 pub mod workload;
 
-pub use study_inputs::{GlvConfiguration, GlvInputs, GlvInputsError, load_glv_inputs};
+pub use study_inputs::{GlvConfiguration, GlvInputs, GlvInputsError};
 pub use template::{GlvTemplate, INTERACTION_INPUT_KEY, InteractionInput, TemplateTaskError};
 pub use workload::{GlvWorkload, GlvWorkloadError};
 

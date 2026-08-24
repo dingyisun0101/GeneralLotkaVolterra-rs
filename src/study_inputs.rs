@@ -1,12 +1,9 @@
 //! GLV-owned loading of configurations and named study paths.
 
-use std::collections::BTreeMap;
-use std::fs;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
 use scientific_workflow::configuration::{
-    ConfigurationError, ConfigurationSpace, ParameterKeyTuple, ResolvedConfiguration,
+    ConfigurationError, ConfigurationSpace, ParameterKeyTuple, ProjectPaths, ResolvedConfiguration,
 };
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -14,20 +11,14 @@ use thiserror::Error;
 
 #[derive(Clone)]
 pub struct GlvInputs {
-    study_root: PathBuf,
     configurations: ConfigurationSpace,
-    paths: Arc<BTreeMap<String, PathBuf>>,
+    paths: ProjectPaths,
 }
 
 #[derive(Clone)]
 pub struct GlvConfiguration {
     configuration: ResolvedConfiguration,
-    study_root: PathBuf,
-    paths: Arc<BTreeMap<String, PathBuf>>,
-}
-
-pub fn load_glv_inputs(study_root: impl Into<PathBuf>) -> Result<GlvInputs, GlvInputsError> {
-    GlvInputs::load(study_root)
+    paths: ProjectPaths,
 }
 
 impl GlvInputs {
@@ -35,30 +26,15 @@ impl GlvInputs {
         let study_root = study_root.into();
         let configuration_directory = study_root.join("config");
         let configurations = ConfigurationSpace::load(&configuration_directory)?;
-        let paths_file = configuration_directory.join("paths.json");
-        let source = fs::read(&paths_file).map_err(|source| GlvInputsError::ReadPaths {
-            path: paths_file.clone(),
-            source,
-        })?;
-        let raw: BTreeMap<String, String> =
-            serde_json::from_slice(&source).map_err(|source| GlvInputsError::ParsePaths {
-                path: paths_file,
-                source,
-            })?;
-        let paths = Arc::new(
-            raw.into_iter()
-                .map(|(key, value)| (key, PathBuf::from(value)))
-                .collect(),
-        );
+        let paths = ProjectPaths::load(study_root)?;
         Ok(Self {
-            study_root,
             configurations,
             paths,
         })
     }
 
     pub fn study_root(&self) -> &Path {
-        &self.study_root
+        self.paths.project_root()
     }
 
     pub fn configuration_directory(&self) -> &Path {
@@ -86,20 +62,21 @@ impl GlvInputs {
     }
 
     pub fn resolve_path(&self, key: &str) -> Result<PathBuf, GlvInputsError> {
-        resolve_path(&self.study_root, &self.paths, key)
+        Ok(self.paths.resolve_path(key)?)
     }
 
     pub fn paths(&self) -> impl Iterator<Item = (&str, &Path)> {
-        self.paths
-            .iter()
-            .map(|(key, path)| (key.as_str(), path.as_path()))
+        self.paths.iter()
+    }
+
+    pub fn project_paths(&self) -> &ProjectPaths {
+        &self.paths
     }
 
     fn attach(&self, configuration: ResolvedConfiguration) -> GlvConfiguration {
         GlvConfiguration {
             configuration,
-            study_root: self.study_root.clone(),
-            paths: Arc::clone(&self.paths),
+            paths: self.paths.clone(),
         }
     }
 }
@@ -132,23 +109,8 @@ impl GlvConfiguration {
     }
 
     pub fn resolve_path(&self, key: &str) -> Result<PathBuf, GlvInputsError> {
-        resolve_path(&self.study_root, &self.paths, key)
+        Ok(self.paths.resolve_path(key)?)
     }
-}
-
-fn resolve_path(
-    study_root: &Path,
-    paths: &BTreeMap<String, PathBuf>,
-    key: &str,
-) -> Result<PathBuf, GlvInputsError> {
-    let path = paths.get(key).ok_or_else(|| GlvInputsError::UnknownPath {
-        key: key.to_owned(),
-    })?;
-    Ok(if path.is_absolute() {
-        path.clone()
-    } else {
-        study_root.join(path)
-    })
 }
 
 #[derive(Debug, Error)]
@@ -156,18 +118,4 @@ fn resolve_path(
 pub enum GlvInputsError {
     #[error(transparent)]
     Configuration(#[from] ConfigurationError),
-    #[error("failed to read GLV study paths `{path}`")]
-    ReadPaths {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
-    #[error("failed to parse GLV study paths `{path}`")]
-    ParsePaths {
-        path: PathBuf,
-        #[source]
-        source: serde_json::Error,
-    },
-    #[error("GLV study paths do not contain `{key}`")]
-    UnknownPath { key: String },
 }

@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use general_lotka_volterra_rs::interaction::InteractionMatrix;
 use general_lotka_volterra_rs::kernel::BoundaryCondition;
 use general_lotka_volterra_rs::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD};
+use general_lotka_volterra_rs::{GlvInputs, load_state_schema};
 use general_lotka_volterra_rs::{INTERACTION_INPUT_KEY, InteractionInput};
-use general_lotka_volterra_rs::{load_glv_inputs, load_state_schema};
 use physics_in_parallel::prelude::basic::RngConfig;
 use scientific_workflow::prelude::basics::{SamplingInterval, StateStreamConfig};
 
@@ -17,7 +17,7 @@ fn example_root(name: &str) -> PathBuf {
 #[test]
 fn mean_field_example_is_a_complete_lazy_workflow_study() {
     let root = example_root("mean_field_replicator");
-    let inputs = load_glv_inputs(&root).unwrap();
+    let inputs = GlvInputs::load(&root).unwrap();
     assert!(root.join("Cargo.toml").is_file());
     assert!(root.join("README.md").is_file());
     assert!(root.join("src/main.rs").is_file());
@@ -98,7 +98,7 @@ fn every_user_example_is_an_independent_glv_crate_and_study() {
             !root.join("config/state.json").exists(),
             "{name} uses GLV's crate-owned schema"
         );
-        let inputs = load_glv_inputs(&root).unwrap();
+        let inputs = GlvInputs::load(&root).unwrap();
         assert!(
             inputs.combination_count() > 0,
             "{name} has at least one configuration"
@@ -107,10 +107,14 @@ fn every_user_example_is_an_independent_glv_crate_and_study() {
             configuration
                 .decode_value::<Vec<StateStreamConfig>>("/recording")
                 .unwrap();
-            let input: InteractionInput = configuration
-                .decode_value(INTERACTION_INPUT_KEY)
-                .unwrap();
-            assert!(configuration.resolve_path(&input.path_key).unwrap().is_file());
+            let input: InteractionInput =
+                configuration.decode_value(INTERACTION_INPUT_KEY).unwrap();
+            assert!(
+                configuration
+                    .resolve_path(&input.path_key)
+                    .unwrap()
+                    .is_file()
+            );
         }
     }
 }
@@ -126,7 +130,7 @@ fn domain_configuration_decodes_without_application_mirror_types() {
         BoundaryCondition::Neumann
     );
 
-    let inputs = load_glv_inputs(example_root("mean_field_replicator_demographic")).unwrap();
+    let inputs = GlvInputs::load(example_root("mean_field_replicator_demographic")).unwrap();
     let seeds = inputs
         .combinations()
         .map(|task| task.decode_value::<RngConfig>("/rng").unwrap().seed())

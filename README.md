@@ -22,7 +22,7 @@ Add the crate:
 ```toml
 [dependencies]
 general-lotka-volterra-rs = "0.12.0"
-scientific-workflow = "0.7.0"
+scientific-workflow = "0.7.2"
 ```
 
 Copy the configuration, inputs, and `main.rs` from the example closest to your

@@ -50,7 +50,7 @@ pub mod prelude {
         SpatialGeneralLotkaVolterraConfig, SpatialReplicator, SpatialReplicatorConfig,
         StateAssemblyError,
     };
-    pub use crate::study_inputs::{GlvConfiguration, GlvInputs, GlvInputsError, load_glv_inputs};
+    pub use crate::study_inputs::{GlvConfiguration, GlvInputs, GlvInputsError};
     pub use crate::template::{GlvTemplate, TemplateTaskError};
     pub use crate::terminal_state::{
         TERMINAL_STATE_FORMAT, TerminalState, TerminalStateOpenError, open_terminal_state,

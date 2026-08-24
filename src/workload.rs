@@ -7,7 +7,7 @@ use scientific_workflow::prelude::study::{PhaseBuilder, Task};
 use thiserror::Error;
 
 use crate::GlvTemplate;
-use crate::study_inputs::{GlvInputs, GlvInputsError, load_glv_inputs};
+use crate::study_inputs::{GlvInputs, GlvInputsError};
 
 /// A fully loaded GLV workload ready to register its expanded tasks.
 pub struct GlvWorkload {
@@ -22,7 +22,7 @@ impl GlvWorkload {
         directory: impl Into<PathBuf>,
         template: GlvTemplate,
     ) -> Result<Self, GlvWorkloadError> {
-        let inputs = load_glv_inputs(directory)?;
+        let inputs = GlvInputs::load(directory)?;
         let execution = ExecutionScope::create_generated(inputs.resolve_path("recordings")?)?;
         Ok(Self {
             inputs,
@@ -37,7 +37,7 @@ impl GlvWorkload {
         directory: impl Into<PathBuf>,
         template: GlvTemplate,
     ) -> Result<Self, GlvWorkloadError> {
-        let inputs = load_glv_inputs(directory)?;
+        let inputs = GlvInputs::load(directory)?;
         let execution = ExecutionScope::open_or_create(inputs.resolve_path("recordings")?)?;
         Ok(Self {
             inputs,
@@ -75,16 +75,14 @@ impl GlvWorkload {
         let template = self.template;
         let execution = self.execution.clone();
         let category = category.into();
+        let project_paths = self.inputs.project_paths().clone();
         let tasks = self.inputs.combinations().map(move |configuration| {
-            let ordinal = configuration.ordinal();
             let execution = execution.clone();
-            Task::progress(
-                format!("{category}-{ordinal}"),
-                format!("{category} {ordinal}"),
-                move |context| Ok(template.run_task(&execution, &configuration, context)?),
-            )
-            .category(category.clone())
-            .metadata("configuration_ordinal", ordinal)
+            let resolved = configuration.configuration().clone();
+            Task::progress_for_configuration(category.clone(), &resolved, move |context| {
+                template.run_task(&execution, &configuration, context)
+            })
+            .with_project_paths(&project_paths)
         });
         builder.tasks(tasks)
     }

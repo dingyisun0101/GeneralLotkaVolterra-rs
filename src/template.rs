@@ -697,7 +697,7 @@ mod tests {
     use std::sync::atomic::{AtomicU64, Ordering};
 
     fn run_study(template: GlvTemplate, root: &Path) -> ExecutionScope {
-        let inputs = crate::load_glv_inputs(root).unwrap();
+        let inputs = crate::GlvInputs::load(root).unwrap();
         let scope =
             ExecutionScope::create_generated(inputs.resolve_path("recordings").unwrap()).unwrap();
         let task_scope = scope.clone();
@@ -707,7 +707,7 @@ mod tests {
             Task::progress(
                 format!("{}-{ordinal}", template.as_str()),
                 format!("{} {ordinal}", template.as_str()),
-                move |context| Ok(template.run_task(&scope, &configuration, context)?),
+                move |context| template.run_task(&scope, &configuration, context),
             )
         });
         let phase = Phase::builder(1, "GLV simulation")

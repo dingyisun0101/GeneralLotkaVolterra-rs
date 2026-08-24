@@ -21,4 +21,4 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
-pub use crate::{GlvInputs, GlvTemplate, GlvWorkload, GlvWorkloadError, load_glv_inputs};
+pub use crate::{GlvInputs, GlvTemplate, GlvWorkload, GlvWorkloadError};
