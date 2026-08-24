@@ -1,12 +1,12 @@
 {
   "global": {},
-  "phase_group": {
+  "components": {
     "glv": {
       "shared": {},
-      "phase": {
-        "simulation": {
+      "workloads": {
+        "dynamics": {
           "spatial_shape": [8, 8],
-          "initialization": {
+          "initial_condition": {
             "source": "recipe",
             "recipe": {
               "method": "random",
@@ -19,13 +19,13 @@
           "diffusion": [0.025, 0.02, 0.015],
           "spacing": [1.0, 1.0],
           "boundary": "neumann",
-          "cutoff": 1e-9,
+          "extinction_cutoff": 1e-9,
           "carrying_capacity": 40000.0,
-          "physical_time_increment": 0.003,
+          "time_step": 0.003,
           "maximum_iterations": 100,
           "observation": {"mode": "detect", "equilibrium": true, "periodic_orbit": true},
-          "interaction": {"path_key": "interaction_matrix"},
-          "recording": [
+          "interaction_source": {"path_key": "interaction_matrix"},
+          "recordings": [
             {"name": "signal", "sampling_interval": 10, "fields": ["abundance", "total"], "storage":{"layout":{"kind":"chunked","target_bytes":65536},"storage_queue_bytes":262144}},
             {"name": "space", "sampling_interval": 25, "fields": ["abundance", "space", "total"], "storage":{"layout":{"kind":"chunked","target_bytes":262144},"storage_queue_bytes":1048576}},
             {"name": "checkpoint", "sampling_interval": 50, "fields": ["abundance", "space", "total"], "storage":{"layout":{"kind":"individual_files"},"storage_queue_bytes":1048576}}

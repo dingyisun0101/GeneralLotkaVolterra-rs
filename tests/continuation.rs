@@ -78,7 +78,7 @@ impl Workspace {
             study.join("config/parameters.json"),
             r#"{
               "global": {},
-              "phase_group": {"glv": {"shared": {}, "phase": {"simulation": {
+              "components": {"glv": {"shared": {}, "workloads": {"dynamics": {
                 "growth":[0.15,-0.08],"cutoff":0.0,"physical_time_increment":0.05
               }}}}
             }"#,
@@ -86,7 +86,7 @@ impl Workspace {
         .unwrap();
         StudyConfiguration::load(study)
             .unwrap()
-            .phase("glv", "simulation")
+            .workload("glv", "dynamics")
             .unwrap()
             .combination(0)
             .unwrap()

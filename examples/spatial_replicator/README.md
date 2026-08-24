@@ -17,7 +17,7 @@ Laplacian uses the configured grid `spacing` and either:
 
 The built-in kernel uses explicit midpoint RK2. Construction checks a
 conservative diffusion stability limit. After kernel and noise phases, the
-local-frequency invariant applies `cutoff` and normalizes every cell to sum to
+local-frequency invariant applies `extinction_cutoff` and normalizes every cell to sum to
 one. Aggregate abundance is the mean composition across cells and `total = 1`.
 
 ## Run
@@ -44,11 +44,11 @@ policy and records which outcome, if any, ended the run.
 The binary dispatches the single replicate in `study.json`, supplies its
 Workflow execution scope to `GlvWorkload`, and registers its tasks in a phase.
 GLV supplies model construction and scientific I/O while the application owns
-Workflow orchestration. An optional workload-directory path
-allows the same binary to run another inputs:
+Workflow orchestration. An optional study-directory path
+allows the same binary to run another study:
 
 ```sh
-cargo run --release -- /path/to/inputs/config
+cargo run --release -- /path/to/study
 ```
 
 Outputs are written beneath `output/replicate_0`. The `space` stream retains the

@@ -21,8 +21,8 @@ Add the crate:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = "0.14.0"
-scientific-workflow = "0.8.0"
+general-lotka-volterra-rs = "0.15.0"
+scientific-workflow = "0.9.0"
 ```
 
 Copy the configuration, inputs, and `main.rs` from the example closest to your
@@ -46,11 +46,11 @@ let workload = GlvWorkload::load(
     template,
     replicate.execution_scope().clone(),
 )?;
-let simulation = workload
+let phase = workload
     .register(Phase::builder(1, "mean-field replicator"))
     .build()?;
 Study::builder(workload.record_path())
-    .phase(simulation)
+    .phase(phase)
     .build()?
     .run_phases([1])?;
 println!("results: {}", workload.execution().directory().display());
@@ -99,14 +99,14 @@ cargo run --release
 Pass another compatible configuration directory as the optional argument:
 
 ```sh
-cargo run --release -- /path/to/my-study/config
+cargo run --release -- /path/to/my-study
 ```
 
 Spatial templates consume categorical ecological lattices through the public
 `ecological-model-core` crate. GLV owns only their explicit conversion to a
 species-last continuous field: spatial replicator sites become one-hot
 frequency cells, while population GLV requires `initial_population_per_site`.
-An initialization may be generated from shared configuration or loaded from a
+An initial condition may be generated from shared configuration or loaded from a
 verified content-addressed artifact produced by an earlier execution.
 
 ## Study configuration
@@ -123,38 +123,39 @@ my-study/
     └── interaction.json
 ```
 
-- `study.json` defines replicate count, execution mode, failure policy, and the
+- `study.json` defines replicate count, scheduling mode, failure policy, and the
   base seed used for deterministic per-replicate derivation.
-- `parameters.json` places GLV settings under
-  `phase_group.glv.shared` and `phase_group.glv.phase.simulation`. Ordinary JSON
+- `parameters.json` places mean-field settings under
+  `components.glv.shared` and
+  `components.glv.workloads.dynamics`. Ordinary JSON
   arrays remain literal arrays; wrap only a swept value as
   `{ "$sweep": [...] }`, or put complete alternatives in `"$cases"`.
 - `paths.json` names interaction inputs and the recording output root. The
-  `interaction.path_key` value in each resolved configuration selects which named
-  interaction path it uses, so a sweep may pair different model sizes with
+  `interaction_source.path_key` value in each resolved configuration selects
+  which named interaction path it uses, so a sweep may pair different model sizes with
   different matrices inside one study.
 - `interaction.json` is the versioned PiP interaction matrix.
 
 The examples are the configuration reference for their respective models.
 Their READMEs explain every model-specific field. Common fields include
-`maximum_iterations`, `physical_time_increment`, `observation`, and
-`recording`. Spatial examples additionally show lattice shape,
-initialization, diffusion, spacing, and boundary conditions.
+`maximum_iterations`, `time_step`, `observation`, and
+`recordings`. Spatial examples additionally show lattice shape,
+initial condition, diffusion, spacing, and boundary conditions.
 
 The interaction matrix is the sole authority for species count. GLV ignores a
 study-level `K` value, allowing it to remain useful metadata without becoming
 duplicated model configuration. A scalar `growth` or `diffusion` value applies
 to every inferred species. Mean-field models default to uniform initial
-abundance when `initial_abundance` is absent. Spatial models default to unit
+abundance when `initial_condition` is absent. Spatial models default to unit
 spacing when `spacing` is absent, and population GLV applies no global capacity
 when `carrying_capacity` is absent.
 
-Mean-field `initial_abundance` accepts either an inline vector or
+Mean-field `initial_condition` accepts either an inline vector or
 `{ "path_key": "<key>" }`. The latter resolves a JSON vector through the
 study's `paths.json`, allowing an upstream scientific-input phase to provide
 the exact same aggregate frequencies used to construct a categorical lattice.
 GLV validates and normalizes the resolved vector through its ordinary invariant
-boundary; it does not infer or regenerate the lattice initialization.
+boundary; it does not infer or regenerate the lattice initial condition.
 
 Relative paths are resolved from the study root. There is no separate output
 argument: `config/paths.json` is the sole path authority.

@@ -43,8 +43,8 @@ another compatible configuration folder:
 cargo run --release -- /path/to/inputs/config
 ```
 
-Other main values in `config/parameters.json` are optional `initial_abundance`, scalar or
-per-species `growth`, `cutoff`, `physical_time_increment`,
+Other main values in `config/parameters.json` are optional `initial_condition`, scalar or
+per-species `growth`, `extinction_cutoff`, `time_step`,
 `maximum_iterations`, and the recording streams. Each sweep RNG configuration creates a reproducible task with its own
 recorded seed provenance.
 

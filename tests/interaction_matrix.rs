@@ -127,7 +127,7 @@ fn workflow_decodes_inline_values_and_resolves_pip_matrix_paths() {
         configuration.join("parameters.json"),
         br#"{
           "global": {},
-          "phase_group": {"glv": {"shared": {}, "phase": {"simulation": {
+          "components": {"glv": {"shared": {}, "workloads": {"dynamics": {
             "interaction_matrix":[[1.0,0.0],[0.0,1.0]]
           }}}}
         }"#,

@@ -4,7 +4,7 @@ use general_lotka_volterra_rs::interaction::InteractionMatrix;
 use general_lotka_volterra_rs::kernel::BoundaryCondition;
 use general_lotka_volterra_rs::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD};
 use general_lotka_volterra_rs::{GlvInputs, load_state_schema};
-use general_lotka_volterra_rs::{INTERACTION_INPUT_KEY, InteractionInput};
+use general_lotka_volterra_rs::{INTERACTION_SOURCE_KEY, InteractionSource};
 use physics_in_parallel::prelude::basic::RngConfig;
 use scientific_workflow::prelude::basics::{SamplingInterval, StateStreamConfig};
 
@@ -37,7 +37,7 @@ fn mean_field_example_is_a_complete_lazy_workflow_study() {
         let task = tasks.next().unwrap();
         assert_eq!(task.ordinal(), ordinal as u64);
         assert_eq!(
-            task.decode_value::<Vec<f64>>("/initial_abundance").unwrap(),
+            task.decode_value::<Vec<f64>>("/initial_condition").unwrap(),
             [0.5, 0.3, 0.2]
         );
         assert_eq!(
@@ -45,20 +45,16 @@ fn mean_field_example_is_a_complete_lazy_workflow_study() {
             [0.0, 0.0, 0.0]
         );
         assert_eq!(
-            task.decode_value::<f64>("/cutoff").unwrap(),
+            task.decode_value::<f64>("/extinction_cutoff").unwrap(),
             expected_cutoff
         );
-        assert_eq!(
-            task.decode_value::<f64>("/physical_time_increment")
-                .unwrap(),
-            0.005
-        );
+        assert_eq!(task.decode_value::<f64>("/time_step").unwrap(), 0.005);
         assert_eq!(
             task.decode_value::<u64>("/maximum_iterations").unwrap(),
             100
         );
         let recording = task
-            .decode_value::<Vec<StateStreamConfig>>("/recording")
+            .decode_value::<Vec<StateStreamConfig>>("/recordings")
             .unwrap();
         assert_eq!(recording.len(), 2);
         assert_eq!(
@@ -70,7 +66,7 @@ fn mean_field_example_is_a_complete_lazy_workflow_study() {
             SamplingInterval::iterations(50).unwrap()
         );
 
-        let input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY).unwrap();
+        let input: InteractionSource = task.decode_value(INTERACTION_SOURCE_KEY).unwrap();
         let matrix =
             InteractionMatrix::load_json(task.resolve_path(&input.path_key).unwrap()).unwrap();
         assert_eq!(matrix.species(), 3);
@@ -105,10 +101,10 @@ fn every_user_example_is_an_independent_glv_crate_and_study() {
         );
         for configuration in inputs.combinations() {
             configuration
-                .decode_value::<Vec<StateStreamConfig>>("/recording")
+                .decode_value::<Vec<StateStreamConfig>>("/recordings")
                 .unwrap();
-            let input: InteractionInput =
-                configuration.decode_value(INTERACTION_INPUT_KEY).unwrap();
+            let input: InteractionSource =
+                configuration.decode_value(INTERACTION_SOURCE_KEY).unwrap();
             assert!(
                 configuration
                     .resolve_path(&input.path_key)

@@ -93,8 +93,8 @@ impl Workspace {
         fs::create_dir(study.join("config")).unwrap();
         let parameters = serde_json::json!({
             "global": {},
-            "phase_group": {"glv": {"shared": {}, "phase": {
-                "simulation": serde_json::from_str::<Value>(fixed).unwrap()
+            "components": {"glv": {"shared": {}, "workloads": {
+                "dynamics": serde_json::from_str::<Value>(fixed).unwrap()
             }}}
         });
         fs::write(
@@ -104,7 +104,7 @@ impl Workspace {
         .unwrap();
         StudyConfiguration::load(study)
             .unwrap()
-            .phase("glv", "simulation")
+            .workload("glv", "dynamics")
             .unwrap()
             .combination(0)
             .unwrap()

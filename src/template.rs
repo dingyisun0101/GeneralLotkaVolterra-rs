@@ -38,12 +38,12 @@ use ecological_model_core::trajectory::{
     TrajectoryObserver,
 };
 
-pub const INTERACTION_INPUT_KEY: &str = "/interaction";
+pub const INTERACTION_SOURCE_KEY: &str = "/interaction_source";
 
 /// Task-specific interaction input resolved through the workload path table.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct InteractionInput {
+pub struct InteractionSource {
     pub path_key: String,
 }
 
@@ -70,7 +70,7 @@ impl InitialAbundanceInput {
     }
 }
 
-impl InteractionInput {
+impl InteractionSource {
     fn resolve(&self, task: &GlvConfiguration) -> Result<PathBuf, TemplateTaskError> {
         if self.path_key.trim().is_empty() {
             return Err("interaction path key must not be empty".into());
@@ -170,10 +170,10 @@ fn run_mean_field(
     context: &TaskContext,
     demographic: bool,
 ) -> Result<(), TemplateTaskError> {
-    let cutoff = task.decode_value("/cutoff")?;
-    let time_step = TimeStep::new(task.decode_value("/physical_time_increment")?)?;
+    let cutoff = task.decode_value("/extinction_cutoff")?;
+    let time_step = TimeStep::new(task.decode_value("/time_step")?)?;
     let maximum_iterations = task.decode_value("/maximum_iterations")?;
-    let streams: Vec<StateStreamConfig> = task.decode_value("/recording")?;
+    let streams: Vec<StateStreamConfig> = task.decode_value("/recordings")?;
     let noise = demographic
         .then(|| {
             Ok::<_, TemplateTaskError>((
@@ -184,13 +184,13 @@ fn run_mean_field(
         .transpose()?;
 
     context.set_detail("resolving interaction matrix");
-    let interaction_input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY)?;
+    let interaction_input: InteractionSource = task.decode_value(INTERACTION_SOURCE_KEY)?;
     let interaction = InteractionMatrix::load_json(interaction_input.resolve(task)?)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
     let species = interaction.species();
     let initial_abundance = task
-        .value("/initial_abundance")
-        .map(|_| task.decode_value::<InitialAbundanceInput>("/initial_abundance"))
+        .value("/initial_condition")
+        .map(|_| task.decode_value::<InitialAbundanceInput>("/initial_condition"))
         .transpose()?
         .map(|input| {
             let values = input.resolve(task)?;
@@ -252,14 +252,14 @@ fn run_spatial_replicator(
         .map(|_| task.decode_value::<Vec<f64>>("/spacing"))
         .transpose()?;
     let boundary = task.decode_value("/boundary")?;
-    let cutoff = task.decode_value("/cutoff")?;
-    let time_step = TimeStep::new(task.decode_value("/physical_time_increment")?)?;
+    let cutoff = task.decode_value("/extinction_cutoff")?;
+    let time_step = TimeStep::new(task.decode_value("/time_step")?)?;
     let maximum_iterations = task.decode_value("/maximum_iterations")?;
-    let streams: Vec<StateStreamConfig> = task.decode_value("/recording")?;
-    let initialization: InitialStateSource = task.decode_value("/initialization")?;
+    let streams: Vec<StateStreamConfig> = task.decode_value("/recordings")?;
+    let initialization: InitialStateSource = task.decode_value("/initial_condition")?;
 
     context.set_detail("resolving interaction matrix");
-    let interaction_input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY)?;
+    let interaction_input: InteractionSource = task.decode_value(INTERACTION_SOURCE_KEY)?;
     let interaction = InteractionMatrix::load_json(interaction_input.resolve(task)?)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
     let species = interaction.species();
@@ -310,19 +310,19 @@ fn run_spatial_glv(
         .map(|_| task.decode_value::<Vec<f64>>("/spacing"))
         .transpose()?;
     let boundary = task.decode_value("/boundary")?;
-    let cutoff = task.decode_value("/cutoff")?;
+    let cutoff = task.decode_value("/extinction_cutoff")?;
     let carrying_capacity = task
         .value("/carrying_capacity")
         .map(|_| task.decode_value::<f64>("/carrying_capacity"))
         .transpose()?;
     let initial_population_per_site: f64 = task.decode_value("/initial_population_per_site")?;
-    let time_step = TimeStep::new(task.decode_value("/physical_time_increment")?)?;
+    let time_step = TimeStep::new(task.decode_value("/time_step")?)?;
     let maximum_iterations = task.decode_value("/maximum_iterations")?;
-    let streams: Vec<StateStreamConfig> = task.decode_value("/recording")?;
-    let initialization: InitialStateSource = task.decode_value("/initialization")?;
+    let streams: Vec<StateStreamConfig> = task.decode_value("/recordings")?;
+    let initialization: InitialStateSource = task.decode_value("/initial_condition")?;
 
     context.set_detail("resolving interaction matrix");
-    let interaction_input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY)?;
+    let interaction_input: InteractionSource = task.decode_value(INTERACTION_SOURCE_KEY)?;
     let interaction = InteractionMatrix::load_json(interaction_input.resolve(task)?)?;
     let persisted = persist_interaction_matrix(scope, &interaction)?;
     let species = interaction.species();
@@ -588,9 +588,9 @@ fn task_recording_directory(
     scope: &ExecutionScope,
     task: &GlvConfiguration,
 ) -> Result<std::path::PathBuf, TemplateTaskError> {
-    match task.value("/recording_name") {
+    match task.value("/run_name") {
         Some(_) => {
-            let name = task.decode_value::<String>("/recording_name")?;
+            let name = task.decode_value::<String>("/run_name")?;
             Ok(scope.named_task_recording_directory(&name)?)
         }
         None => Ok(scope.task_recording_directory(task.ordinal())),
@@ -740,19 +740,19 @@ mod tests {
                 root.join("config/parameters.json"),
                 r#"{
                   "global": {},
-                  "phase_group": {"glv": {"shared": {}, "phase": {"simulation": {
-                    "initial_abundance": [1.0, 0.0],
+                  "components": {"glv": {"shared": {}, "workloads": {"dynamics": {
+                    "initial_condition": [1.0, 0.0],
                     "growth": [0.0, 0.0],
-                    "cutoff": 0.0,
-                    "physical_time_increment": 0.1,
+                    "extinction_cutoff": 0.0,
+                    "time_step": 0.1,
                     "maximum_iterations": 1200,
-                    "interaction": {"path_key": "interaction_matrix"},
+                    "interaction_source": {"path_key": "interaction_matrix"},
                     "observation": {
                       "mode": "detect",
                       "equilibrium": true,
                       "periodic_orbit": false
                     },
-                    "recording": [
+                    "recordings": [
                       {"name":"signal","sampling_interval":10,"fields":["abundance","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"storage_queue_bytes":262144}},
                       {"name":"space","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"storage_queue_bytes":262144}},
                       {"name":"checkpoint","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"individual_files"},"storage_queue_bytes":262144}}
@@ -779,7 +779,7 @@ mod tests {
             let mut document: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
             update(
                 document
-                    .pointer_mut("/phase_group/glv/phase/simulation")
+                    .pointer_mut("/components/glv/workloads/dynamics")
                     .unwrap(),
             );
             fs::write(path, serde_json::to_vec_pretty(&document).unwrap()).unwrap();
@@ -797,7 +797,7 @@ mod tests {
         fn inferred_uniform() -> Self {
             let inputs = Self::stationary();
             inputs.update_simulation(|config| {
-                config.as_object_mut().unwrap().remove("initial_abundance");
+                config.as_object_mut().unwrap().remove("initial_condition");
                 config["growth"] = Value::from(0.0);
             });
             inputs
@@ -806,11 +806,11 @@ mod tests {
         fn path_abundance() -> Self {
             let inputs = Self::stationary();
             inputs.update_simulation(|config| {
-                config["initial_abundance"] = serde_json::json!({"path_key":"initial_abundance"});
+                config["initial_condition"] = serde_json::json!({"path_key":"initial_condition"});
             });
             let paths_path = inputs.0.join("config/paths.json");
             let mut paths: Value = serde_json::from_slice(&fs::read(&paths_path).unwrap()).unwrap();
-            paths["initial_abundance"] = Value::from("inputs/initial-abundance.json");
+            paths["initial_condition"] = Value::from("inputs/initial-abundance.json");
             fs::write(paths_path, serde_json::to_vec_pretty(&paths).unwrap()).unwrap();
             fs::write(
                 inputs.0.join("inputs/initial-abundance.json"),
@@ -823,10 +823,10 @@ mod tests {
         fn collapses_at_cap() -> Self {
             let inputs = Self::stationary();
             inputs.update_simulation(|config| {
-                config["initial_abundance"] = serde_json::json!([0.98, 0.02]);
+                config["initial_condition"] = serde_json::json!([0.98, 0.02]);
                 config["growth"] = serde_json::json!([0.0, -100.0]);
-                config["cutoff"] = Value::from(0.01);
-                config["physical_time_increment"] = Value::from(0.01);
+                config["extinction_cutoff"] = Value::from(0.01);
+                config["time_step"] = Value::from(0.01);
                 config["maximum_iterations"] = Value::from(1);
             });
             inputs
@@ -836,7 +836,7 @@ mod tests {
             let inputs = Self::stationary();
             let config = serde_json::json!({
                 "spatial_shape": [2, 2],
-                "initialization": {
+                "initial_condition": {
                     "source": "recipe",
                     "recipe": {
                         "method": "random",
@@ -848,12 +848,12 @@ mod tests {
                 "growth": [0.35, 0.0],
                 "diffusion": 0.0,
                 "boundary": "neumann",
-                "cutoff": 0.0,
-                "physical_time_increment": 0.01,
+                "extinction_cutoff": 0.0,
+                "time_step": 0.01,
                 "maximum_iterations": 0,
-                "interaction": {"path_key": "interaction_matrix"},
+                "interaction_source": {"path_key": "interaction_matrix"},
                 "observation": {"mode":"detect","equilibrium":true,"periodic_orbit":false},
-                "recording": [
+                "recordings": [
                     {"name":"signal","sampling_interval":10,"fields":["abundance","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"storage_queue_bytes":262144}},
                     {"name":"space","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"storage_queue_bytes":262144}},
                     {"name":"checkpoint","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"individual_files"},"storage_queue_bytes":262144}}

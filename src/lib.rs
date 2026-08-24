@@ -25,7 +25,7 @@ pub mod terminal_state;
 pub mod workload;
 
 pub use study_inputs::{GlvConfiguration, GlvInputs, GlvInputsError};
-pub use template::{GlvTemplate, INTERACTION_INPUT_KEY, InteractionInput, TemplateTaskError};
+pub use template::{GlvTemplate, INTERACTION_SOURCE_KEY, InteractionSource, TemplateTaskError};
 pub use workload::{GlvWorkload, GlvWorkloadError};
 
 /// Explicit reusable worker pool for callers that want to bound an entire GLV

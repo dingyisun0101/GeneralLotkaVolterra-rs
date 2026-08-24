@@ -208,8 +208,9 @@ space as JSON `null`.
 The schema is model-owned: GLV supplies it through
 `GlvInputs::load`. User studies contain only
 `parameters.json` and `paths.json`; they cannot drift by copying or overriding
-`state.json`. GLV reads its `glv` phase group and `simulation` phase, while
-Workflow owns the global/shared/phase merge and sweep expansion.
+`state.json`. GLV reads the `glv.dynamics`
+component/workload selected by its template, while Workflow owns the
+global/shared/workload merge and sweep expansion.
 
 ### Authoritative state and numerical scratch
 

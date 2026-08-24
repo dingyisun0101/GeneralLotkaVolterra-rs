@@ -1,21 +1,21 @@
 {
   "global": {},
-  "phase_group": {
+  "components": {
     "glv": {
       "shared": {},
-      "phase": {
-        "simulation": {
-          "initial_abundance": [0.5, 0.3, 0.2],
+      "workloads": {
+        "dynamics": {
+          "initial_condition": [0.5, 0.3, 0.2],
           "growth": [0.0, 0.0, 0.0],
-          "physical_time_increment": 0.005,
+          "time_step": 0.005,
           "maximum_iterations": 100,
           "observation": {"mode": "detect", "equilibrium": true, "periodic_orbit": true},
-          "interaction": {"path_key": "interaction_matrix"},
-          "recording": [
+          "interaction_source": {"path_key": "interaction_matrix"},
+          "recordings": [
             {"name": "signal", "sampling_interval": 10, "fields": ["abundance", "total"], "storage":{"layout":{"kind":"chunked","target_bytes":65536},"storage_queue_bytes":262144}},
             {"name": "checkpoint", "sampling_interval": 50, "fields": ["abundance", "space", "total"], "storage":{"layout":{"kind":"individual_files"},"storage_queue_bytes":262144}}
           ],
-          "cutoff": {"$sweep": [0.0, 1e-8]}
+          "extinction_cutoff": {"$sweep": [0.0, 1e-8]}
         }
       }
     }

@@ -12,7 +12,7 @@ f̄(x)   = Σ_i x_i f_i(x)
 `A` is the interaction matrix and `r` is the intrinsic-growth vector. The
 replicator subtraction removes common fitness and preserves total frequency.
 After every deterministic or stochastic phase, the GLV frequency invariant
-sets values below `cutoff` to zero and normalizes the surviving frequencies to
+sets values below `extinction_cutoff` to zero and normalizes the surviving frequencies to
 sum to one.
 
 The built-in model uses classical fourth-order Runge–Kutta integration and no
@@ -37,11 +37,11 @@ let workload = GlvWorkload::load(
     template,
     replicate.execution_scope().clone(),
 )?;
-let simulation = workload
+let phase = workload
     .register(Phase::builder(1, "mean-field replicator"))
     .build()?;
 Study::builder(workload.record_path())
-    .phase(simulation)
+    .phase(phase)
     .build()?
     .run_phases([1])?;
 ```
@@ -54,19 +54,19 @@ cargo run --release -- /path/to/inputs/config
 ```
 
 The default configuration is this directory's `config/` folder.
-`config/parameters.json` contains shared GLV parameters and varies `cutoff`
+`config/parameters.json` contains shared GLV parameters and varies `extinction_cutoff`
 with `{"$sweep": [...]}`; `config/paths.json` names the interaction matrix and
 output root. `study.json` declares one sequential replicate. The matrix file
 uses rows as affected species and columns as contributing species.
 
 The main values to edit are:
 
-- `initial_abundance`: optional starting frequencies; omission uses a uniform state;
+- `initial_condition`: optional starting frequencies; omission uses a uniform state;
 - `growth`: one intrinsic value per species, or one scalar shared by all species;
-- `physical_time_increment`: RK4 time increment;
+- `time_step`: RK4 time increment;
 - `maximum_iterations`: hard iteration cap;
 - `observation`: terminal observation mode and detector toggles; and
-- `recording`: sampling cadence, fields, and chunk-size limits per stream.
+- `recordings`: sampling cadence, fields, and chunk-size limits per stream.
 
 The checked-in deterministic configuration enables both automatic detectors:
 equilibrium convergence and a nontrivial periodic orbit. GLV owns their
@@ -79,7 +79,7 @@ The declared replicate writes beneath `output/replicate_0`. Each task records:
 - `signal`: aggregate abundance and total;
 - `checkpoint`: restart-quality complete states.
 
-Sampling and storage limits are configured independently under `recording`.
+Sampling and storage limits are configured independently under `recordings`.
 The program verifies the final checkpoint before reporting success.
 Every successful task also records a classified terminal composition: an exact
 accepted fixed point or a trailing estimate when the run ended otherwise.

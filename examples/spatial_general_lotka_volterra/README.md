@@ -16,7 +16,7 @@ periodic or zero-flux Neumann boundaries and integrates the combined reaction–
 diffusion equation using explicit midpoint RK2. Construction rejects time steps
 above a conservative diffusion stability limit.
 
-The population invariant removes counts at or below `cutoff`, recomputes
+The population invariant removes counts at or below `extinction_cutoff`, recomputes
 aggregate abundance, and optionally rescales the field to `carrying_capacity`.
 Unlike frequency models, aggregate abundance and `total` represent absolute
 population rather than a unit simplex.
@@ -32,14 +32,14 @@ cargo run --release
 Important values in `config/parameters.json` under the GLV simulation phase are:
 
 - `spatial_shape`: grid axes, excluding species;
-- `initialization`: shared categorical ecological initial-state source;
+- `initial_condition`: shared categorical ecological initial-state source;
 - `initial_population_per_site`: explicit population assigned to the selected
   taxon at each categorical site;
 - `growth` and `diffusion`: one value per species or one shared scalar;
 - `spacing`: optional values per spatial axis; omission uses unit spacing;
 - `boundary`: `periodic` or `neumann`;
 - `carrying_capacity`: an optional positive total capacity; and
-- `physical_time_increment`: RK2 time increment.
+- `time_step`: RK2 time increment.
 
 Both deterministic automatic-termination detectors are enabled: equilibrium
 convergence and a nontrivial periodic orbit. Their evidence policy is
