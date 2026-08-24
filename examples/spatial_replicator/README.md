@@ -28,7 +28,8 @@ Copy this complete directory and run:
 cargo run --release
 ```
 
-The default `fixed.json` uses `ecological-model-core` to sample one
+The default GLV simulation in `config/parameters.json` uses
+`ecological-model-core` to sample one
 categorical taxon per site, then converts each site to a one-hot frequency
 cell. Its explicit PiP RNG configuration is recorded as provenance.
 Change `spatial_shape`, scalar or per-species `diffusion`, optional per-axis
@@ -40,16 +41,17 @@ Both deterministic automatic-termination detectors are enabled: equilibrium
 convergence and a nontrivial periodic orbit. GLV owns their evidence
 policy and records which outcome, if any, ended the run.
 
-The binary loads a `GlvWorkload` and registers its tasks in a phase it constructs
-itself. GLV supplies model construction and scientific I/O while the application
-owns Workflow orchestration. An optional workload-directory path
+The binary dispatches the single replicate in `study.json`, supplies its
+Workflow execution scope to `GlvWorkload`, and registers its tasks in a phase.
+GLV supplies model construction and scientific I/O while the application owns
+Workflow orchestration. An optional workload-directory path
 allows the same binary to run another inputs:
 
 ```sh
 cargo run --release -- /path/to/inputs/config
 ```
 
-Outputs are written to a fresh execution scope. The `space` stream retains the
+Outputs are written beneath `output/replicate_0`. The `space` stream retains the
 full field, while the smaller `signal` stream is suited to aggregate analysis.
 The `checkpoint` stream supports deterministic continuation.
 Every successful task also records a classified terminal composition: an exact

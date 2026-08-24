@@ -29,7 +29,7 @@ Copy this complete directory and run:
 cargo run --release
 ```
 
-Important values in `config/fixed.json` are:
+Important values in `config/parameters.json` under the GLV simulation phase are:
 
 - `spatial_shape`: grid axes, excluding species;
 - `initialization`: shared categorical ecological initial-state source;
@@ -45,11 +45,12 @@ Both deterministic automatic-termination detectors are enabled: equilibrium
 convergence and a nontrivial periodic orbit. Their evidence policy is
 internal to GLV.
 
-The binary loads a `GlvWorkload` and registers its tasks in an application-owned
-phase. It contains no model assembly or recording code. Pass another
+The binary dispatches the single replicate declared in `study.json`, supplies
+its Workflow execution scope to `GlvWorkload`, and registers the tasks in an
+application-owned phase. It contains no model assembly or recording code. Pass another
 compatible workload directory as the optional first
 argument.
-Every invocation creates new output and records aggregate, spatial, and
+The replicate writes to `output/replicate_0` and records aggregate, spatial, and
 checkpoint streams. The program verifies the final checkpoint before success.
 Every successful task also records a classified terminal composition. For
 population GLV, single-species support alone is not accepted as a fixed point;

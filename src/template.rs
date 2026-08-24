@@ -737,8 +737,10 @@ mod tests {
             fs::create_dir_all(root.join("config")).unwrap();
             fs::create_dir(root.join("inputs")).unwrap();
             fs::write(
-                root.join("config/fixed.json"),
+                root.join("config/parameters.json"),
                 r#"{
+                  "global": {},
+                  "phase_group": {"glv": {"shared": {}, "phase": {"simulation": {
                     "initial_abundance": [1.0, 0.0],
                     "growth": [0.0, 0.0],
                     "cutoff": 0.0,
@@ -746,21 +748,17 @@ mod tests {
                     "maximum_iterations": 1200,
                     "interaction": {"path_key": "interaction_matrix"},
                     "observation": {
-                        "mode": "detect",
-                        "equilibrium": true,
-                        "periodic_orbit": false
+                      "mode": "detect",
+                      "equilibrium": true,
+                      "periodic_orbit": false
                     },
                     "recording": [
-                        {"name":"signal","sampling_interval":10,"fields":["abundance","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"storage_queue_bytes":262144}},
-                        {"name":"space","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"storage_queue_bytes":262144}},
-                        {"name":"checkpoint","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"individual_files"},"storage_queue_bytes":262144}}
+                      {"name":"signal","sampling_interval":10,"fields":["abundance","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"storage_queue_bytes":262144}},
+                      {"name":"space","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"chunked","target_bytes":65536},"storage_queue_bytes":262144}},
+                      {"name":"checkpoint","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"individual_files"},"storage_queue_bytes":262144}}
                     ]
+                  }}}}
                 }"#,
-            )
-            .unwrap();
-            fs::write(
-                root.join("config/sweep.json"),
-                r#"{"mode":"cartesian","axes":{}}"#,
             )
             .unwrap();
             fs::write(
@@ -776,33 +774,40 @@ mod tests {
             Self(root)
         }
 
+        fn update_simulation(&self, update: impl FnOnce(&mut Value)) {
+            let path = self.0.join("config/parameters.json");
+            let mut document: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            update(
+                document
+                    .pointer_mut("/phase_group/glv/phase/simulation")
+                    .unwrap(),
+            );
+            fs::write(path, serde_json::to_vec_pretty(&document).unwrap()).unwrap();
+        }
+
         fn capped() -> Self {
             let inputs = Self::stationary();
-            let path = inputs.0.join("config/fixed.json");
-            let mut config: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-            config.as_object_mut().unwrap().remove("observation");
-            config["maximum_iterations"] = Value::from(3);
-            fs::write(path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+            inputs.update_simulation(|config| {
+                config.as_object_mut().unwrap().remove("observation");
+                config["maximum_iterations"] = Value::from(3);
+            });
             inputs
         }
 
         fn inferred_uniform() -> Self {
             let inputs = Self::stationary();
-            let path = inputs.0.join("config/fixed.json");
-            let mut config: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-            config.as_object_mut().unwrap().remove("initial_abundance");
-            config["growth"] = Value::from(0.0);
-            fs::write(path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+            inputs.update_simulation(|config| {
+                config.as_object_mut().unwrap().remove("initial_abundance");
+                config["growth"] = Value::from(0.0);
+            });
             inputs
         }
 
         fn path_abundance() -> Self {
             let inputs = Self::stationary();
-            let fixed_path = inputs.0.join("config/fixed.json");
-            let mut config: Value =
-                serde_json::from_slice(&fs::read(&fixed_path).unwrap()).unwrap();
-            config["initial_abundance"] = serde_json::json!({"path_key":"initial_abundance"});
-            fs::write(fixed_path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+            inputs.update_simulation(|config| {
+                config["initial_abundance"] = serde_json::json!({"path_key":"initial_abundance"});
+            });
             let paths_path = inputs.0.join("config/paths.json");
             let mut paths: Value = serde_json::from_slice(&fs::read(&paths_path).unwrap()).unwrap();
             paths["initial_abundance"] = Value::from("inputs/initial-abundance.json");
@@ -817,20 +822,18 @@ mod tests {
 
         fn collapses_at_cap() -> Self {
             let inputs = Self::stationary();
-            let path = inputs.0.join("config/fixed.json");
-            let mut config: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-            config["initial_abundance"] = serde_json::json!([0.98, 0.02]);
-            config["growth"] = serde_json::json!([0.0, -100.0]);
-            config["cutoff"] = Value::from(0.01);
-            config["physical_time_increment"] = Value::from(0.01);
-            config["maximum_iterations"] = Value::from(1);
-            fs::write(path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+            inputs.update_simulation(|config| {
+                config["initial_abundance"] = serde_json::json!([0.98, 0.02]);
+                config["growth"] = serde_json::json!([0.0, -100.0]);
+                config["cutoff"] = Value::from(0.01);
+                config["physical_time_increment"] = Value::from(0.01);
+                config["maximum_iterations"] = Value::from(1);
+            });
             inputs
         }
 
         fn nonstationary_population_monoculture() -> Self {
             let inputs = Self::stationary();
-            let path = inputs.0.join("config/fixed.json");
             let config = serde_json::json!({
                 "spatial_shape": [2, 2],
                 "initialization": {
@@ -856,7 +859,7 @@ mod tests {
                     {"name":"checkpoint","sampling_interval":10,"fields":["abundance","space","total"],"storage":{"layout":{"kind":"individual_files"},"storage_queue_bytes":262144}}
                 ]
             });
-            fs::write(path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
+            inputs.update_simulation(|current| *current = config);
             inputs
         }
     }

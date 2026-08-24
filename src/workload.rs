@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use scientific_workflow::prelude::basics::{ExecutionScope, ExecutionScopeError};
+use scientific_workflow::prelude::basics::ExecutionScope;
 use scientific_workflow::prelude::study::{PhaseBuilder, Task};
 use thiserror::Error;
 
@@ -17,28 +17,17 @@ pub struct GlvWorkload {
 }
 
 impl GlvWorkload {
-    /// Loads and validates one self-contained workload directory.
+    /// Loads one workload into an application-selected execution scope.
+    ///
+    /// Replicate dispatch and output-scope creation belong to Workflow. GLV
+    /// only maps its resolved configurations into tasks beneath the supplied
+    /// scope.
     pub fn load(
         directory: impl Into<PathBuf>,
         template: GlvTemplate,
+        execution: ExecutionScope,
     ) -> Result<Self, GlvWorkloadError> {
         let inputs = GlvInputs::load(directory)?;
-        let execution = ExecutionScope::create_generated(inputs.resolve_path("recordings")?)?;
-        Ok(Self {
-            inputs,
-            execution,
-            template,
-        })
-    }
-
-    /// Loads a workload whose semantic task directories live directly beneath
-    /// the configured recording root.
-    pub fn load_in_place(
-        directory: impl Into<PathBuf>,
-        template: GlvTemplate,
-    ) -> Result<Self, GlvWorkloadError> {
-        let inputs = GlvInputs::load(directory)?;
-        let execution = ExecutionScope::open_or_create(inputs.resolve_path("recordings")?)?;
         Ok(Self {
             inputs,
             execution,
@@ -95,6 +84,4 @@ pub enum GlvWorkloadError {
     Inputs(#[from] GlvInputsError),
     #[error(transparent)]
     Configuration(#[from] scientific_workflow::configuration::ConfigurationError),
-    #[error(transparent)]
-    Execution(#[from] ExecutionScopeError),
 }

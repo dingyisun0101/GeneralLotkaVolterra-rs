@@ -19,7 +19,7 @@ use general_lotka_volterra_rs::{
     TOTAL_FIELD, TerminalState, TimeStep, TotalAbundance,
 };
 use physics_in_parallel::prelude::basic::{DenseMatrix, Tensor};
-use scientific_workflow::configuration::{ConfigurationSpace, ResolvedConfiguration};
+use scientific_workflow::configuration::{ResolvedConfiguration, StudyConfiguration};
 use scientific_workflow::execution::ExecutionScope;
 use scientific_workflow::storage::{SamplingInterval, StateStreamConfig, StateStreamStorage};
 use scientific_workflow::system_state::SystemState;
@@ -71,19 +71,22 @@ impl Workspace {
     }
 
     fn task_parameters(&self) -> ResolvedConfiguration {
-        let config = self.root.join("config");
-        fs::create_dir(&config).unwrap();
+        let study = self.root.join("study");
+        fs::create_dir(&study).unwrap();
+        fs::create_dir(study.join("config")).unwrap();
         fs::write(
-            config.join("fixed.json"),
-            r#"{"growth":[0.15,-0.08],"cutoff":0.0,"physical_time_increment":0.05}"#,
+            study.join("config/parameters.json"),
+            r#"{
+              "global": {},
+              "phase_group": {"glv": {"shared": {}, "phase": {"simulation": {
+                "growth":[0.15,-0.08],"cutoff":0.0,"physical_time_increment":0.05
+              }}}}
+            }"#,
         )
         .unwrap();
-        fs::write(
-            config.join("sweep.json"),
-            r#"{"mode":"cartesian","axes":{}}"#,
-        )
-        .unwrap();
-        ConfigurationSpace::load(config)
+        StudyConfiguration::load(study)
+            .unwrap()
+            .phase("glv", "simulation")
             .unwrap()
             .combination(0)
             .unwrap()

@@ -21,8 +21,8 @@ Add the crate:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = "0.13.0"
-scientific-workflow = "0.7.2"
+general-lotka-volterra-rs = "0.14.0"
+scientific-workflow = "0.8.0"
 ```
 
 Copy the configuration, inputs, and `main.rs` from the example closest to your
@@ -31,11 +31,21 @@ tasks in a phase:
 
 ```rust,no_run
 use general_lotka_volterra_rs::prelude::*;
+use scientific_workflow::prelude::basics::{ProjectPaths, ReplicateExecutor, StudySettings};
 use scientific_workflow::prelude::study::{Phase, Study};
 
 # fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+let directory = "examples/mean_field_replicator";
+let settings = StudySettings::load(directory)?;
+let output = ProjectPaths::load(directory)?.resolve_path("recordings")?;
+let Some(replicate) = ReplicateExecutor::new(settings.replicate_settings(), output)
+    .dispatch_current_executable()? else { return Ok(()) };
 let template = GlvTemplate::MeanFieldReplicator;
-let workload = GlvWorkload::load("examples/mean_field_replicator", template)?;
+let workload = GlvWorkload::load(
+    directory,
+    template,
+    replicate.execution_scope().clone(),
+)?;
 let simulation = workload
     .register(Phase::builder(1, "mean-field replicator"))
     .build()?;
@@ -50,7 +60,7 @@ println!("results: {}", workload.execution().directory().display());
 
 The GLV prelude exports the built-in template and GLV-aware study loader.
 Scientific Workflow types are imported from their owning crate, making ownership explicit.
-Paths, model parameters, sweeps, and recording settings remain in study files
+Replicate policy, paths, model parameters, sweeps, and recording settings remain in study files
 rather than in Rust code.
 
 Custom template authors may import GLV extension contracts from
@@ -105,16 +115,20 @@ A runnable study has this layout:
 
 ```text
 my-study/
+├── study.json
 ├── config/
-│   ├── fixed.json
-│   ├── sweep.json
+│   ├── parameters.json
 │   └── paths.json
 └── inputs/
     └── interaction.json
 ```
 
-- `fixed.json` contains common model, observation, and recording settings.
-- `sweep.json` defines task-varying parameter values.
+- `study.json` defines replicate count, execution mode, failure policy, and the
+  base seed used for deterministic per-replicate derivation.
+- `parameters.json` places GLV settings under
+  `phase_group.glv.shared` and `phase_group.glv.phase.simulation`. Ordinary JSON
+  arrays remain literal arrays; wrap only a swept value as
+  `{ "$sweep": [...] }`, or put complete alternatives in `"$cases"`.
 - `paths.json` names interaction inputs and the recording output root. The
   `interaction.path_key` value in each resolved configuration selects which named
   interaction path it uses, so a sweep may pair different model sizes with
@@ -200,8 +214,9 @@ their evidence policy consistently.
 
 ## Outputs and terminal states
 
-Every invocation creates a collision-resistant execution directory beneath the
-configured recording root. Recording streams are explicit and model-specific:
+Workflow creates one execution scope per replicate beneath the configured
+recording root (for example, `output/replicate_0`). GLV writes all task recordings
+inside the scope supplied by the application. Recording streams are explicit and model-specific:
 
 | Stream | Intended use |
 | --- | --- |

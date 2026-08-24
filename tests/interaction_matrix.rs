@@ -124,13 +124,13 @@ fn workflow_decodes_inline_values_and_resolves_pip_matrix_paths() {
     fs::create_dir(&configuration).unwrap();
     fs::create_dir(&data).unwrap();
     fs::write(
-        configuration.join("fixed.json"),
-        br#"{"interaction_matrix":[[1.0,0.0],[0.0,1.0]]}"#,
-    )
-    .unwrap();
-    fs::write(
-        configuration.join("sweep.json"),
-        br#"{"mode":"cartesian","axes":{}}"#,
+        configuration.join("parameters.json"),
+        br#"{
+          "global": {},
+          "phase_group": {"glv": {"shared": {}, "phase": {"simulation": {
+            "interaction_matrix":[[1.0,0.0],[0.0,1.0]]
+          }}}}
+        }"#,
     )
     .unwrap();
     fs::write(

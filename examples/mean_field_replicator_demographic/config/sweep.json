@@ -1,8 +1,0 @@
-{
-  "mode": "cartesian",
-  "axes": {
-    "rng": {
-      "seed": {"values": [7, 11]}
-    }
-  }
-}

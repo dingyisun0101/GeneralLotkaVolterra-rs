@@ -207,8 +207,9 @@ space as JSON `null`.
 
 The schema is model-owned: GLV supplies it through
 `GlvInputs::load`. User studies contain only
-`fixed.json`, `sweep.json`, and `paths.json`; they cannot drift by copying or
-overriding `state.json`.
+`parameters.json` and `paths.json`; they cannot drift by copying or overriding
+`state.json`. GLV reads its `glv` phase group and `simulation` phase, while
+Workflow owns the global/shared/phase merge and sweep expansion.
 
 ### Authoritative state and numerical scratch
 
@@ -437,9 +438,10 @@ needed, it supplies a `GeneratorProvenance` value containing explicit identity,
 version, JSON parameters, and an optional resolved PiP `RngConfig`.
 
 Scientific Workflow remains the configuration parser. `GlvInputs` and
-`GlvConfiguration` decode `fixed.json`, `sweep.json`, and `paths.json` into typed GLV
-source configuration. A kernel source consumes that resolved configuration; it
-does not independently parse the study files.
+`GlvConfiguration` decode the resolved GLV simulation combinations from
+`parameters.json` plus `paths.json` into typed GLV source configuration. A
+kernel source consumes that resolved configuration; it does not independently
+parse the study files.
 
 Direct programmatic callers supply an already-owned PiP matrix. Tests use this
 path without filesystem setup; GLV has no second numerical storage system.

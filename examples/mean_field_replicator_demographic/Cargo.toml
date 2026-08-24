@@ -7,11 +7,9 @@ publish = false
 
 [dependencies]
 general-lotka-volterra-rs = { path = "../.." }
-scientific-workflow = { path = "../../../workflow/rust" }
+scientific-workflow = "0.8.0"
 
 [workspace]
 
 [patch.crates-io]
 ecological-model-core = { path = "../../../eco_core" }
-physics_in_parallel = { path = "../../../pip" }
-scientific-workflow = { path = "../../../workflow/rust" }

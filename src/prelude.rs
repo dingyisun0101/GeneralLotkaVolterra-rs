@@ -1,15 +1,22 @@
 //! Minimal imports for registering built-in GLV tasks with a Study.
 //!
-//! GLV owns workload loading, model construction, recording, and validation.
-//! Applications own phase composition, scheduling, and study execution.
+//! GLV owns model-specific workload loading, construction, recording, and
+//! validation. Applications own the Workflow execution scope, phase
+//! composition, scheduling, and study execution.
 //!
 //! ```no_run
 //! use general_lotka_volterra_rs::prelude::*;
 //!
+//! use scientific_workflow::prelude::basics::ExecutionScope;
 //! use scientific_workflow::prelude::study::{Phase, Study};
 //!
 //! let template = GlvTemplate::MeanFieldReplicator;
-//! let workload = GlvWorkload::load("examples/mean_field_replicator", template)?;
+//! let execution = ExecutionScope::open_or_create("output/replicate_0")?;
+//! let workload = GlvWorkload::load(
+//!     "examples/mean_field_replicator",
+//!     template,
+//!     execution,
+//! )?;
 //! let simulation = workload
 //!     .register(Phase::builder(1, "GLV simulation"))
 //!     .build()?;

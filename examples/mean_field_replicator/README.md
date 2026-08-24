@@ -27,11 +27,16 @@ Install Rust 1.97 or newer, copy this entire directory, and run:
 cargo run --release
 ```
 
-The binary loads the GLV inputs, creates its execution scope, and registers the
-built-in model as a Workflow progress workload:
+The binary asks Workflow to dispatch the configured replicates, passes each
+replicate's execution scope to GLV, and registers the built-in model as a
+Workflow progress workload:
 
 ```rust
-let workload = GlvWorkload::load(study_directory, template)?;
+let workload = GlvWorkload::load(
+    study_directory,
+    template,
+    replicate.execution_scope().clone(),
+)?;
 let simulation = workload
     .register(Phase::builder(1, "mean-field replicator"))
     .build()?;
@@ -49,10 +54,10 @@ cargo run --release -- /path/to/inputs/config
 ```
 
 The default configuration is this directory's `config/` folder.
-`config/fixed.json` contains common
-parameters, `config/sweep.json` varies `cutoff`, and `config/paths.json` names
-the interaction matrix and output root. The matrix file uses rows as affected
-species and columns as contributing species.
+`config/parameters.json` contains shared GLV parameters and varies `cutoff`
+with `{"$sweep": [...]}`; `config/paths.json` names the interaction matrix and
+output root. `study.json` declares one sequential replicate. The matrix file
+uses rows as affected species and columns as contributing species.
 
 The main values to edit are:
 
@@ -69,8 +74,7 @@ internal evidence windows and publishes the resulting termination reason.
 
 ## Outputs
 
-Every invocation creates a new collision-resistant execution directory beneath
-`output/`. Each task records:
+The declared replicate writes beneath `output/replicate_0`. Each task records:
 
 - `signal`: aggregate abundance and total;
 - `checkpoint`: restart-quality complete states.

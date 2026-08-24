@@ -30,7 +30,7 @@ use general_lotka_volterra_rs::{
     TimeStep, TotalAbundance,
 };
 use physics_in_parallel::prelude::basic::{DenseMatrix, RngConfig, Tensor};
-use scientific_workflow::configuration::{ConfigurationSpace, ResolvedConfiguration};
+use scientific_workflow::configuration::{ResolvedConfiguration, StudyConfiguration};
 use scientific_workflow::execution::ExecutionScope;
 use scientific_workflow::rng_record::{RNG_RECORDS_METADATA_KEY, RngRecord};
 use scientific_workflow::storage::{
@@ -88,15 +88,23 @@ impl Workspace {
     }
 
     fn task_parameters(&self, fixed: &str, label: &str) -> ResolvedConfiguration {
-        let config = self.root.join(label);
-        fs::create_dir(&config).unwrap();
-        fs::write(config.join("fixed.json"), fixed).unwrap();
+        let study = self.root.join(label);
+        fs::create_dir(&study).unwrap();
+        fs::create_dir(study.join("config")).unwrap();
+        let parameters = serde_json::json!({
+            "global": {},
+            "phase_group": {"glv": {"shared": {}, "phase": {
+                "simulation": serde_json::from_str::<Value>(fixed).unwrap()
+            }}}
+        });
         fs::write(
-            config.join("sweep.json"),
-            r#"{"mode":"cartesian","axes":{}}"#,
+            study.join("config/parameters.json"),
+            serde_json::to_vec_pretty(&parameters).unwrap(),
         )
         .unwrap();
-        ConfigurationSpace::load(config)
+        StudyConfiguration::load(study)
+            .unwrap()
+            .phase("glv", "simulation")
             .unwrap()
             .combination(0)
             .unwrap()

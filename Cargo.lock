@@ -266,9 +266,7 @@ dependencies = [
 
 [[package]]
 name = "ecological-model-core"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "992be0c62e16e2957c2c948eab96704f69f5b97e4486e0ceee82383d5ee03546"
+version = "0.9.0"
 dependencies = [
  "physics_in_parallel",
  "scientific-workflow",
@@ -328,7 +326,7 @@ dependencies = [
 
 [[package]]
 name = "general-lotka-volterra-rs"
-version = "0.13.3"
+version = "0.14.0"
 dependencies = [
  "ecological-model-core",
  "physics_in_parallel",
@@ -883,9 +881,9 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "scientific-workflow"
-version = "0.7.4"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abc36b9a79376eb85ab6084010f46714d39ee8a7f5ca68cfd777de5aeadd80e5"
+checksum = "439fabafe2732bfe076606f8e50fbbf62f133b231e922d2eb8efaf98191af1c2"
 dependencies = [
  "crossterm",
  "erased-serde",

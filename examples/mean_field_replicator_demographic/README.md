@@ -32,17 +32,18 @@ Copy the entire directory and run:
 cargo run --release
 ```
 
-The binary loads a `GlvWorkload` and registers its tasks in an application-owned
-Study. The checked-in
-`config/sweep.json` runs the same scientific parameters with multiple complete
-PiP `RngConfig` values. Edit `sigma` in `config/fixed.json` to control noise
-strength, or pass another compatible configuration folder:
+The binary dispatches the replicate declared in `study.json`, passes its
+Workflow execution scope to `GlvWorkload`, and registers the tasks in an
+application-owned Study. In `config/parameters.json`, `rng.seed` uses
+`{"$sweep": [...]}` to run the same scientific parameters with multiple PiP
+seeds. Edit the shared `sigma` value there to control noise strength, or pass
+another compatible configuration folder:
 
 ```sh
 cargo run --release -- /path/to/inputs/config
 ```
 
-Other main values in `fixed.json` are optional `initial_abundance`, scalar or
+Other main values in `config/parameters.json` are optional `initial_abundance`, scalar or
 per-species `growth`, `cutoff`, `physical_time_increment`,
 `maximum_iterations`, and the recording streams. Each sweep RNG configuration creates a reproducible task with its own
 recorded seed provenance.

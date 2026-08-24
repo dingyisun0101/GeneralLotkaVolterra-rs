@@ -3,7 +3,8 @@
 use std::path::{Path, PathBuf};
 
 use scientific_workflow::configuration::{
-    ConfigurationError, ConfigurationSpace, ParameterKeyTuple, ProjectPaths, ResolvedConfiguration,
+    ConfigurationError, ParameterKeyTuple, PhaseConfiguration, ProjectPaths, ResolvedConfiguration,
+    StudyConfiguration,
 };
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -11,7 +12,7 @@ use thiserror::Error;
 
 #[derive(Clone)]
 pub struct GlvInputs {
-    configurations: ConfigurationSpace,
+    configurations: PhaseConfiguration,
     paths: ProjectPaths,
 }
 
@@ -24,8 +25,7 @@ pub struct GlvConfiguration {
 impl GlvInputs {
     pub fn load(study_root: impl Into<PathBuf>) -> Result<Self, GlvInputsError> {
         let study_root = study_root.into();
-        let configuration_directory = study_root.join("config");
-        let configurations = ConfigurationSpace::load(&configuration_directory)?;
+        let configurations = StudyConfiguration::load(&study_root)?.phase("glv", "simulation")?;
         let paths = ProjectPaths::load(study_root)?;
         Ok(Self {
             configurations,
@@ -38,10 +38,10 @@ impl GlvInputs {
     }
 
     pub fn configuration_directory(&self) -> &Path {
-        self.configurations.directory()
+        self.configurations.configuration_directory()
     }
 
-    pub fn configurations(&self) -> &ConfigurationSpace {
+    pub fn configurations(&self) -> &PhaseConfiguration {
         &self.configurations
     }
 
