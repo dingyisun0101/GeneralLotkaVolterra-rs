@@ -16,6 +16,7 @@ include = [
     "src/*.rs",
     "src/**/*.rs",
     "!src/target/**",
+    "tests/**/*.rs",
     "schemas/*.json",
     "README.md",
     "tools/*.py",
