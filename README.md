@@ -119,11 +119,6 @@ my-study/
   `interaction.path_key` value in each resolved configuration selects which named
   interaction path it uses, so a sweep may pair different model sizes with
   different matrices inside one study.
-- Path keys, path-resolved `initial_abundance`, and `recording_name` may contain
-  scalar configuration placeholders such as `{sys_idx}` or `{energy}`. For
-  example, `interaction_sys_{sys_idx}` selects `interaction_sys_0` for the
-  configuration whose `sys_idx` is `0`. This keeps correlated artifact routing
-  compatible with ordinary Cartesian sweep axes.
 - `interaction.json` is the versioned PiP interaction matrix.
 
 The examples are the configuration reference for their respective models.
