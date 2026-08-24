@@ -19,7 +19,7 @@ use general_lotka_volterra_rs::{
     TOTAL_FIELD, TerminalState, TimeStep, TotalAbundance,
 };
 use ndarray::{Array1, arr2};
-use scientific_workflow::configuration::{ParameterSpace, TaskParameters};
+use scientific_workflow::configuration::{ConfigurationSpace, ResolvedConfiguration};
 use scientific_workflow::execution::ExecutionScope;
 use scientific_workflow::storage::{SamplingInterval, StateStreamConfig, StateStreamStorage};
 use scientific_workflow::system_state::SystemState;
@@ -70,7 +70,7 @@ impl Workspace {
         Self { root }
     }
 
-    fn task_parameters(&self) -> TaskParameters {
+    fn task_parameters(&self) -> ResolvedConfiguration {
         let config = self.root.join("config");
         fs::create_dir(&config).unwrap();
         fs::write(
@@ -83,7 +83,10 @@ impl Workspace {
             r#"{"mode":"cartesian","axes":{}}"#,
         )
         .unwrap();
-        ParameterSpace::load(config).unwrap().task(0).unwrap()
+        ConfigurationSpace::load(config)
+            .unwrap()
+            .combination(0)
+            .unwrap()
     }
 }
 

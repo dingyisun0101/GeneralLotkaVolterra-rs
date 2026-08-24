@@ -27,15 +27,15 @@ Install Rust 1.97 or newer, copy this entire directory, and run:
 cargo run --release
 ```
 
-The binary loads the GLV project, creates its execution scope, and registers the
+The binary loads the GLV inputs, creates its execution scope, and registers the
 built-in model as a Workflow progress workload:
 
 ```rust
-let workload = GlvWorkload::load(project_directory, template)?;
+let workload = GlvWorkload::load(study_directory, template)?;
 let simulation = workload
     .register(Phase::builder(1, "mean-field replicator"))
     .build()?;
-WorkflowRuntime::builder(workload.execution_record_path())
+Study::builder(workload.record_path())
     .phase(simulation)
     .build()?
     .run_phases([1])?;
@@ -45,7 +45,7 @@ An optional first argument selects another compatible Workflow configuration
 folder:
 
 ```sh
-cargo run --release -- /path/to/project/config
+cargo run --release -- /path/to/inputs/config
 ```
 
 The default configuration is this directory's `config/` folder.

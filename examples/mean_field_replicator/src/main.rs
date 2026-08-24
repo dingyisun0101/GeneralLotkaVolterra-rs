@@ -1,10 +1,10 @@
-//! Deterministic mean-field replicator project.
+//! Deterministic mean-field replicator inputs.
 
 use std::error::Error;
 use std::path::PathBuf;
 
 use general_lotka_volterra_rs::prelude::*;
-use scientific_workflow::prelude::runtime::{Phase, WorkflowRuntime};
+use scientific_workflow::prelude::study::{Phase, Study};
 
 fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let workload_directory = std::env::args_os()
@@ -15,9 +15,8 @@ fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let workload = GlvWorkload::load(workload_directory, template)?;
     let simulation = workload
         .register(Phase::builder(1, "mean-field replicator"))
-        .display_tasks_by(template.as_str(), ["/cutoff"])
         .build()?;
-    WorkflowRuntime::builder(workload.execution_record_path())
+    Study::builder(workload.record_path())
         .phase(simulation)
         .build()?
         .run_phases([1])?;

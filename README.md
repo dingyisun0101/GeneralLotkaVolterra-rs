@@ -4,10 +4,10 @@
 > breaking changes; older releases should be treated as incompatible.
 
 `general-lotka-volterra-rs` provides ecological models and their scientific I/O
-as workloads for an application-owned Scientific Workflow runtime. GLV handles
+as workloads for an application-owned Scientific Study. GLV handles
 model construction, evolution, recording, terminal-state production, and final
 integrity checks; the application owns task expansion, phases, scheduling, and
-runtime execution.
+study execution.
 
 The included models are:
 
@@ -26,12 +26,12 @@ scientific-workflow = "0.7.0"
 ```
 
 Copy the configuration, inputs, and `main.rs` from the example closest to your
-study. Applications select a built-in GLV template and register it as a
-Workflow phase workload:
+study. Applications select a built-in GLV template and register its generated
+tasks in a phase:
 
 ```rust,no_run
 use general_lotka_volterra_rs::prelude::*;
-use scientific_workflow::prelude::runtime::{Phase, WorkflowRuntime};
+use scientific_workflow::prelude::study::{Phase, Study};
 
 # fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 let template = GlvTemplate::MeanFieldReplicator;
@@ -39,7 +39,7 @@ let workload = GlvWorkload::load("examples/mean_field_replicator", template)?;
 let simulation = workload
     .register(Phase::builder(1, "mean-field replicator"))
     .build()?;
-WorkflowRuntime::builder(workload.execution_record_path())
+Study::builder(workload.record_path())
     .phase(simulation)
     .build()?
     .run_phases([1])?;
@@ -48,14 +48,14 @@ println!("results: {}", workload.execution().directory().display());
 # }
 ```
 
-The GLV prelude exports the built-in template and GLV-aware project loader.
-Workflow types are imported from Workflow itself, making ownership explicit.
-Paths, model parameters, sweeps, and recording settings remain in project files
+The GLV prelude exports the built-in template and GLV-aware study loader.
+Scientific Workflow types are imported from their owning crate, making ownership explicit.
+Paths, model parameters, sweeps, and recording settings remain in study files
 rather than in Rust code.
 
 Custom template authors may import GLV extension contracts from
 `advanced::prelude`. Generic arrays, matrices, randomness, ecological data, and
-Workflow runtime types remain available from their owning crates rather than
+Study types remain available from their owning crates rather than
 being duplicated through GLV.
 
 The minimum supported toolchain is Rust 1.97 with edition 2024.
@@ -78,7 +78,7 @@ Start from one of the complete runnable examples:
 - [spatial replicator reaction–diffusion](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version/examples/spatial_replicator)
 - [spatial General Lotka–Volterra populations](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version/examples/spatial_general_lotka_volterra)
 
-Each example is an independent crate and complete project. Run one from its
+Each example is an independent crate and complete study. Run one from its
 directory:
 
 ```sh
@@ -99,9 +99,9 @@ frequency cells, while population GLV requires `initial_population_per_site`.
 An initialization may be generated from shared configuration or loaded from a
 verified content-addressed artifact produced by an earlier execution.
 
-## Project configuration
+## Study configuration
 
-A runnable project has this layout:
+A runnable study has this layout:
 
 ```text
 my-study/
@@ -116,9 +116,9 @@ my-study/
 - `fixed.json` contains common model, observation, and recording settings.
 - `sweep.json` defines task-varying parameter values.
 - `paths.json` names interaction inputs and the recording output root. The
-  `interaction.path_key` value in each resolved task selects which named
+  `interaction.path_key` value in each resolved configuration selects which named
   interaction path it uses, so a sweep may pair different model sizes with
-  different matrices inside one project.
+  different matrices inside one study.
 - `interaction.json` is the versioned PiP interaction matrix.
 
 The examples are the configuration reference for their respective models.
@@ -137,12 +137,12 @@ when `carrying_capacity` is absent.
 
 Mean-field `initial_abundance` accepts either an inline vector or
 `{ "path_key": "<key>" }`. The latter resolves a JSON vector through the
-project's `paths.json`, allowing an upstream scientific-input phase to provide
+study's `paths.json`, allowing an upstream scientific-input phase to provide
 the exact same aggregate frequencies used to construct a categorical lattice.
 GLV validates and normalizes the resolved vector through its ordinary invariant
 boundary; it does not infer or regenerate the lattice initialization.
 
-Relative paths are resolved from the project root. There is no separate output
+Relative paths are resolved from the study root. There is no separate output
 argument: `config/paths.json` is the sole path authority.
 
 ### Trajectory observation
@@ -163,7 +163,7 @@ explicitly select `terminal_only` or `disabled`. Observation cadence defaults
 to the canonical `signal` writer cadence.
 
 GLV owns the detector's bounded windows, tolerances, and confirmation schedule.
-These are intentionally not ordinary project settings. The synchronous checker
+These are intentionally not ordinary study settings. The synchronous checker
 runs inside the solver loop after complete steps, at the signal writer cadence.
 Equilibrium acceptance requires stable
 support, confined Jensen–Shannon composition, stable mass, and an authoritative
@@ -194,7 +194,7 @@ authoritative distinction; downstream code must not infer fixed-point status
 from the vector alone. Disabled observation allocates no observer and emits no
 terminal-state metadata or artifact.
 
-The internal details are recorded for auditability but are not project
+The internal details are recorded for auditability but are not study
 parameters. End users choose which outcomes to detect; GLV defines and applies
 their evidence policy consistently.
 
@@ -265,7 +265,7 @@ The state also carries an integer iteration and continuous physical time.
 
 Spatial population `total` preserves the historical rounded aggregate
 convention. Spatial and aggregate arrays retain full floating-point values.
-Individual projects do not copy this file and cannot override the model's
+Individual studies do not copy this file and cannot override the model's
 state contract. Workflow embeds the resolved schema in every recording.
 
 ## Interaction matrices
@@ -316,7 +316,7 @@ Its payload fixture is serialized by a Rust conformance test.
 ## Advanced composition
 
 Most users should stay with `prelude::{GlvWorkload, GlvTemplate}` and copy
-a complete runtime integration example. Researchers who genuinely need a new
+a complete study integration example. Researchers who genuinely need a new
 model composition can import `advanced::prelude` and assemble workloads using
 the same concrete models, kernels, noise plugins, invariants, interaction
 facilities, recording adapter, and Workflow types used by the built-in

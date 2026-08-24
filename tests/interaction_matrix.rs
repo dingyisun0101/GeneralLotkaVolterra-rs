@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use general_lotka_volterra_rs::GlvInputs;
 use general_lotka_volterra_rs::interaction::{
     ArtifactDisposition, GeneratorProvenance, INTERACTION_GENERATOR_RNG_NAMESPACE,
     INTERACTION_MATRIX_FORMAT, INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactError,
@@ -12,7 +13,6 @@ use general_lotka_volterra_rs::interaction::{
 use physics_in_parallel::prelude::basic::{DenseMatrix, RngConfig, RngMethod};
 use scientific_workflow::artifact::{ArtifactError, ArtifactLoadError};
 use scientific_workflow::execution::ExecutionScope;
-use scientific_workflow::project::ScientificProject;
 use serde_json::{Map, json};
 use sha2::{Digest, Sha256};
 
@@ -149,8 +149,8 @@ fn workflow_decodes_inline_values_and_resolves_pip_matrix_paths() {
     )
     .unwrap();
 
-    let project = ScientificProject::load(directory.path()).unwrap();
-    let task = project.task_config(0).unwrap();
+    let inputs = GlvInputs::load(directory.path()).unwrap();
+    let task = inputs.combination(0).unwrap();
     let inline = InteractionMatrix::from_rows(
         task.decode_value::<Vec<Vec<f64>>>("/interaction_matrix")
             .unwrap(),

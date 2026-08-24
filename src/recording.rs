@@ -7,9 +7,9 @@
 use std::path::Path;
 
 use scientific_workflow::prelude::basics::{
-    CompletedRecording, RNG_RECORDS_METADATA_KEY, RngRecord, RngRecordError, StateError,
-    StateSchemaSource, StateStreamConfig, StorageError, SystemState, SystemStateWriter,
-    SystemStateWriterBuilder, TaskParameters, TimeAxisMetadata,
+    CompletedRecording, RNG_RECORDS_METADATA_KEY, ResolvedConfiguration, RngRecord, RngRecordError,
+    StateError, StateSchemaSource, StateStreamConfig, StorageError, SystemState, SystemStateWriter,
+    SystemStateWriterBuilder, TimeAxisMetadata,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -32,8 +32,8 @@ pub const MODEL_KIND_METADATA_KEY: &str = "model_kind";
 /// Creation-metadata key containing abundance interpretation.
 pub const ABUNDANCE_REPRESENTATION_METADATA_KEY: &str = "abundance_representation";
 
-/// Creation-metadata key containing the resolved Workflow task ordinal.
-pub const TASK_ORDINAL_METADATA_KEY: &str = "task_ordinal";
+/// Creation-metadata key containing the resolved configuration ordinal.
+pub const TASK_ORDINAL_METADATA_KEY: &str = "ordinal";
 
 /// Terminal-metadata key containing the typed successful termination reason.
 pub const TERMINATION_REASON_METADATA_KEY: &str = "termination_reason";
@@ -65,11 +65,11 @@ pub struct GlvRecordingMetadata {
 }
 
 impl GlvRecordingMetadata {
-    /// Combines exact resolved task parameters with GLV and matrix provenance.
+    /// Combines one resolved configuration with GLV and matrix provenance.
     pub fn new(
         model_kind: SimulationKind,
         abundance_representation: AbundanceRepresentation,
-        task: &TaskParameters,
+        configuration: &ResolvedConfiguration,
         interaction: &InteractionArtifactDescriptor,
         rng_record: Option<&RngRecord>,
     ) -> Result<Self, RecordingMetadataError> {
@@ -82,19 +82,19 @@ impl GlvRecordingMetadata {
             });
         }
         for key in RESERVED_CREATION_KEYS {
-            if task.contains(&format!("/{key}")) {
-                return Err(RecordingMetadataError::ReservedTaskParameter {
+            if configuration.contains(&format!("/{key}")) {
+                return Err(RecordingMetadataError::ReservedConfigurationParameter {
                     key: key.to_owned(),
                 });
             }
         }
-        let mut values = task
+        let mut values = configuration
             .iter()
             .map(|(key, value)| (key.to_owned(), value.clone()))
             .collect::<Map<_, _>>();
         values.insert(
             TASK_ORDINAL_METADATA_KEY.to_owned(),
-            Value::from(task.task_ordinal()),
+            Value::from(configuration.ordinal()),
         );
         values.insert(
             MODEL_KIND_METADATA_KEY.to_owned(),
@@ -105,7 +105,7 @@ impl GlvRecordingMetadata {
             Value::from(abundance_representation.as_str()),
         );
         if interaction.insert_into_metadata(&mut values).is_some() {
-            return Err(RecordingMetadataError::ReservedTaskParameter {
+            return Err(RecordingMetadataError::ReservedConfigurationParameter {
                 key: INTERACTION_MATRIX_METADATA_KEY.to_owned(),
             });
         }
@@ -147,7 +147,7 @@ impl GlvRecordingMetadata {
         rng_record: Option<&RngRecord>,
     ) -> Result<Self, RecordingMetadataError> {
         if descriptor.insert_into_metadata(&mut self.values).is_some() {
-            return Err(RecordingMetadataError::ReservedTaskParameter {
+            return Err(RecordingMetadataError::ReservedConfigurationParameter {
                 key: INITIAL_STATE_METADATA_KEY.to_owned(),
             });
         }
@@ -220,9 +220,9 @@ pub enum RecordingMetadataError {
     /// A Workflow RNG record was invalid or reused a namespace.
     #[error(transparent)]
     RngRecord(#[from] RngRecordError),
-    /// A task parameter would overwrite GLV-owned provenance.
-    #[error("resolved task parameter `{key}` collides with reserved recording metadata")]
-    ReservedTaskParameter {
+    /// A configuration parameter would overwrite GLV-owned provenance.
+    #[error("resolved configuration parameter `{key}` collides with reserved recording metadata")]
+    ReservedConfigurationParameter {
         /// Conflicting exact parameter key.
         key: String,
     },

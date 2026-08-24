@@ -43,10 +43,10 @@ policy and records which outcome, if any, ended the run.
 The binary loads a `GlvWorkload` and registers its tasks in a phase it constructs
 itself. GLV supplies model construction and scientific I/O while the application
 owns Workflow orchestration. An optional workload-directory path
-allows the same binary to run another project:
+allows the same binary to run another inputs:
 
 ```sh
-cargo run --release -- /path/to/project/config
+cargo run --release -- /path/to/inputs/config
 ```
 
 Outputs are written to a fresh execution scope. The `space` stream retains the

@@ -46,7 +46,7 @@ convergence and a nontrivial periodic orbit. Their evidence policy is
 internal to GLV.
 
 The binary loads a `GlvWorkload` and registers its tasks in an application-owned
-Workflow phase. It contains no model assembly or recording code. Pass another
+phase. It contains no model assembly or recording code. Pass another
 compatible workload directory as the optional first
 argument.
 Every invocation creates new output and records aggregate, spatial, and

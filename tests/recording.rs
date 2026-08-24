@@ -31,7 +31,7 @@ use general_lotka_volterra_rs::{
 };
 use ndarray::{Array1, Array2, ArrayD, IxDyn};
 use physics_in_parallel::prelude::basic::RngConfig;
-use scientific_workflow::configuration::{ParameterSpace, TaskParameters};
+use scientific_workflow::configuration::{ConfigurationSpace, ResolvedConfiguration};
 use scientific_workflow::execution::ExecutionScope;
 use scientific_workflow::rng_record::{RNG_RECORDS_METADATA_KEY, RngRecord};
 use scientific_workflow::storage::{
@@ -88,7 +88,7 @@ impl Workspace {
         Self { root }
     }
 
-    fn task_parameters(&self, fixed: &str, label: &str) -> TaskParameters {
+    fn task_parameters(&self, fixed: &str, label: &str) -> ResolvedConfiguration {
         let config = self.root.join(label);
         fs::create_dir(&config).unwrap();
         fs::write(config.join("fixed.json"), fixed).unwrap();
@@ -97,7 +97,10 @@ impl Workspace {
             r#"{"mode":"cartesian","axes":{}}"#,
         )
         .unwrap();
-        ParameterSpace::load(config).unwrap().task(0).unwrap()
+        ConfigurationSpace::load(config)
+            .unwrap()
+            .combination(0)
+            .unwrap()
     }
 }
 
@@ -299,7 +302,7 @@ fn workflow_records_all_glv_streams_metadata_terminal_state_and_integrity() {
         simulation.rng_record(),
     )
     .unwrap();
-    let recording_directory = scope.task_recording_directory(task.task_ordinal());
+    let recording_directory = scope.task_recording_directory(task.ordinal());
     let mut recording = GlvRecording::start(
         &recording_directory,
         recording_config(8_192),
@@ -579,7 +582,7 @@ fn recording_metadata_and_failure_lifecycle_fail_closed() {
             persisted.descriptor(),
             simulation.rng_record(),
         ),
-        Err(RecordingMetadataError::ReservedTaskParameter { .. })
+        Err(RecordingMetadataError::ReservedConfigurationParameter { .. })
     ));
 
     let creation = GlvRecordingMetadata::new(

@@ -2,9 +2,9 @@ use std::path::PathBuf;
 
 use general_lotka_volterra_rs::interaction::InteractionMatrix;
 use general_lotka_volterra_rs::kernel::BoundaryCondition;
-use general_lotka_volterra_rs::project::load_glv_project;
 use general_lotka_volterra_rs::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD};
 use general_lotka_volterra_rs::{INTERACTION_INPUT_KEY, InteractionInput};
+use general_lotka_volterra_rs::{load_glv_inputs, load_state_schema};
 use physics_in_parallel::prelude::basic::RngConfig;
 use scientific_workflow::prelude::basics::{SamplingInterval, StateStreamConfig};
 
@@ -15,16 +15,16 @@ fn example_root(name: &str) -> PathBuf {
 }
 
 #[test]
-fn mean_field_example_is_a_complete_lazy_workflow_project() {
+fn mean_field_example_is_a_complete_lazy_workflow_study() {
     let root = example_root("mean_field_replicator");
-    let project = load_glv_project(&root).unwrap();
+    let inputs = load_glv_inputs(&root).unwrap();
     assert!(root.join("Cargo.toml").is_file());
     assert!(root.join("README.md").is_file());
     assert!(root.join("src/main.rs").is_file());
-    assert_eq!(project.task_count(), 2);
+    assert_eq!(inputs.combination_count(), 2);
     assert_eq!(
-        project
-            .state_schema()
+        load_state_schema()
+            .unwrap()
             .field_schemas()
             .iter()
             .map(|field| field.name())
@@ -32,10 +32,10 @@ fn mean_field_example_is_a_complete_lazy_workflow_project() {
         [ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD]
     );
 
-    let mut tasks = project.task_configs();
+    let mut tasks = inputs.combinations();
     for (ordinal, expected_cutoff) in [0.0, 1e-8].into_iter().enumerate() {
         let task = tasks.next().unwrap();
-        assert_eq!(task.task_ordinal(), ordinal as u64);
+        assert_eq!(task.ordinal(), ordinal as u64);
         assert_eq!(
             task.decode_value::<Vec<f64>>("/initial_abundance").unwrap(),
             [0.5, 0.3, 0.2]
@@ -83,7 +83,7 @@ fn mean_field_example_is_a_complete_lazy_workflow_project() {
 }
 
 #[test]
-fn every_user_example_is_an_independent_glv_crate_and_project() {
+fn every_user_example_is_an_independent_glv_crate_and_study() {
     for name in [
         "mean_field_replicator",
         "mean_field_replicator_demographic",
@@ -98,13 +98,19 @@ fn every_user_example_is_an_independent_glv_crate_and_project() {
             !root.join("config/state.json").exists(),
             "{name} uses GLV's crate-owned schema"
         );
-        let project = load_glv_project(&root).unwrap();
-        assert!(project.task_count() > 0, "{name} has at least one task");
-        for task in project.task_configs() {
-            task.decode_value::<Vec<StateStreamConfig>>("/recording")
+        let inputs = load_glv_inputs(&root).unwrap();
+        assert!(
+            inputs.combination_count() > 0,
+            "{name} has at least one configuration"
+        );
+        for configuration in inputs.combinations() {
+            configuration
+                .decode_value::<Vec<StateStreamConfig>>("/recording")
                 .unwrap();
-            let input: InteractionInput = task.decode_value(INTERACTION_INPUT_KEY).unwrap();
-            assert!(task.resolve_path(&input.path_key).unwrap().is_file());
+            let input: InteractionInput = configuration
+                .decode_value(INTERACTION_INPUT_KEY)
+                .unwrap();
+            assert!(configuration.resolve_path(&input.path_key).unwrap().is_file());
         }
     }
 }
@@ -120,9 +126,9 @@ fn domain_configuration_decodes_without_application_mirror_types() {
         BoundaryCondition::Neumann
     );
 
-    let project = load_glv_project(example_root("mean_field_replicator_demographic")).unwrap();
-    let seeds = project
-        .task_configs()
+    let inputs = load_glv_inputs(example_root("mean_field_replicator_demographic")).unwrap();
+    let seeds = inputs
+        .combinations()
         .map(|task| task.decode_value::<RngConfig>("/rng").unwrap().seed())
         .collect::<Vec<_>>();
     assert_eq!(seeds, [Some(7), Some(11)]);

@@ -16,14 +16,15 @@ pub mod invariant;
 pub mod kernel;
 pub mod noise;
 pub mod prelude;
-pub mod project;
 pub mod reading;
 pub mod recording;
 pub mod simulation;
+pub mod study_inputs;
 mod template;
 pub mod terminal_state;
 pub mod workload;
 
+pub use study_inputs::{GlvConfiguration, GlvInputs, GlvInputsError, load_glv_inputs};
 pub use template::{GlvTemplate, INTERACTION_INPUT_KEY, InteractionInput, TemplateTaskError};
 pub use workload::{GlvWorkload, GlvWorkloadError};
 

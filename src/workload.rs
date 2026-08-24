@@ -1,19 +1,17 @@
-//! Canonical GLV workload-directory loading and runtime registration.
+//! Canonical GLV input loading and task registration.
 
 use std::path::PathBuf;
 
-use scientific_workflow::prelude::basics::{
-    ExecutionScope, ExecutionScopeError, ScientificProject,
-};
-use scientific_workflow::prelude::runtime::PhaseBuilder;
+use scientific_workflow::prelude::basics::{ExecutionScope, ExecutionScopeError};
+use scientific_workflow::prelude::study::{PhaseBuilder, Task};
 use thiserror::Error;
 
 use crate::GlvTemplate;
-use crate::project::{GlvProjectError, load_glv_project};
+use crate::study_inputs::{GlvInputs, GlvInputsError, load_glv_inputs};
 
 /// A fully loaded GLV workload ready to register its expanded tasks.
 pub struct GlvWorkload {
-    project: ScientificProject,
+    inputs: GlvInputs,
     execution: ExecutionScope,
     template: GlvTemplate,
 }
@@ -24,10 +22,10 @@ impl GlvWorkload {
         directory: impl Into<PathBuf>,
         template: GlvTemplate,
     ) -> Result<Self, GlvWorkloadError> {
-        let project = load_glv_project(directory)?;
-        let execution = ExecutionScope::create_generated(project.resolve_path("recordings")?)?;
+        let inputs = load_glv_inputs(directory)?;
+        let execution = ExecutionScope::create_generated(inputs.resolve_path("recordings")?)?;
         Ok(Self {
-            project,
+            inputs,
             execution,
             template,
         })
@@ -39,17 +37,17 @@ impl GlvWorkload {
         directory: impl Into<PathBuf>,
         template: GlvTemplate,
     ) -> Result<Self, GlvWorkloadError> {
-        let project = load_glv_project(directory)?;
-        let execution = ExecutionScope::open_or_create(project.resolve_path("recordings")?)?;
+        let inputs = load_glv_inputs(directory)?;
+        let execution = ExecutionScope::open_or_create(inputs.resolve_path("recordings")?)?;
         Ok(Self {
-            project,
+            inputs,
             execution,
             template,
         })
     }
 
-    pub const fn project(&self) -> &ScientificProject {
-        &self.project
+    pub const fn inputs(&self) -> &GlvInputs {
+        &self.inputs
     }
     pub const fn execution(&self) -> &ExecutionScope {
         &self.execution
@@ -58,27 +56,37 @@ impl GlvWorkload {
         self.template
     }
 
-    /// Returns the conventional execution-record path for this workload.
-    pub fn execution_record_path(&self) -> PathBuf {
-        self.execution.directory().join("execution-record.json")
+    /// Returns the conventional study-record path for this workload.
+    pub fn record_path(&self) -> PathBuf {
+        self.execution.directory().join("study-record.json")
     }
 
     /// Adds every expanded GLV configuration to an application-owned phase.
     pub fn register(&self, builder: PhaseBuilder) -> PhaseBuilder {
-        let kind = self.template.as_str();
-        self.register_as(builder, kind)
+        let category = self.template.as_str();
+        self.register_as(builder, category)
     }
 
     /// Adds every expanded configuration under an application-selected task namespace.
     ///
     /// This permits several independent GLV workload directories using the same
-    /// template to coexist in one Workflow phase without task-ID collisions.
-    pub fn register_as(&self, builder: PhaseBuilder, kind: impl Into<String>) -> PhaseBuilder {
+    /// template to coexist in one phase without task-ID collisions.
+    pub fn register_as(&self, builder: PhaseBuilder, category: impl Into<String>) -> PhaseBuilder {
         let template = self.template;
         let execution = self.execution.clone();
-        builder.progress_tasks_from_project(&self.project, kind, move |context| {
-            template.run_task(&execution, context)
-        })
+        let category = category.into();
+        let tasks = self.inputs.combinations().map(move |configuration| {
+            let ordinal = configuration.ordinal();
+            let execution = execution.clone();
+            Task::progress(
+                format!("{category}-{ordinal}"),
+                format!("{category} {ordinal}"),
+                move |context| Ok(template.run_task(&execution, &configuration, context)?),
+            )
+            .category(category.clone())
+            .metadata("configuration_ordinal", ordinal)
+        });
+        builder.tasks(tasks)
     }
 }
 
@@ -86,7 +94,7 @@ impl GlvWorkload {
 #[non_exhaustive]
 pub enum GlvWorkloadError {
     #[error(transparent)]
-    Project(#[from] GlvProjectError),
+    Inputs(#[from] GlvInputsError),
     #[error(transparent)]
     Configuration(#[from] scientific_workflow::configuration::ConfigurationError),
     #[error(transparent)]

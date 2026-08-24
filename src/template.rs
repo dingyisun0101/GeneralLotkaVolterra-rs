@@ -1,4 +1,4 @@
-//! Built-in GLV task templates for application-owned Workflow runtimes.
+//! Built-in GLV task templates for application-owned Studys.
 
 use std::error::Error;
 use std::fs;
@@ -8,10 +8,11 @@ use ndarray::Array1;
 use physics_in_parallel::prelude::basic::{RngConfig, SquareLatticeConfig};
 use scientific_workflow::prelude::basics::{
     ExecutionScope, RngRecord, SamplingInterval, SimulationTime, StateStreamConfig, SystemState,
-    TaskConfig,
 };
-use scientific_workflow::prelude::runtime::TaskContext;
+use scientific_workflow::prelude::study::TaskContext;
 use serde::{Deserialize, Serialize};
+
+use crate::study_inputs::GlvConfiguration;
 
 use crate::initialization::{
     ResolvedSpatialInitialState, categorical_to_species_field, resolve_spatial_initial_state,
@@ -56,7 +57,7 @@ enum InitialAbundanceInput {
 }
 
 impl InitialAbundanceInput {
-    fn resolve(self, task: &TaskConfig) -> Result<Vec<f64>, TemplateTaskError> {
+    fn resolve(self, task: &GlvConfiguration) -> Result<Vec<f64>, TemplateTaskError> {
         match self {
             Self::Inline(values) => Ok(values),
             Self::Path { path_key } => {
@@ -71,7 +72,7 @@ impl InitialAbundanceInput {
 }
 
 impl InteractionInput {
-    fn resolve(&self, task: &TaskConfig) -> Result<PathBuf, TemplateTaskError> {
+    fn resolve(&self, task: &GlvConfiguration) -> Result<PathBuf, TemplateTaskError> {
         if self.path_key.trim().is_empty() {
             return Err("interaction path key must not be empty".into());
         }
@@ -108,11 +109,11 @@ impl Default for ObservationConfig {
 /// Error returned by one advanced template task implementation.
 pub type TemplateTaskError = Box<dyn Error + Send + Sync + 'static>;
 
-/// Complete built-in GLV project compositions.
+/// Complete built-in GLV inputs compositions.
 ///
 /// A variant fixes model assembly only. Scientific values, recording streams,
 /// path aliases, and parameter sweeps remain in application-owned Workflow
-/// project documents.
+/// inputs documents.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -140,18 +141,18 @@ impl GlvTemplate {
 }
 
 impl GlvTemplate {
-    /// Executes one runtime-owned task using GLV's model and I/O capabilities.
+    /// Executes one study task using GLV's model and I/O capabilities.
     ///
-    /// The application owns project loading, phase construction, scheduling,
-    /// and the [`scientific_workflow::runtime::WorkflowRuntime`]. GLV owns model
+    /// The application owns inputs loading, phase construction, scheduling,
+    /// and the [`scientific_workflow::study::Study`]. GLV owns model
     /// construction, evolution, recording, terminal-state publication, and
     /// final checkpoint verification for this task.
     pub fn run_task(
         self,
         scope: &ExecutionScope,
+        task: &GlvConfiguration,
         context: &TaskContext,
     ) -> Result<(), TemplateTaskError> {
-        let task = context.configuration();
         let maximum_iterations = task.decode_value("/maximum_iterations")?;
         context.set_iteration(0)?;
         context.set_target_iteration(maximum_iterations)?;
@@ -166,7 +167,7 @@ impl GlvTemplate {
 
 fn run_mean_field(
     scope: &ExecutionScope,
-    task: &TaskConfig,
+    task: &GlvConfiguration,
     context: &TaskContext,
     demographic: bool,
 ) -> Result<(), TemplateTaskError> {
@@ -240,7 +241,7 @@ fn run_mean_field(
 
 fn run_spatial_replicator(
     scope: &ExecutionScope,
-    task: &TaskConfig,
+    task: &GlvConfiguration,
     context: &TaskContext,
 ) -> Result<(), TemplateTaskError> {
     let spatial_shape: Vec<usize> = task.decode_value("/spatial_shape")?;
@@ -286,7 +287,7 @@ fn run_spatial_replicator(
 }
 
 fn decode_species_values(
-    task: &TaskConfig,
+    task: &GlvConfiguration,
     name: &str,
     species: usize,
 ) -> Result<Array1<f64>, TemplateTaskError> {
@@ -298,7 +299,7 @@ fn decode_species_values(
 
 fn run_spatial_glv(
     scope: &ExecutionScope,
-    task: &TaskConfig,
+    task: &GlvConfiguration,
     context: &TaskContext,
 ) -> Result<(), TemplateTaskError> {
     let spatial_shape: Vec<usize> = task.decode_value("/spatial_shape")?;
@@ -469,7 +470,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn finish_task<S>(
     scope: &ExecutionScope,
-    task: &TaskConfig,
+    task: &GlvConfiguration,
     context: &TaskContext,
     streams: Vec<StateStreamConfig>,
     maximum_iterations: u64,
@@ -498,7 +499,7 @@ where
     let mut metadata = GlvRecordingMetadata::new(
         simulation.kind(),
         simulation.abundance_representation(),
-        task.parameters(),
+        task.configuration(),
         interaction,
         simulation.rng_record(),
     )?;
@@ -583,14 +584,14 @@ fn publish_terminal_state(
 
 fn task_recording_directory(
     scope: &ExecutionScope,
-    task: &TaskConfig,
+    task: &GlvConfiguration,
 ) -> Result<std::path::PathBuf, TemplateTaskError> {
     match task.value("/recording_name") {
         Some(_) => {
             let name = task.decode_value::<String>("/recording_name")?;
             Ok(scope.named_task_recording_directory(&name)?)
         }
-        None => Ok(scope.task_recording_directory(task.task_ordinal())),
+        None => Ok(scope.task_recording_directory(task.ordinal())),
     }
 }
 
@@ -688,25 +689,32 @@ fn observation_policy(config: ObservationConfig, interval: u64) -> TrajectoryObs
 mod tests {
     use super::*;
     use crate::recording::{TERMINATION_DIAGNOSTICS_METADATA_KEY, TERMINATION_REASON_METADATA_KEY};
-    use scientific_workflow::prelude::runtime::{Phase, WorkflowRuntime};
+    use scientific_workflow::prelude::study::{Phase, Study, Task};
     use serde_json::Value;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicU64, Ordering};
 
-    fn run_project(template: GlvTemplate, root: &Path) -> ExecutionScope {
-        let project = crate::project::load_glv_project(root).unwrap();
+    fn run_study(template: GlvTemplate, root: &Path) -> ExecutionScope {
+        let inputs = crate::load_glv_inputs(root).unwrap();
         let scope =
-            ExecutionScope::create_generated(project.resolve_path("recordings").unwrap()).unwrap();
+            ExecutionScope::create_generated(inputs.resolve_path("recordings").unwrap()).unwrap();
         let task_scope = scope.clone();
+        let tasks = inputs.combinations().map(|configuration| {
+            let ordinal = configuration.ordinal();
+            let scope = task_scope.clone();
+            Task::progress(
+                format!("{}-{ordinal}", template.as_str()),
+                format!("{} {ordinal}", template.as_str()),
+                move |context| Ok(template.run_task(&scope, &configuration, context)?),
+            )
+        });
         let phase = Phase::builder(1, "GLV simulation")
-            .progress_tasks_from_project(&project, template.as_str(), move |context| {
-                template.run_task(&task_scope, context)
-            })
+            .tasks(tasks)
             .build()
             .unwrap();
-        WorkflowRuntime::builder(root.join("execution-record.json"))
+        Study::builder(root.join("study-record.json"))
             .phase(phase)
             .hidden()
             .build()
@@ -719,9 +727,9 @@ mod tests {
     static TEST_SEQUENCE: AtomicU64 = AtomicU64::new(0);
     static RUN_LOCK: Mutex<()> = Mutex::new(());
 
-    struct TestProject(PathBuf);
+    struct TestStudy(PathBuf);
 
-    impl TestProject {
+    impl TestStudy {
         fn stationary() -> Self {
             let sequence = TEST_SEQUENCE.fetch_add(1, Ordering::Relaxed);
             let root = std::env::temp_dir()
@@ -769,47 +777,47 @@ mod tests {
         }
 
         fn capped() -> Self {
-            let project = Self::stationary();
-            let path = project.0.join("config/fixed.json");
+            let inputs = Self::stationary();
+            let path = inputs.0.join("config/fixed.json");
             let mut config: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
             config.as_object_mut().unwrap().remove("observation");
             config["maximum_iterations"] = Value::from(3);
             fs::write(path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
-            project
+            inputs
         }
 
         fn inferred_uniform() -> Self {
-            let project = Self::stationary();
-            let path = project.0.join("config/fixed.json");
+            let inputs = Self::stationary();
+            let path = inputs.0.join("config/fixed.json");
             let mut config: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
             config.as_object_mut().unwrap().remove("initial_abundance");
             config["growth"] = Value::from(0.0);
             fs::write(path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
-            project
+            inputs
         }
 
         fn path_abundance() -> Self {
-            let project = Self::stationary();
-            let fixed_path = project.0.join("config/fixed.json");
+            let inputs = Self::stationary();
+            let fixed_path = inputs.0.join("config/fixed.json");
             let mut config: Value =
                 serde_json::from_slice(&fs::read(&fixed_path).unwrap()).unwrap();
             config["initial_abundance"] = serde_json::json!({"path_key":"initial_abundance"});
             fs::write(fixed_path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
-            let paths_path = project.0.join("config/paths.json");
+            let paths_path = inputs.0.join("config/paths.json");
             let mut paths: Value = serde_json::from_slice(&fs::read(&paths_path).unwrap()).unwrap();
             paths["initial_abundance"] = Value::from("inputs/initial-abundance.json");
             fs::write(paths_path, serde_json::to_vec_pretty(&paths).unwrap()).unwrap();
             fs::write(
-                project.0.join("inputs/initial-abundance.json"),
+                inputs.0.join("inputs/initial-abundance.json"),
                 b"[0.25,0.75]",
             )
             .unwrap();
-            project
+            inputs
         }
 
         fn collapses_at_cap() -> Self {
-            let project = Self::stationary();
-            let path = project.0.join("config/fixed.json");
+            let inputs = Self::stationary();
+            let path = inputs.0.join("config/fixed.json");
             let mut config: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
             config["initial_abundance"] = serde_json::json!([0.98, 0.02]);
             config["growth"] = serde_json::json!([0.0, -100.0]);
@@ -817,12 +825,12 @@ mod tests {
             config["physical_time_increment"] = Value::from(0.01);
             config["maximum_iterations"] = Value::from(1);
             fs::write(path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
-            project
+            inputs
         }
 
         fn nonstationary_population_monoculture() -> Self {
-            let project = Self::stationary();
-            let path = project.0.join("config/fixed.json");
+            let inputs = Self::stationary();
+            let path = inputs.0.join("config/fixed.json");
             let config = serde_json::json!({
                 "spatial_shape": [2, 2],
                 "initialization": {
@@ -849,11 +857,11 @@ mod tests {
                 ]
             });
             fs::write(path, serde_json::to_vec_pretty(&config).unwrap()).unwrap();
-            project
+            inputs
         }
     }
 
-    impl Drop for TestProject {
+    impl Drop for TestStudy {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
@@ -874,18 +882,18 @@ mod tests {
     #[test]
     fn mean_field_accepts_path_resolved_initial_abundance() {
         let _guard = RUN_LOCK.lock().unwrap();
-        let project = TestProject::path_abundance();
-        let scope = run_project(GlvTemplate::MeanFieldReplicator, &project.0);
+        let inputs = TestStudy::path_abundance();
+        let scope = run_study(GlvTemplate::MeanFieldReplicator, &inputs.0);
         let fixed_point =
             crate::open_accepted_fixed_point(scope.task_recording_directory(0)).unwrap();
         assert_eq!(fixed_point.composition(), [0.25, 0.75]);
     }
 
     #[test]
-    fn runtime_task_stops_at_a_confirmed_fixed_point_and_records_evidence() {
+    fn task_stops_at_a_confirmed_fixed_point_and_records_evidence() {
         let _guard = RUN_LOCK.lock().unwrap();
-        let project = TestProject::stationary();
-        let scope = run_project(GlvTemplate::MeanFieldReplicator, &project.0);
+        let inputs = TestStudy::stationary();
+        let scope = run_study(GlvTemplate::MeanFieldReplicator, &inputs.0);
         let document: Value = serde_json::from_slice(
             &fs::read(scope.task_recording_directory(0).join("metadata.json")).unwrap(),
         )
@@ -929,17 +937,17 @@ mod tests {
     #[test]
     fn mean_field_infers_species_and_uniform_initial_state_from_interaction() {
         let _guard = RUN_LOCK.lock().unwrap();
-        let project = TestProject::inferred_uniform();
-        let scope = run_project(GlvTemplate::MeanFieldReplicator, &project.0);
+        let inputs = TestStudy::inferred_uniform();
+        let scope = run_study(GlvTemplate::MeanFieldReplicator, &inputs.0);
         let terminal = crate::open_terminal_state(scope.task_recording_directory(0)).unwrap();
         assert_eq!(terminal.composition(), [0.5, 0.5]);
     }
 
     #[test]
-    fn runtime_task_accepts_a_collapse_on_the_last_allowed_step() {
+    fn task_accepts_a_collapse_on_the_last_allowed_step() {
         let _guard = RUN_LOCK.lock().unwrap();
-        let project = TestProject::collapses_at_cap();
-        let scope = run_project(GlvTemplate::MeanFieldReplicator, &project.0);
+        let inputs = TestStudy::collapses_at_cap();
+        let scope = run_study(GlvTemplate::MeanFieldReplicator, &inputs.0);
         let terminal = crate::open_terminal_state(scope.task_recording_directory(0)).unwrap();
         assert_eq!(terminal.iteration(), 1);
         assert_eq!(terminal.composition(), [0.99, 0.01]);
@@ -948,8 +956,8 @@ mod tests {
     #[test]
     fn population_monoculture_with_nonzero_residual_is_not_a_fixed_point() {
         let _guard = RUN_LOCK.lock().unwrap();
-        let project = TestProject::nonstationary_population_monoculture();
-        let scope = run_project(GlvTemplate::SpatialGeneralLotkaVolterra, &project.0);
+        let inputs = TestStudy::nonstationary_population_monoculture();
+        let scope = run_study(GlvTemplate::SpatialGeneralLotkaVolterra, &inputs.0);
         let terminal = crate::open_terminal_state(scope.task_recording_directory(0)).unwrap();
         assert_eq!(
             terminal.classification(),
@@ -963,10 +971,10 @@ mod tests {
     }
 
     #[test]
-    fn capped_runtime_task_publishes_a_trailing_average_with_an_explicit_marker() {
+    fn capped_task_publishes_a_trailing_average_with_an_explicit_marker() {
         let _guard = RUN_LOCK.lock().unwrap();
-        let project = TestProject::capped();
-        let scope = run_project(GlvTemplate::MeanFieldReplicator, &project.0);
+        let inputs = TestStudy::capped();
+        let scope = run_study(GlvTemplate::MeanFieldReplicator, &inputs.0);
         let terminal = crate::open_terminal_state(scope.task_recording_directory(0)).unwrap();
         assert_eq!(
             terminal.classification(),

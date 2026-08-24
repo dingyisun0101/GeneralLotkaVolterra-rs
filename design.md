@@ -10,9 +10,9 @@ implementation on `sw-version`.
   and progress behavior.
 - Keep GLV responsible for ecological equations, numerical algorithms,
   invariants, stochastic updates, validation, and model-specific assembly.
-- Provide built-in templates as runtime-compatible task workloads while the
-  application owns project loading, phase construction, scheduling, and
-  `WorkflowRuntime` execution.
+- Provide built-in templates as study-compatible task workloads while the
+  application owns study loading, phase construction, scheduling, and
+  `Study` execution.
 - Validate deterministic numerical behavior against independent
   high-resolution ground truth before changing scientific behavior.
 - Make every resolved interaction matrix independently inspectable and exactly
@@ -25,7 +25,7 @@ implementation on `sw-version`.
 - No parallel GLV state, solver dispatch layer, task API, or recording format.
 - No second GLV storage, configuration, progress, or execution abstraction
   beside Scientific Workflow.
-- No process-global runtime or writer manager.
+- No process-global study or writer manager.
 - No interaction matrix, representation label, or immutable model parameter in
   the evolving Workflow state.
 - No exact stochastic-continuation claim until RNG state has an explicit,
@@ -77,7 +77,7 @@ glv/
 │   │   └── source.rs
 │   ├── noise.rs
 │   ├── prelude.rs
-│   ├── project.rs
+│   ├── study.rs
 │   ├── noise/
 │   │   ├── algorithms.rs
 │   │   ├── algorithms/
@@ -136,13 +136,13 @@ Scientific Workflow owns:
 
 - `SystemState`, `SystemStateSchema`, and `SimulationTime`;
 - validation and persistence of RNG-agnostic `RngRecord` metadata;
-- `ScientificProject`, `TaskConfig`, and project path resolution;
+- `GlvInputs`, `GlvConfiguration`, and study path resolution;
 - `ExecutionScope` and task recording paths;
 - `SystemStateWriter`, stream sampling, queues, chunking, checksums, and
   recording lifecycle;
 - `StoredStateSeriesReader`, typed reconstruction, and state series;
 - creation-time and terminal recording metadata; and
-- `WorkflowRuntime`, phases, `TaskContext`, progress, and cancellation.
+- `Study`, phases, `TaskContext`, progress, and cancellation.
 
 GLV owns:
 
@@ -164,10 +164,10 @@ current state by immutable borrow; orchestration decides when to observe it.
 
 Automatic termination is an internal synchronous part of built-in template
 orchestration, not a numerical-engine concern and not a background thread.
-Ordinary project configuration only toggles the fixed-point and oscillation
+Ordinary study configuration only toggles the fixed-point and oscillation
 detectors. GLV owns their sampling cadence, bounded evidence windows,
 tolerances, confirmation schedule, and observable. This keeps scientific
-classification consistent across studies instead of allowing each project to
+classification consistent across studies instead of allowing each study to
 silently define a different meaning of convergence.
 
 The fixed-point detector combines windowed composition, support, mass, and an
@@ -206,7 +206,7 @@ checkpoint can therefore select every schema field and encode non-spatial
 space as JSON `null`.
 
 The schema is model-owned: GLV supplies it through
-`ScientificProject::load_with_state_schema`. User projects contain only
+`GlvInputs::load`. User studies contain only
 `fixed.json`, `sweep.json`, and `paths.json`; they cannot drift by copying or
 overriding `state.json`.
 
@@ -436,10 +436,10 @@ An external generator produces an ordinary PiP matrix. If provenance is
 needed, it supplies a `GeneratorProvenance` value containing explicit identity,
 version, JSON parameters, and an optional resolved PiP `RngConfig`.
 
-Scientific Workflow remains the configuration parser. `ScientificProject` and
-`TaskConfig` decode `fixed.json`, `sweep.json`, and `paths.json` into typed GLV
+Scientific Workflow remains the configuration parser. `GlvInputs` and
+`GlvConfiguration` decode `fixed.json`, `sweep.json`, and `paths.json` into typed GLV
 source configuration. A kernel source consumes that resolved configuration; it
-does not independently parse the project files.
+does not independently parse the study files.
 
 Direct programmatic callers may supply an already-owned PiP matrix or ndarray.
 Tests use this path without filesystem setup.
@@ -646,11 +646,11 @@ retain ownership of any rejected payload through typed Workflow
 
 ## Ordinary and advanced API layers
 
-The ordinary `prelude` exports `load_glv_project` and `GlvTemplate`. The caller
-loads the project, creates an `ExecutionScope`, constructs phases, and registers
+The ordinary `prelude` exports `load_glv_inputs` and `GlvTemplate`. The caller
+loads the study, creates an `ExecutionScope`, constructs phases, and registers
 `GlvTemplate::run_task` as a progress workload. The template receives
 Workflow's `TaskContext` and the application-owned scope directly; GLV defines
-no parallel runtime, task, progress, or configuration wrapper.
+no parallel study, task, progress, or configuration wrapper.
 
 The separate `advanced::prelude` exposes the building blocks needed to create a
 custom application workload from concrete simulations, kernels, noise plugins,
@@ -659,12 +659,12 @@ does not require a GLV-owned orchestration trait.
 
 ## Orchestration and recording
 
-An application-owned Workflow phase drives this standard task flow:
+An application-owned phase drives this standard task flow:
 
 ```text
-ScientificProject
+GlvInputs
         ↓
-resolved TaskConfig
+resolved GlvConfiguration
         ↓
 PiP matrix input → validated GLV interaction → content-addressed input artifact
         ↓
@@ -683,10 +683,10 @@ complete with final state and terminal metadata
 
 Every runnable model example supplies conventional
 `config/{fixed,sweep,paths,state}.json` inputs. Scientific parameters are
-decoded from `TaskConfig`; interaction files are resolved before construction
+decoded from `GlvConfiguration`; interaction files are resolved before construction
 and persisted once per execution scope. Example `main.rs` files demonstrate
-project loading, execution-scope creation, phase registration, scheduling
-bounds, and runtime execution explicitly. GLV updates the supplied
+study loading, execution-scope creation, phase registration, scheduling
+bounds, and study execution explicitly. GLV updates the supplied
 `TaskContext` while retaining ownership of all scientific I/O.
 
 After completion, examples reopen the checkpoint stream through
@@ -713,13 +713,13 @@ Named streams are:
 Orchestration decodes and passes Workflow's `Vec<StateStreamConfig>` directly;
 GLV defines no parallel recording-configuration structs. Each stream therefore
 uses Workflow's typed `SamplingInterval`, optional nonzero storage limits,
-field selection, and validation. The standard projects declare all three
+field selection, and validation. The standard studies declare all three
 streams. Non-spatial `space` and `checkpoint` records encode the populated
 `Option<ArrayD<f64>>::None` payload as JSON `null`.
 
 `GlvRecordingMetadata` combines stable `SimulationKind` and
 `AbundanceRepresentation` values, exact resolved `TaskParameters` plus
-`task_ordinal`, and the content-addressed `InteractionArtifactDescriptor` in
+`ordinal`, and the content-addressed `InteractionArtifactDescriptor` in
 Workflow creation-time `user_metadata`. It also accepts the concrete
 simulation's optional `RngRecord`, stores stochastic method/version/key
 identity beneath Workflow's reserved `rng_records` object, and permits
@@ -759,7 +759,7 @@ exact iteration and physical-time coordinates.
 A deterministic continuation requires:
 
 1. a verified complete checkpoint;
-2. the original resolved task configuration;
+2. the original resolved configuration;
 3. the verified interaction-matrix artifact and descriptor;
 4. reconstruction through the matching concrete simulation constructor; and
 5. freshly allocated numerical scratch.
@@ -779,7 +779,7 @@ GLV neither selects integrity policy nor duplicates these checks.
 `GlvRecording::continue_from_latest_checkpoint` rebuilds the exact original
 writer configuration and delegates recovery, checkpoint reconstruction, and
 append ownership to Workflow. Workflow rejects any difference in time-axis
-metadata, resolved task/GLV metadata, or stream configuration. The returned
+metadata, resolved configuration/GLV metadata, or stream configuration. The returned
 checkpoint is not observed a second time.
 
 `load_verified_interaction_matrix` resolves the descriptor's normalized path

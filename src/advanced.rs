@@ -1,10 +1,10 @@
-//! Curated API for authors of custom GLV project templates.
+//! Curated API for authors of custom GLV inputs templates.
 //!
 //! Ordinary users should import [`crate::prelude`] instead. This layer exposes
 //! the same model, plugin, interaction, and Workflow building blocks used by
 //! the built-in [`crate::GlvTemplate`] implementations.
 
-/// Imports for advanced users assembling a custom project template.
+/// Imports for advanced users assembling a custom inputs template.
 pub mod prelude {
     pub use crate::core::{TimeStep, TimeStepError};
     pub use crate::initialization::{
@@ -34,7 +34,6 @@ pub mod prelude {
         NoiseDomain, NoisePluginError, NoiseStepError, PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE,
         ProportionalGaussian,
     };
-    pub use crate::project::{GlvProjectError, load_glv_project, validate_glv_project};
     pub use crate::reading::{
         GlvCheckpointVerificationError, glv_json_decoders, open_completed_glv_recording,
         verify_completed_glv_checkpoint,
@@ -51,6 +50,7 @@ pub mod prelude {
         SpatialGeneralLotkaVolterraConfig, SpatialReplicator, SpatialReplicatorConfig,
         StateAssemblyError,
     };
+    pub use crate::study_inputs::{GlvConfiguration, GlvInputs, GlvInputsError, load_glv_inputs};
     pub use crate::template::{GlvTemplate, TemplateTaskError};
     pub use crate::terminal_state::{
         TERMINAL_STATE_FORMAT, TerminalState, TerminalStateOpenError, open_terminal_state,

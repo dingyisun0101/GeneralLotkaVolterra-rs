@@ -33,13 +33,13 @@ cargo run --release
 ```
 
 The binary loads a `GlvWorkload` and registers its tasks in an application-owned
-Workflow runtime. The checked-in
+Study. The checked-in
 `config/sweep.json` runs the same scientific parameters with multiple complete
 PiP `RngConfig` values. Edit `sigma` in `config/fixed.json` to control noise
 strength, or pass another compatible configuration folder:
 
 ```sh
-cargo run --release -- /path/to/project/config
+cargo run --release -- /path/to/inputs/config
 ```
 
 Other main values in `fixed.json` are optional `initial_abundance`, scalar or
