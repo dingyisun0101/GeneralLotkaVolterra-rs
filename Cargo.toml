@@ -1,6 +1,6 @@
 [package]
 name = "general-lotka-volterra-rs"
-version = "0.13.2"
+version = "0.13.1"
 edition = "2024"
 rust-version = "1.97"
 autoexamples = false
@@ -34,7 +34,7 @@ resolver = "3"
 [dependencies]
 ecological-model-core = "0.8.0"
 physics_in_parallel = "3.7.0"
-scientific-workflow = "0.7.3"
+scientific-workflow = "0.7.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.11"

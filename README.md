@@ -122,9 +122,7 @@ my-study/
 - Path keys, path-resolved `initial_abundance`, and `recording_name` may contain
   scalar configuration placeholders such as `{sys_idx}` or `{energy}`. For
   example, `interaction_sys_{sys_idx}` selects `interaction_sys_0` for the
-  configuration whose `sys_idx` is `0`. A `paths.json` entry may itself retain
-  the same templated key and use placeholders in its path, covering any number
-  of systems with one declaration. This keeps correlated artifact routing
+  configuration whose `sys_idx` is `0`. This keeps correlated artifact routing
   compatible with ordinary Cartesian sweep axes.
 - `interaction.json` is the versioned PiP interaction matrix.
 

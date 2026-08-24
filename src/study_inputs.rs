@@ -121,31 +121,7 @@ impl GlvConfiguration {
                 reason,
             }
         })?;
-        if self.paths.contains(&key) {
-            return self.resolve_path(&key);
-        }
-        let Some(path_template) = self.paths.path(template) else {
-            return self.resolve_path(&key);
-        };
-        let path_template =
-            path_template
-                .to_str()
-                .ok_or_else(|| GlvInputsError::InvalidPathKeyTemplate {
-                    template: template.to_owned(),
-                    reason: "templated project path is not valid UTF-8".to_owned(),
-                })?;
-        let rendered = expand_template(path_template, &self.configuration).map_err(|reason| {
-            GlvInputsError::InvalidPathKeyTemplate {
-                template: path_template.to_owned(),
-                reason,
-            }
-        })?;
-        let rendered = PathBuf::from(rendered);
-        Ok(if rendered.is_absolute() {
-            rendered
-        } else {
-            self.paths.project_root().join(rendered)
-        })
+        self.resolve_path(&key)
     }
 
     /// Expands scalar `{parameter}` placeholders from this configuration.
@@ -228,7 +204,7 @@ mod tests {
         .unwrap();
         fs::write(
             root.join("config/paths.json"),
-            br#"{"matrix_E{energy}_sys_{sys_idx}":"matrices/E={energy}/sys={sys_idx}.json"}"#,
+            br#"{"matrix_E0.2_sys_1":"matrix.json"}"#,
         )
         .unwrap();
 
@@ -237,7 +213,7 @@ mod tests {
             configuration
                 .resolve_path_template("matrix_E{energy}_sys_{sys_idx}")
                 .unwrap(),
-            root.join("matrices/E=0.2/sys=1.json")
+            root.join("matrix.json")
         );
         fs::remove_dir_all(root).unwrap();
     }
