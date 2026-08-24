@@ -63,7 +63,7 @@ impl InitialAbundanceInput {
                 if path_key.trim().is_empty() {
                     return Err("initial-abundance path key must not be empty".into());
                 }
-                let path = task.resolve_path(&path_key)?;
+                let path = task.resolve_path_template(&path_key)?;
                 Ok(serde_json::from_slice(&fs::read(path)?)?)
             }
         }
@@ -75,7 +75,7 @@ impl InteractionInput {
         if self.path_key.trim().is_empty() {
             return Err("interaction path key must not be empty".into());
         }
-        Ok(task.resolve_path(&self.path_key)?)
+        Ok(task.resolve_path_template(&self.path_key)?)
     }
 }
 
@@ -591,7 +591,7 @@ fn task_recording_directory(
     match task.value("/recording_name") {
         Some(_) => {
             let name = task.decode_value::<String>("/recording_name")?;
-            Ok(scope.named_task_recording_directory(&name)?)
+            Ok(scope.named_task_recording_directory(&task.expand_template(&name)?)?)
         }
         None => Ok(scope.task_recording_directory(task.ordinal())),
     }

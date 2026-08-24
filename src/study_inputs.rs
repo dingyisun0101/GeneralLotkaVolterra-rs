@@ -111,6 +111,69 @@ impl GlvConfiguration {
     pub fn resolve_path(&self, key: &str) -> Result<PathBuf, GlvInputsError> {
         Ok(self.paths.resolve_path(key)?)
     }
+
+    /// Expands `{parameter}` placeholders from this resolved configuration and
+    /// resolves the resulting project-path key.
+    pub fn resolve_path_template(&self, template: &str) -> Result<PathBuf, GlvInputsError> {
+        let key = expand_template(template, &self.configuration).map_err(|reason| {
+            GlvInputsError::InvalidPathKeyTemplate {
+                template: template.to_owned(),
+                reason,
+            }
+        })?;
+        self.resolve_path(&key)
+    }
+
+    /// Expands scalar `{parameter}` placeholders from this configuration.
+    pub fn expand_template(&self, template: &str) -> Result<String, GlvInputsError> {
+        expand_template(template, &self.configuration).map_err(|reason| {
+            GlvInputsError::InvalidPathKeyTemplate {
+                template: template.to_owned(),
+                reason,
+            }
+        })
+    }
+}
+
+fn expand_template(
+    template: &str,
+    configuration: &ResolvedConfiguration,
+) -> Result<String, String> {
+    let mut output = String::with_capacity(template.len());
+    let mut remainder = template;
+    while let Some(open) = remainder.find('{') {
+        output.push_str(&remainder[..open]);
+        let after_open = &remainder[open + 1..];
+        let close = after_open
+            .find('}')
+            .ok_or_else(|| "unclosed placeholder".to_owned())?;
+        let name = &after_open[..close];
+        if name.is_empty() || name.contains('{') || name.contains('}') {
+            return Err("placeholders must contain one nonempty parameter path".to_owned());
+        }
+        let path = if name.starts_with('/') {
+            name.to_owned()
+        } else {
+            format!("/{name}")
+        };
+        let value = configuration
+            .value(&path)
+            .ok_or_else(|| format!("configuration does not contain `{path}`"))?;
+        match value {
+            Value::String(value) => output.push_str(value),
+            Value::Number(value) => output.push_str(&value.to_string()),
+            Value::Bool(value) => output.push_str(if *value { "true" } else { "false" }),
+            Value::Null | Value::Array(_) | Value::Object(_) => {
+                return Err(format!("configuration value `{path}` is not scalar"));
+            }
+        }
+        remainder = &after_open[close + 1..];
+    }
+    if remainder.contains('}') {
+        return Err("closing brace without an opening placeholder".to_owned());
+    }
+    output.push_str(remainder);
+    Ok(output)
 }
 
 #[derive(Debug, Error)]
@@ -118,4 +181,40 @@ impl GlvConfiguration {
 pub enum GlvInputsError {
     #[error(transparent)]
     Configuration(#[from] ConfigurationError),
+    #[error("invalid path-key template `{template}`: {reason}")]
+    InvalidPathKeyTemplate { template: String, reason: String },
+}
+
+#[cfg(test)]
+mod tests {
+    use std::fs;
+
+    use super::GlvInputs;
+
+    #[test]
+    fn configuration_templates_expand_scalar_sweep_values() {
+        let root = std::env::temp_dir().join(format!("glv-path-template-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("config")).unwrap();
+        fs::write(root.join("config/fixed.json"), b"{}").unwrap();
+        fs::write(
+            root.join("config/sweep.json"),
+            br#"{"mode":"cartesian","axes":{"energy":{"values":[0.2]},"sys_idx":{"values":[1]}}}"#,
+        )
+        .unwrap();
+        fs::write(
+            root.join("config/paths.json"),
+            br#"{"matrix_E0.2_sys_1":"matrix.json"}"#,
+        )
+        .unwrap();
+
+        let configuration = GlvInputs::load(&root).unwrap().combination(0).unwrap();
+        assert_eq!(
+            configuration
+                .resolve_path_template("matrix_E{energy}_sys_{sys_idx}")
+                .unwrap(),
+            root.join("matrix.json")
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
 }
