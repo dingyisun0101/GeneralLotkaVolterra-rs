@@ -12,7 +12,7 @@ use std::convert::Infallible;
 use std::error::Error;
 use std::fmt;
 
-use ndarray::{Array1, ArrayD};
+use physics_in_parallel::prelude::basic::Tensor;
 use scientific_workflow::prelude::basics::{
     PayloadInsertError, SimulationTime, StateError, SystemState,
 };
@@ -153,8 +153,8 @@ pub enum DefaultSimulationBuildError {
 }
 
 pub(crate) fn assemble_initial_state(
-    abundance: Array1<f64>,
-    space: Option<ArrayD<f64>>,
+    abundance: AggregateAbundance,
+    space: SpatialAbundance,
     total: f64,
 ) -> Result<SystemState, StateAssemblyError> {
     let time = SimulationTime::from_iteration_and_physical_time(0, 0.0)
@@ -179,25 +179,20 @@ pub(crate) fn assemble_initial_state(
 }
 
 pub(crate) fn aggregate_spatial(
-    space: &ArrayD<f64>,
+    space: &Tensor<f64>,
     species: usize,
     average: bool,
-) -> Result<Array1<f64>, DefaultSimulationBuildError> {
-    let values =
-        space
-            .as_slice()
-            .ok_or_else(|| DefaultSimulationBuildError::NonStandardInitialSpace {
-                shape: space.shape().to_vec(),
-            })?;
+) -> Result<AggregateAbundance, DefaultSimulationBuildError> {
+    let values = space.as_slice();
     let cells = values.len() / species;
-    let mut abundance = Array1::zeros(species);
+    let mut abundance = Tensor::zeros(&[species]);
     for cell in values.chunks_exact(species) {
-        for (target, value) in abundance.iter_mut().zip(cell) {
+        for (target, value) in abundance.as_mut_slice().iter_mut().zip(cell) {
             *target += *value;
         }
     }
     if average {
-        abundance.mapv_inplace(|value| value / cells as f64);
+        abundance.map_in_place(|value| value / cells as f64);
     }
     Ok(abundance)
 }

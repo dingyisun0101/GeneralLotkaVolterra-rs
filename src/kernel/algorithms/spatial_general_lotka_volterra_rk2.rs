@@ -1,6 +1,6 @@
 //! Allocation-free spatial General Lotka–Volterra midpoint RK2 evolution.
 
-use ndarray::Array1;
+use physics_in_parallel::prelude::basic::Tensor;
 
 use crate::TimeStep;
 use crate::kernel::core::{
@@ -18,7 +18,7 @@ pub struct SpatialGeneralLotkaVolterraRk2 {
 
 impl SpatialGeneralLotkaVolterraRk2 {
     /// Creates fixed configuration and scratch from PiP lattice geometry.
-    pub fn new(growth: Array1<f64>, diffusion: Diffusion) -> Result<Self, KernelAlgorithmError> {
+    pub fn new(growth: Tensor<f64>, diffusion: Diffusion) -> Result<Self, KernelAlgorithmError> {
         Ok(Self {
             inner: SpatialRk2::new(growth, diffusion)?,
         })
@@ -35,7 +35,7 @@ impl SpatialGeneralLotkaVolterraRk2 {
     }
 
     /// Borrows the immutable growth vector.
-    pub const fn growth(&self) -> &Array1<f64> {
+    pub const fn growth(&self) -> &Tensor<f64> {
         self.inner.growth()
     }
 

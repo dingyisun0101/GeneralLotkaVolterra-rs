@@ -6,7 +6,7 @@ use general_lotka_volterra_rs::{
     SPACE_FIELD, SPACE_STREAM, SpatialAbundance, TOTAL_FIELD, TotalAbundance, load_state_schema,
     state_schema_path,
 };
-use ndarray::{Array1, ArrayD, IxDyn};
+use physics_in_parallel::prelude::basic::Tensor;
 use scientific_workflow::system_state::{SimulationTime, SystemState, SystemStateSchema};
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -65,7 +65,7 @@ fn canonical_schema_has_one_exact_round_trip() {
 fn non_spatial_and_spatial_models_share_the_populated_space_slot() {
     let schema = load_state_schema().unwrap();
 
-    let non_spatial = assemble_state(&schema, Array1::from_vec(vec![0.25, 0.75]), None, 1.0);
+    let non_spatial = assemble_state(&schema, Tensor::from_vec(&[2], vec![0.25, 0.75]), None, 1.0);
     assert_eq!(non_spatial.populated_field_count(), 3);
     assert!(
         non_spatial
@@ -74,10 +74,10 @@ fn non_spatial_and_spatial_models_share_the_populated_space_slot() {
             .is_none()
     );
 
-    let space = ArrayD::from_elem(IxDyn(&[2, 3, 2]), 0.5);
+    let space = Tensor::from_vec(&[2, 3, 2], vec![0.5; 12]);
     let spatial = assemble_state(
         &schema,
-        Array1::from_vec(vec![3.0, 3.0]),
+        Tensor::from_vec(&[2], vec![3.0, 3.0]),
         Some(space.clone()),
         6.0,
     );
@@ -96,8 +96,8 @@ fn coordinated_spatial_mutation_updates_abundance_space_and_total() {
     let schema = load_state_schema().unwrap();
     let mut state = assemble_state(
         &schema,
-        Array1::from_vec(vec![1.0, 2.0]),
-        Some(ArrayD::from_elem(IxDyn(&[1, 2]), 1.0)),
+        Tensor::from_vec(&[2], vec![1.0, 2.0]),
+        Some(Tensor::from_vec(&[1, 2], vec![1.0; 2])),
         3.0,
     );
 
@@ -108,37 +108,42 @@ fn coordinated_spatial_mutation_updates_abundance_space_and_total() {
             TOTAL_FIELD,
         ))
         .expect("distinct state fields support coordinated mutation");
-    abundance[0] = 4.0;
-    space.as_mut().expect("spatial state is present")[[0, 0]] = 4.0;
-    *total = abundance.sum();
+    abundance.as_mut_slice()[0] = 4.0;
+    space
+        .as_mut()
+        .expect("spatial state is present")
+        .as_mut_slice()[0] = 4.0;
+    *total = abundance.sum_serial();
 
     assert_eq!(
         state
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
-            .unwrap()[0],
+            .unwrap()
+            .as_slice()[0],
         4.0
     );
     assert_eq!(*state.payload::<TotalAbundance>(TOTAL_FIELD).unwrap(), 6.0);
 }
 
 #[test]
-fn payload_insertion_and_extraction_preserve_array_ownership() {
+fn payload_insertion_and_extraction_preserve_tensor_ownership() {
     let schema = load_state_schema().unwrap();
-    let abundance = Array1::from_vec(vec![1.0, 2.0, 3.0]);
-    let original_pointer = abundance.as_ptr();
+    let abundance = Tensor::from_vec(&[3], vec![1.0, 2.0, 3.0]);
+    let original_pointer = abundance.as_slice().as_ptr();
     let mut state = assemble_state(&schema, abundance, None, 6.0);
 
     let stored_pointer = state
         .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
         .expect("aggregate abundance is present")
+        .as_slice()
         .as_ptr();
     assert_eq!(stored_pointer, original_pointer);
 
     let extracted = state
         .take_payload::<AggregateAbundance>(ABUNDANCE_FIELD)
         .expect("aggregate abundance can be extracted");
-    assert_eq!(extracted.as_ptr(), original_pointer);
-    assert_eq!(extracted, Array1::from_vec(vec![1.0, 2.0, 3.0]));
+    assert_eq!(extracted.as_slice().as_ptr(), original_pointer);
+    assert_eq!(extracted, Tensor::from_vec(&[3], vec![1.0, 2.0, 3.0]));
 }
 
 #[test]

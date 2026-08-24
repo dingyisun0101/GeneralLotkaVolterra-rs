@@ -34,8 +34,9 @@ pub fn open_terminal_state(
     if state.classification() == TerminalClassification::Equilibrium {
         let final_state = reader.read_latest_state_from_stream(crate::CHECKPOINT_STREAM)?;
         let abundance = final_state.payload::<crate::AggregateAbundance>(crate::ABUNDANCE_FIELD)?;
-        let total = abundance.sum();
+        let total = abundance.sum_serial();
         let composition = abundance
+            .as_slice()
             .iter()
             .map(|value| value / total)
             .collect::<Vec<_>>();

@@ -4,8 +4,7 @@ use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
 
-use ndarray::{ArrayD, ArrayView1, ArrayViewD};
-use physics_in_parallel::prelude::basic::{DenseMatrix, MatrixError};
+use physics_in_parallel::prelude::basic::{DenseMatrix, MatrixError, Tensor};
 use scientific_workflow::prelude::basics::{StateError, SystemState};
 use thiserror::Error as ThisError;
 
@@ -121,7 +120,7 @@ impl KernelCore {
 #[derive(Clone, Copy, Debug)]
 pub struct KernelStateView<'a> {
     abundance: &'a AggregateAbundance,
-    space: Option<&'a ArrayD<f64>>,
+    space: Option<&'a Tensor<f64>>,
 }
 
 impl<'a> KernelStateView<'a> {
@@ -138,7 +137,7 @@ impl<'a> KernelStateView<'a> {
     }
 
     /// Borrows spatial abundance when this is a spatial state.
-    pub const fn space(self) -> Option<&'a ArrayD<f64>> {
+    pub const fn space(self) -> Option<&'a Tensor<f64>> {
         self.space
     }
 }
@@ -150,37 +149,37 @@ impl<'a> KernelStateView<'a> {
 #[derive(Debug)]
 pub enum KernelUpdate<'a> {
     /// Replace aggregate abundance values only.
-    Abundance(ArrayView1<'a, f64>),
+    Abundance(&'a Tensor<f64>),
     /// Replace spatial abundance values only.
-    Space(ArrayViewD<'a, f64>),
+    Space(&'a Tensor<f64>),
     /// Replace aggregate and spatial values as one atomic update.
     Both {
         /// Proposed aggregate abundance.
-        abundance: ArrayView1<'a, f64>,
+        abundance: &'a Tensor<f64>,
         /// Proposed spatial abundance.
-        space: ArrayViewD<'a, f64>,
+        space: &'a Tensor<f64>,
     },
 }
 
 /// Model-owned instantaneous right-hand side evaluated at canonical state.
 pub enum KernelResidual<'a> {
-    Abundance(ArrayView1<'a, f64>),
-    Space(ArrayViewD<'a, f64>),
+    Abundance(&'a Tensor<f64>),
+    Space(&'a Tensor<f64>),
 }
 
 impl<'a> KernelUpdate<'a> {
     /// Creates an aggregate-only update.
-    pub const fn abundance(values: ArrayView1<'a, f64>) -> Self {
+    pub const fn abundance(values: &'a Tensor<f64>) -> Self {
         Self::Abundance(values)
     }
 
     /// Creates a spatial-only update.
-    pub const fn space(values: ArrayViewD<'a, f64>) -> Self {
+    pub const fn space(values: &'a Tensor<f64>) -> Self {
         Self::Space(values)
     }
 
     /// Creates a coordinated aggregate-and-spatial update.
-    pub const fn both(abundance: ArrayView1<'a, f64>, space: ArrayViewD<'a, f64>) -> Self {
+    pub const fn both(abundance: &'a Tensor<f64>, space: &'a Tensor<f64>) -> Self {
         Self::Both { abundance, space }
     }
 }
@@ -341,17 +340,17 @@ where
                 let abundance = state
                     .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
                     .map_err(KernelStepError::State)?;
-                if values.len() != abundance.len() {
+                if values.shape() != abundance.shape() {
                     return Err(KernelStepError::Residual(
                         KernelResidualError::AbundanceLength {
-                            expected: abundance.len(),
-                            actual: values.len(),
+                            expected: abundance.size(),
+                            actual: values.size(),
                         },
                     ));
                 }
                 maximum_scaled_component(
-                    values.iter().copied(),
-                    abundance.iter().copied(),
+                    values.as_slice().iter().copied(),
+                    abundance.as_slice().iter().copied(),
                     absolute_tolerance,
                     relative_tolerance,
                 )
@@ -371,8 +370,8 @@ where
                     }));
                 }
                 maximum_scaled_component(
-                    values.iter().copied(),
-                    space.iter().copied(),
+                    values.as_slice().iter().copied(),
+                    space.as_slice().iter().copied(),
                     absolute_tolerance,
                     relative_tolerance,
                 )
@@ -416,29 +415,30 @@ fn validate_update(
     update: &KernelUpdate<'_>,
 ) -> Result<(), KernelUpdateError> {
     match update {
-        KernelUpdate::Abundance(values) => validate_abundance(abundance, values.view()),
-        KernelUpdate::Space(values) => validate_space(space, values.view()),
+        KernelUpdate::Abundance(values) => validate_abundance(abundance, values),
+        KernelUpdate::Space(values) => validate_space(space, values),
         KernelUpdate::Both {
             abundance: values,
             space: spatial_values,
         } => {
-            validate_abundance(abundance, values.view())?;
-            validate_space(space, spatial_values.view())
+            validate_abundance(abundance, values)?;
+            validate_space(space, spatial_values)
         }
     }
 }
 
 fn validate_abundance(
     current: &AggregateAbundance,
-    proposed: ArrayView1<'_, f64>,
+    proposed: &Tensor<f64>,
 ) -> Result<(), KernelUpdateError> {
-    if proposed.len() != current.len() {
+    if proposed.shape() != current.shape() {
         return Err(KernelUpdateError::AbundanceLength {
-            expected: current.len(),
-            actual: proposed.len(),
+            expected: current.size(),
+            actual: proposed.size(),
         });
     }
     if let Some((index, value)) = proposed
+        .as_slice()
         .iter()
         .copied()
         .enumerate()
@@ -455,7 +455,7 @@ fn validate_abundance(
 
 fn validate_space(
     current: &SpatialAbundance,
-    proposed: ArrayViewD<'_, f64>,
+    proposed: &Tensor<f64>,
 ) -> Result<(), KernelUpdateError> {
     let current = current
         .as_ref()
@@ -467,6 +467,7 @@ fn validate_space(
         });
     }
     if let Some((index, value)) = proposed
+        .as_slice()
         .iter()
         .copied()
         .enumerate()
@@ -487,20 +488,26 @@ fn commit_update(
     update: KernelUpdate<'_>,
 ) {
     match update {
-        KernelUpdate::Abundance(values) => abundance.assign(&values),
+        KernelUpdate::Abundance(values) => abundance
+            .copy_from(values)
+            .expect("abundance shape was validated before commit"),
         KernelUpdate::Space(values) => space
             .as_mut()
             .expect("space presence was validated before commit")
-            .assign(&values),
+            .copy_from(values)
+            .expect("space shape was validated before commit"),
         KernelUpdate::Both {
             abundance: values,
             space: spatial_values,
         } => {
-            abundance.assign(&values);
+            abundance
+                .copy_from(values)
+                .expect("abundance shape was validated before commit");
             space
                 .as_mut()
                 .expect("space presence was validated before commit")
-                .assign(&spatial_values);
+                .copy_from(spatial_values)
+                .expect("space shape was validated before commit");
         }
     }
 }

@@ -41,17 +41,17 @@ impl InvariantPolicy for FrequencyInvariant {
         space: &SpatialAbundance,
         total: &TotalAbundance,
     ) -> Result<(), Self::Error> {
-        if abundance.len() != self.species {
+        if abundance.size() != self.species {
             return Err(InvariantPolicyError::SpeciesMismatch {
                 expected: self.species,
-                actual: abundance.len(),
+                actual: abundance.size(),
             });
         }
         if space.is_some() {
             return Err(InvariantPolicyError::UnexpectedSpace);
         }
         validate_abundance_values(abundance)?;
-        let sum = abundance.sum();
+        let sum = abundance.sum_serial();
         if !close(1.0, sum) {
             return Err(InvariantPolicyError::SimplexViolation { cell: 0, sum });
         }
@@ -70,23 +70,23 @@ impl InvariantPolicy for FrequencyInvariant {
         space: &mut SpatialAbundance,
         total: &mut TotalAbundance,
     ) -> Result<(), Self::Error> {
-        if abundance.len() != self.species {
+        if abundance.size() != self.species {
             return Err(InvariantPolicyError::SpeciesMismatch {
                 expected: self.species,
-                actual: abundance.len(),
+                actual: abundance.size(),
             });
         }
         if space.is_some() {
             return Err(InvariantPolicyError::UnexpectedSpace);
         }
-        for value in abundance.iter_mut() {
+        for value in abundance.as_mut_slice() {
             if !value.is_finite() || *value <= 0.0 || *value < self.cutoff {
                 *value = 0.0;
             }
         }
-        let sum = abundance.sum();
+        let sum = abundance.sum_serial();
         if sum > 0.0 {
-            abundance.mapv_inplace(|value| value / sum);
+            abundance.map_in_place(|value| value / sum);
         } else {
             abundance.fill(1.0 / self.species as f64);
         }

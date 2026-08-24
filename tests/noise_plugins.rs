@@ -8,8 +8,7 @@ use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TimeStep,
     TotalAbundance, load_state_schema,
 };
-use ndarray::{Array1, ArrayD, IxDyn};
-use physics_in_parallel::prelude::basic::RngConfig;
+use physics_in_parallel::prelude::basic::{RngConfig, Tensor};
 use scientific_workflow::system_state::{SimulationTime, SystemState};
 
 fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemState {
@@ -17,7 +16,10 @@ fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemStat
         .unwrap()
         .create_empty_state(SimulationTime::from_iteration_and_physical_time(5, 2.0).unwrap());
     state
-        .insert_payload(ABUNDANCE_FIELD, Array1::from_vec(abundance))
+        .insert_payload(
+            ABUNDANCE_FIELD,
+            Tensor::from_vec(&[abundance.len()], abundance),
+        )
         .unwrap();
     state.insert_payload(SPACE_FIELD, space).unwrap();
     state.insert_payload(TOTAL_FIELD, total).unwrap();
@@ -25,7 +27,7 @@ fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemStat
 }
 
 fn spatial(values: Vec<f64>) -> SpatialAbundance {
-    Some(ArrayD::from_shape_vec(IxDyn(&[2, 3]), values).unwrap())
+    Some(Tensor::from_vec(&[2, 3], values))
 }
 
 fn rng(seed: u64) -> RngConfig {
@@ -58,8 +60,16 @@ fn no_noise_is_zero_sized_and_changes_nothing() {
 #[test]
 fn demographic_noise_is_seeded_reproducible_and_reuses_scratch() {
     let domain = NoiseDomain::aggregate(3).unwrap();
-    let algorithm_a = DemographicGaussian::new(0.2, rng(17), domain.clone()).unwrap();
-    let algorithm_b = DemographicGaussian::new(0.2, rng(17), domain).unwrap();
+    let algorithm_a = DemographicGaussian::new(0.2, rng(17), domain.clone())
+        .unwrap()
+        .with_max_threads(1)
+        .unwrap();
+    let algorithm_b = DemographicGaussian::new(0.2, rng(17), domain)
+        .unwrap()
+        .with_max_threads(4)
+        .unwrap();
+    assert_eq!(algorithm_a.max_threads(), 1);
+    assert_eq!(algorithm_b.max_threads(), 4);
     let capacity = algorithm_a.scratch_capacity();
     let mut noise_a = Noise::new(algorithm_a);
     let mut noise_b = Noise::new(algorithm_b);
@@ -93,7 +103,7 @@ fn demographic_noise_is_seeded_reproducible_and_reuses_scratch() {
         state_a
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Array1::from_vec(vec![4.0, 9.0, 16.0])
+        &Tensor::from_vec(&[3], vec![4.0, 9.0, 16.0])
     );
     assert_eq!(noise_a.algorithm().scratch_capacity(), capacity);
     assert_eq!(state_a.simulation_time(), initial_time);
@@ -148,7 +158,7 @@ fn proportional_spatial_noise_updates_only_space_reproducibly() {
         .unwrap()
         .as_ref()
         .unwrap();
-    for cell in spatial.as_slice().unwrap().chunks_exact(3) {
+    for cell in spatial.as_slice().chunks_exact(3) {
         assert!((cell.iter().sum::<f64>() - 1.0).abs() <= 1.0e-12);
     }
 }
@@ -162,6 +172,14 @@ fn invalid_noise_configuration_and_inputs_fail_before_mutation() {
     assert!(matches!(
         NoiseDomain::spatial(Vec::<usize>::new()),
         Err(NoisePluginError::MissingSpeciesAxis)
+    ));
+    assert!(matches!(
+        DemographicGaussian::new(0.1, rng(1), NoiseDomain::aggregate(2).unwrap())
+            .unwrap()
+            .with_max_threads(0),
+        Err(NoisePluginError::TensorRng(
+            physics_in_parallel::prelude::basic::TensorRandError::InvalidMaxThreads
+        ))
     ));
 
     let mut noise = Noise::new(
@@ -180,19 +198,16 @@ fn invalid_noise_configuration_and_inputs_fail_before_mutation() {
     let after = state
         .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
         .unwrap();
-    assert!(before[0].is_nan() && after[0].is_nan());
-    assert_eq!(after[1], before[1]);
+    assert!(before.as_slice()[0].is_nan() && after.as_slice()[0].is_nan());
+    assert_eq!(after.as_slice()[1], before.as_slice()[1]);
 }
 
 #[test]
-fn spatial_noise_rejects_non_contiguous_storage() {
-    let mut values = ArrayD::from_shape_vec(
-        IxDyn(&[2, 2, 3]),
+fn spatial_noise_rejects_shape_mismatch() {
+    let values = Tensor::from_vec(
+        &[2, 6],
         vec![0.2, 0.3, 0.5, 0.4, 0.2, 0.4, 0.1, 0.7, 0.2, 0.3, 0.3, 0.4],
-    )
-    .unwrap();
-    values.swap_axes(0, 1);
-    assert!(values.as_slice().is_none());
+    );
 
     let state = state(vec![0.25, 0.35, 0.4], Some(values), 1.0);
     let noise = Noise::new(
@@ -203,7 +218,7 @@ fn spatial_noise_rejects_non_contiguous_storage() {
     assert!(matches!(
         noise.validate_state(&state),
         Err(general_lotka_volterra_rs::noise::NoiseStepError::Algorithm(
-            NoisePluginError::NonStandardSpaceLayout
+            NoisePluginError::SpaceShapeMismatch { .. }
         ))
     ));
 }

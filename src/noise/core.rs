@@ -107,6 +107,7 @@ impl fmt::Debug for GaussianWorkspace {
             .field("domain", &self.domain)
             .field("sigma", &self.sigma)
             .field("rng", &self.filler.rng_config())
+            .field("random_max_threads", &self.filler.max_threads())
             .field("proposed_len", &self.proposed.len())
             .finish_non_exhaustive()
     }
@@ -182,6 +183,16 @@ impl GaussianWorkspace {
         self.filler.rng_config()
     }
 
+    pub(crate) const fn max_threads(&self) -> usize {
+        self.filler.max_threads()
+    }
+
+    pub(crate) fn set_max_threads(&mut self, max_threads: usize) -> Result<(), NoisePluginError> {
+        self.filler
+            .set_max_threads(max_threads)
+            .map_err(NoisePluginError::TensorRng)
+    }
+
     pub(crate) const fn domain(&self) -> &NoiseDomain {
         &self.domain
     }
@@ -210,10 +221,10 @@ impl GaussianWorkspace {
         space: &'a SpatialAbundance,
         kind: GaussianKind,
     ) -> Result<&'a [f64], NoisePluginError> {
-        if abundance.len() != self.domain.species() {
+        if abundance.size() != self.domain.species() {
             return Err(NoisePluginError::SpeciesMismatch {
                 expected: self.domain.species(),
-                actual: abundance.len(),
+                actual: abundance.size(),
             });
         }
         let target = self.target(abundance, space)?;
@@ -263,15 +274,13 @@ impl GaussianWorkspace {
             }
         }
         match &self.domain {
-            NoiseDomain::Aggregate { .. } => abundance
-                .as_slice_mut()
-                .expect("aggregate abundance uses standard contiguous storage")
-                .copy_from_slice(&self.proposed),
+            NoiseDomain::Aggregate { .. } => {
+                abundance.as_mut_slice().copy_from_slice(&self.proposed)
+            }
             NoiseDomain::Spatial { .. } => space
                 .as_mut()
                 .expect("space presence was validated before noise commit")
-                .as_slice_mut()
-                .expect("space layout was validated before noise commit")
+                .as_mut_slice()
                 .copy_from_slice(&self.proposed),
         }
         Ok(())
@@ -287,9 +296,7 @@ impl GaussianWorkspace {
                 if space.is_some() {
                     return Err(NoisePluginError::UnexpectedSpace);
                 }
-                abundance
-                    .as_slice()
-                    .ok_or(NoisePluginError::NonStandardAbundanceLayout)
+                Ok(abundance.as_slice())
             }
             NoiseDomain::Spatial { shape, .. } => {
                 let space = space.as_ref().ok_or(NoisePluginError::SpaceRequired)?;
@@ -299,9 +306,7 @@ impl GaussianWorkspace {
                         actual: space.shape().to_vec(),
                     });
                 }
-                space
-                    .as_slice()
-                    .ok_or(NoisePluginError::NonStandardSpaceLayout)
+                Ok(space.as_slice())
             }
         }
     }

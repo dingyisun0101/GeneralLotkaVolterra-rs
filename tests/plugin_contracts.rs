@@ -9,7 +9,7 @@ use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TimeStep,
     TimeStepError, TotalAbundance, load_state_schema,
 };
-use ndarray::{Array1, Array2, ArrayD, IxDyn, arr2};
+use physics_in_parallel::prelude::basic::{DenseMatrix, Tensor};
 use scientific_workflow::system_state::{SimulationTime, SystemState};
 use support::interaction_from_array;
 use thiserror::Error;
@@ -28,7 +28,10 @@ fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemStat
     let mut state = schema.create_empty_state(time);
     assert!(
         state
-            .insert_payload(ABUNDANCE_FIELD, Array1::from_vec(abundance))
+            .insert_payload(
+                ABUNDANCE_FIELD,
+                Tensor::from_vec(&[abundance.len()], abundance)
+            )
             .unwrap()
             .is_none()
     );
@@ -40,7 +43,7 @@ fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemStat
 #[derive(Debug)]
 struct EulerInteraction {
     require_space: bool,
-    scratch: Array1<f64>,
+    scratch: Tensor<f64>,
     steps: usize,
 }
 
@@ -48,7 +51,7 @@ impl EulerInteraction {
     fn new(require_space: bool) -> Self {
         Self {
             require_space,
-            scratch: Array1::zeros(0),
+            scratch: Tensor::zeros(&[1]),
             steps: 0,
         }
     }
@@ -59,10 +62,10 @@ impl KernelAlgorithm for EulerInteraction {
 
     fn validate(&self, core: &KernelCore, state: KernelStateView<'_>) -> Result<(), Self::Error> {
         let abundance = state.abundance();
-        if abundance.len() != core.species() {
+        if abundance.size() != core.species() {
             return Err(TestPluginError::SpeciesMismatch {
                 expected: core.species(),
-                actual: abundance.len(),
+                actual: abundance.size(),
             });
         }
         if self.require_space && state.space().is_none() {
@@ -77,22 +80,22 @@ impl KernelAlgorithm for EulerInteraction {
         state: KernelStateView<'_>,
         time_step: TimeStep,
     ) -> Result<KernelUpdate<'algorithm>, Self::Error> {
-        if self.scratch.len() != core.species() {
-            self.scratch = Array1::zeros(core.species());
+        if self.scratch.size() != core.species() {
+            self.scratch = Tensor::zeros(&[core.species()]);
         }
         let abundance = state.abundance();
-        core.apply_interaction(
-            abundance.as_slice().expect("test abundance is contiguous"),
-            self.scratch
-                .as_slice_mut()
-                .expect("test scratch is contiguous"),
-        )
-        .expect("validated test dimensions match");
-        for (proposed, current) in self.scratch.iter_mut().zip(abundance) {
+        core.apply_interaction(abundance.as_slice(), self.scratch.as_mut_slice())
+            .expect("validated test dimensions match");
+        for (proposed, current) in self
+            .scratch
+            .as_mut_slice()
+            .iter_mut()
+            .zip(abundance.as_slice())
+        {
             *proposed = *current + time_step.get() * *proposed;
         }
         self.steps += 1;
-        Ok(KernelUpdate::abundance(self.scratch.view()))
+        Ok(KernelUpdate::abundance(&self.scratch))
     }
 }
 
@@ -113,7 +116,7 @@ impl NoiseAlgorithm for AdditiveNoise {
         abundance: &AggregateAbundance,
         _space: &SpatialAbundance,
     ) -> Result<(), Self::Error> {
-        if abundance.is_empty() {
+        if abundance.size() == 0 {
             return Err(TestPluginError::SpeciesMismatch {
                 expected: 1,
                 actual: 0,
@@ -129,6 +132,7 @@ impl NoiseAlgorithm for AdditiveNoise {
         time_step: TimeStep,
     ) -> Result<(), Self::Error> {
         abundance
+            .as_mut_slice()
             .iter_mut()
             .for_each(|value| *value += time_step.get());
         self.updates += 1;
@@ -148,7 +152,7 @@ impl InvariantPolicy for SumInvariant {
         _space: &SpatialAbundance,
         _total: &TotalAbundance,
     ) -> Result<(), Self::Error> {
-        if abundance.is_empty() {
+        if abundance.size() == 0 {
             return Err(TestPluginError::SpeciesMismatch {
                 expected: 1,
                 actual: 0,
@@ -163,14 +167,15 @@ impl InvariantPolicy for SumInvariant {
         _space: &mut SpatialAbundance,
         total: &mut TotalAbundance,
     ) -> Result<(), Self::Error> {
-        *total = abundance.sum();
+        *total = abundance.sum_serial();
         Ok(())
     }
 }
 
 #[test]
 fn kernel_core_validates_and_applies_one_shared_matrix() {
-    let matrix = interaction_from_array(arr2(&[[2.0, -1.0], [0.5, 3.0]])).unwrap();
+    let matrix =
+        interaction_from_array(DenseMatrix::from_vec(2, 2, vec![2.0, -1.0, 0.5, 3.0])).unwrap();
     let core = KernelCore::new(matrix);
     let shared = core.shared_interaction();
     assert!(std::ptr::eq(core.interaction(), shared.as_ref()));
@@ -180,11 +185,11 @@ fn kernel_core_validates_and_applies_one_shared_matrix() {
     assert_eq!(output, [6.0, 8.0]);
 
     assert!(matches!(
-        interaction_from_array(Array2::zeros((2, 3))),
+        interaction_from_array(DenseMatrix::zeros(2, 3)),
         Err(InteractionMatrixError::NonSquare { .. })
     ));
     assert!(matches!(
-        interaction_from_array(Array2::from_shape_vec((1, 1), vec![f64::NAN]).unwrap()),
+        interaction_from_array(DenseMatrix::from_vec(1, 1, vec![f64::NAN])),
         Err(InteractionMatrixError::NonFiniteEntry { .. })
     ));
     assert!(matches!(
@@ -195,7 +200,9 @@ fn kernel_core_validates_and_applies_one_shared_matrix() {
 
 #[test]
 fn plugins_mutate_only_borrowed_payloads_and_never_advance_time() {
-    let core = KernelCore::new(interaction_from_array(arr2(&[[0.0, 1.0], [1.0, 0.0]])).unwrap());
+    let core = KernelCore::new(
+        interaction_from_array(DenseMatrix::from_vec(2, 2, vec![0.0, 1.0, 1.0, 0.0])).unwrap(),
+    );
     let mut kernel = Kernel::new(core, EulerInteraction::new(false));
     let mut noise = Noise::new(AdditiveNoise { updates: 0 });
     let mut invariant = SumInvariant;
@@ -220,7 +227,7 @@ fn plugins_mutate_only_borrowed_payloads_and_never_advance_time() {
         state
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Array1::from_vec(vec![2.25, 2.75])
+        &Tensor::from_vec(&[2], vec![2.25, 2.75])
     );
     assert_eq!(*state.payload::<TotalAbundance>(TOTAL_FIELD).unwrap(), 5.0);
     assert_eq!(kernel.algorithm().steps, 1);
@@ -229,7 +236,9 @@ fn plugins_mutate_only_borrowed_payloads_and_never_advance_time() {
 
 #[test]
 fn incompatible_spatial_kernel_fails_validation_before_evolution() {
-    let core = KernelCore::new(interaction_from_array(Array2::eye(2)).unwrap());
+    let core = KernelCore::new(
+        interaction_from_array(DenseMatrix::from_vec(2, 2, vec![1.0, 0.0, 0.0, 1.0])).unwrap(),
+    );
     let kernel = Kernel::new(core, EulerInteraction::new(true));
     let state = state(vec![0.5, 0.5], None, 1.0);
 
@@ -242,10 +251,12 @@ fn incompatible_spatial_kernel_fails_validation_before_evolution() {
 
 #[test]
 fn validated_time_steps_reject_invalid_increments_before_mutation() {
-    let core = KernelCore::new(interaction_from_array(Array2::eye(2)).unwrap());
+    let core = KernelCore::new(
+        interaction_from_array(DenseMatrix::from_vec(2, 2, vec![1.0, 0.0, 0.0, 1.0])).unwrap(),
+    );
     let kernel = Kernel::new(core, EulerInteraction::new(false));
     let noise = Noise::new(AdditiveNoise { updates: 0 });
-    let state = state(vec![0.5, 0.5], Some(ArrayD::zeros(IxDyn(&[1, 2]))), 1.0);
+    let state = state(vec![0.5, 0.5], Some(Tensor::zeros(&[1, 2])), 1.0);
 
     assert!(matches!(
         TimeStep::new(f64::NAN),
@@ -261,7 +272,7 @@ fn validated_time_steps_reject_invalid_increments_before_mutation() {
         state
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Array1::from_vec(vec![0.5, 0.5])
+        &Tensor::from_vec(&[2], vec![0.5, 0.5])
     );
 }
 mod support;

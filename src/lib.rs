@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use ndarray::{Array1, ArrayD};
+use physics_in_parallel::prelude::basic::Tensor;
 use scientific_workflow::prelude::basics::{StateError, SystemStateSchema};
 use serde::{Deserialize, Serialize};
 
@@ -27,6 +27,11 @@ pub mod workload;
 pub use study_inputs::{GlvConfiguration, GlvInputs, GlvInputsError};
 pub use template::{GlvTemplate, INTERACTION_INPUT_KEY, InteractionInput, TemplateTaskError};
 pub use workload::{GlvWorkload, GlvWorkloadError};
+
+/// Explicit reusable worker pool for callers that want to bound an entire GLV
+/// computation. Plain GLV operations use the current Rayon pool and create no
+/// pool of their own.
+pub use physics_in_parallel::prelude::basic::{ComputePool, ComputePoolError, with_threads};
 
 pub use simulation::{
     MeanFieldReplicator, MeanFieldReplicatorConfig, SpatialGeneralLotkaVolterra,
@@ -61,13 +66,13 @@ pub const SPACE_STREAM: &str = "space";
 pub const CHECKPOINT_STREAM: &str = "checkpoint";
 
 /// Aggregate species-abundance payload shared by every implemented model.
-pub type AggregateAbundance = Array1<f64>;
+pub type AggregateAbundance = Tensor<f64>;
 
 /// Spatial payload shared by every model.
 ///
 /// A populated workflow slot contains `None` for a non-spatial model and
-/// `Some(ArrayD<f64>)` for a spatial model.
-pub type SpatialAbundance = Option<ArrayD<f64>>;
+/// `Some(Tensor<f64>)` for a spatial model.
+pub type SpatialAbundance = Option<Tensor<f64>>;
 
 /// Total-abundance payload shared by every implemented model.
 pub type TotalAbundance = f64;

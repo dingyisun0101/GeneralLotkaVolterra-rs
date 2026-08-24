@@ -21,7 +21,7 @@ Add the crate:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = "0.12.0"
+general-lotka-volterra-rs = "0.13.0"
 scientific-workflow = "0.7.2"
 ```
 
@@ -257,14 +257,14 @@ Every model uses the schema in `schemas/state.json`:
 
 | Field | Rust payload | Meaning |
 | --- | --- | --- |
-| `abundance` | `Array1<f64>` | Aggregate species abundance |
-| `space` | `Option<ArrayD<f64>>` | `None` for mean-field models; a species-last array for spatial models |
+| `abundance` | `Tensor<f64>` | Rank-one PiP tensor of aggregate species abundance |
+| `space` | `Option<Tensor<f64>>` | `None` for mean-field models; a species-last PiP tensor for spatial models |
 | `total` | `f64` | Total abundance; frequency models use `1.0` |
 
 The state also carries an integer iteration and continuous physical time.
 
 Spatial population `total` preserves the historical rounded aggregate
-convention. Spatial and aggregate arrays retain full floating-point values.
+convention. Spatial and aggregate tensors retain full floating-point values.
 Individual studies do not copy this file and cannot override the model's
 state contract. Workflow embeds the resolved schema in every recording.
 
@@ -281,7 +281,38 @@ verified input artifact, and records its identity and digest with the output.
 
 Spatial interaction is evaluated as one species-last batch. PiP owns the
 bounded internal parallel work, and GLV compares this path against independent
-per-cell ndarray linear algebra in its correctness tests.
+per-cell scalar references in its correctness tests. Matrix application,
+lattice Laplacians, and large elementwise tensor transforms use PiP's adaptive
+Rayon execution; small workloads stay serial to avoid parallel overhead.
+
+## Threading
+
+GLV operations use the current Rayon pool through PiP and never create a pool
+implicitly. Workflow applications should normally configure their existing
+execution pool and call GLV normally, allowing task-level and numerical work to
+share the same workers.
+
+For direct use, GLV re-exports PiP's explicit convenience pool:
+
+```rust,no_run
+use general_lotka_volterra_rs::ComputePool;
+
+let pool = ComputePool::new(8)?;
+pool.install(|| {
+    // Construct and step one or more GLV simulations here.
+});
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`with_threads` is available for a single operation; a reusable `ComputePool`
+avoids recreating workers across simulation steps. Neither control is part of
+scientific inputs or serialized Workflow state.
+
+Gaussian noise has a separate instance-local control:
+`DemographicGaussian::with_max_threads` and
+`ProportionalGaussian::with_max_threads` bound how many workers that one random
+filler may occupy. They do not resize the surrounding pool or change seeded
+random values.
 
 ## Recording and reading
 
@@ -309,9 +340,10 @@ Python standard library and refuses to overwrite an existing destination.
 
 The separately packaged `general-lotka-volterra-reader` distribution composes
 Workflow's official reader with GLV-owned NumPy decoders. It validates the
-versioned ndarray representation, model identity, abundance interpretation,
-rank, shape, finiteness, and nonnegativity before exposing contiguous arrays.
-Its payload fixture is serialized by a Rust conformance test.
+versioned PiP dense-tensor representation, model identity, abundance
+interpretation, rank, shape, finiteness, and nonnegativity before exposing
+contiguous arrays. Its payload fixture is serialized by a Rust conformance
+test.
 
 ## Advanced composition
 
@@ -343,9 +375,20 @@ the existing running recording.
 
 ## Validation
 
-Normal Rust tests compare deterministic mean-field and spatial trajectories
-with and without diffusion against checked-in values from an independent
-high-resolution RK4 reference implementation:
+Every built-in simulation composition is compared at every step with an
+allocation-naive scalar reference solver. These tests independently implement
+matrix-vector products, RK4 or midpoint RK2, row-major lattice neighbors,
+diffusion, cutoff and carrying-capacity invariants, aggregate synchronization,
+and demographic-noise application. The stochastic comparison shares only the
+documented seeded normal stream as external forcing:
+
+```sh
+cargo test --test naive_solver
+```
+
+Deterministic mean-field and spatial GLV trajectories are additionally
+compared against checked-in values from an independent high-resolution RK4
+reference implementation:
 
 ```sh
 cargo test --test ground_truth

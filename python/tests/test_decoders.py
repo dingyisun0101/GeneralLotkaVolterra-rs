@@ -18,14 +18,26 @@ class DecoderTests(unittest.TestCase):
         np.testing.assert_array_equal(decoded, [0.2, 0.3, 0.5])
 
     def test_species_last_space_is_reshaped(self) -> None:
-        value = {"v": 1, "dim": [2, 2, 2], "data": list(range(8))}
+        value = {
+            "kind": "tensor",
+            "version": 1,
+            "scalar": "f64",
+            "shape": [2, 2, 2],
+            "data": list(range(8)),
+        }
         decoded = decode_space(value)
         self.assertEqual(decoded.shape, (2, 2, 2))
         self.assertEqual(decoded[1, 1, 1], 7.0)
 
     def test_invalid_shape_fails_closed(self) -> None:
         with self.assertRaises(GlvPayloadError):
-            decode_abundance({"v": 1, "dim": [2], "data": [1.0]})
+            decode_abundance({
+                "kind": "tensor",
+                "version": 1,
+                "scalar": "f64",
+                "shape": [2],
+                "data": [1.0],
+            })
 
 
 if __name__ == "__main__":

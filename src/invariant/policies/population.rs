@@ -76,9 +76,7 @@ impl PopulationInvariant {
                 actual: spatial_species,
             });
         }
-        let values = space
-            .as_slice()
-            .ok_or(InvariantPolicyError::NonStandardSpaceLayout)?;
+        let values = space.as_slice();
         if values.is_empty() {
             return Err(InvariantPolicyError::EmptySpatialDomain);
         }
@@ -95,10 +93,10 @@ impl InvariantPolicy for PopulationInvariant {
         space: &SpatialAbundance,
         total: &TotalAbundance,
     ) -> Result<(), Self::Error> {
-        if abundance.len() != self.species {
+        if abundance.size() != self.species {
             return Err(InvariantPolicyError::SpeciesMismatch {
                 expected: self.species,
-                actual: abundance.len(),
+                actual: abundance.size(),
             });
         }
         validate_abundance_values(abundance)?;
@@ -110,17 +108,18 @@ impl InvariantPolicy for PopulationInvariant {
                 totals[species] += value;
             }
         }
+        let abundance_values = abundance.as_slice();
         for species in 0..self.species {
             let expected = totals[species];
-            if !close(expected, abundance[species]) {
+            if !close(expected, abundance_values[species]) {
                 return Err(InvariantPolicyError::AggregateMismatch {
                     species,
                     expected,
-                    actual: abundance[species],
+                    actual: abundance_values[species],
                 });
             }
         }
-        let exact_total = abundance.sum();
+        let exact_total = abundance.sum_serial();
         if let Some(capacity) = self.carrying_capacity
             && exact_total > capacity
             && !close(capacity, exact_total)
@@ -146,10 +145,10 @@ impl InvariantPolicy for PopulationInvariant {
         space: &mut SpatialAbundance,
         total: &mut TotalAbundance,
     ) -> Result<(), Self::Error> {
-        if abundance.len() != self.species {
+        if abundance.size() != self.species {
             return Err(InvariantPolicyError::SpeciesMismatch {
                 expected: self.species,
-                actual: abundance.len(),
+                actual: abundance.size(),
             });
         }
         let space = space.as_mut().ok_or(InvariantPolicyError::SpaceRequired)?;
@@ -164,9 +163,7 @@ impl InvariantPolicy for PopulationInvariant {
                 actual: spatial_species,
             });
         }
-        let values = space
-            .as_slice_mut()
-            .ok_or(InvariantPolicyError::NonStandardSpaceLayout)?;
+        let values = space.as_mut_slice();
         if values.is_empty() {
             return Err(InvariantPolicyError::EmptySpatialDomain);
         }
@@ -193,7 +190,7 @@ impl InvariantPolicy for PopulationInvariant {
                 exact_total = capacity;
             }
         }
-        for (value, sum) in abundance.iter_mut().zip(&self.totals) {
+        for (value, sum) in abundance.as_mut_slice().iter_mut().zip(&self.totals) {
             *value = *sum;
         }
         *total = exact_total.round().max(0.0);

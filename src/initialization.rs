@@ -4,8 +4,7 @@ use ecological_model_core::initial_state::{
     InitialState, InitialStateArtifactDescriptor, InitialStateError, InitialStateSource,
     PersistedInitialState, persist_initial_state,
 };
-use ndarray::{ArrayD, IxDyn};
-use physics_in_parallel::prelude::basic::SquareLatticeConfig;
+use physics_in_parallel::prelude::basic::{SquareLatticeConfig, Tensor, TensorError};
 use scientific_workflow::prelude::basics::ExecutionScope;
 use thiserror::Error;
 
@@ -48,7 +47,7 @@ impl ResolvedSpatialInitialState {
 pub fn categorical_to_species_field(
     initial: &InitialState,
     site_abundance: f64,
-) -> Result<ArrayD<f64>, SpatialInitializationError> {
+) -> Result<Tensor<f64>, SpatialInitializationError> {
     if !site_abundance.is_finite() || site_abundance <= 0.0 {
         return Err(SpatialInitializationError::InvalidSiteAbundance {
             value: site_abundance,
@@ -60,7 +59,7 @@ pub fn categorical_to_species_field(
     for (site, &taxon) in initial.space().data().iter().enumerate() {
         values[site * initial.num_taxa() + taxon] = site_abundance;
     }
-    Ok(ArrayD::from_shape_vec(IxDyn(&shape), values)?)
+    Ok(Tensor::try_from_vec(&shape, values)?)
 }
 
 #[derive(Debug, Error)]
@@ -71,7 +70,7 @@ pub enum SpatialInitializationError {
     #[error("site_abundance must be positive and finite, got {value}")]
     InvalidSiteAbundance { value: f64 },
     #[error(transparent)]
-    Shape(#[from] ndarray::ShapeError),
+    Tensor(#[from] TensorError),
 }
 
 #[cfg(test)]
@@ -95,8 +94,8 @@ mod tests {
         let field = categorical_to_species_field(&initial, 2.5).unwrap();
         assert_eq!(field.shape(), &[3, 2]);
         for (site, &taxon) in initial.space().data().iter().enumerate() {
-            assert_eq!(field[[site, taxon]], 2.5);
-            assert_eq!(field[[site, 1 - taxon]], 0.0);
+            assert_eq!(field.get(&[site as isize, taxon as isize]), 2.5);
+            assert_eq!(field.get(&[site as isize, (1 - taxon) as isize]), 0.0);
         }
     }
 }

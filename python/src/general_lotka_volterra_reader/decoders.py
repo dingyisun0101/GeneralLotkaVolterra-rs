@@ -14,21 +14,22 @@ class GlvPayloadError(ValueError):
     """A JSON payload violates GLV's canonical model-state contract."""
 
 
-def _ndarray(value: Any, *, rank: int | None, field: str) -> np.ndarray:
-    if not isinstance(value, dict) or set(value) != {"v", "dim", "data"}:
-        raise GlvPayloadError(f"{field} must be an ndarray v1 object")
-    if value["v"] != 1:
-        raise GlvPayloadError(f"{field} has unsupported ndarray version")
-    raw_shape = value["dim"]
-    if isinstance(raw_shape, bool):
+def _tensor(value: Any, *, rank: int | None, field: str) -> np.ndarray:
+    expected_keys = {"kind", "version", "scalar", "shape", "data"}
+    if not isinstance(value, dict) or set(value) != expected_keys:
+        raise GlvPayloadError(f"{field} must be a PiP dense tensor v1 object")
+    if value["kind"] != "tensor" or value["version"] != 1:
+        raise GlvPayloadError(f"{field} has unsupported PiP tensor format")
+    if value["scalar"] != "f64":
+        raise GlvPayloadError(f"{field} must use the PiP f64 scalar type")
+    raw_shape = value["shape"]
+    if not isinstance(raw_shape, list):
         raise GlvPayloadError(f"{field} has invalid dimensions")
-    if isinstance(raw_shape, int):
-        shape = (raw_shape,)
-    elif isinstance(raw_shape, list):
-        shape = tuple(raw_shape)
-    else:
-        raise GlvPayloadError(f"{field} has invalid dimensions")
-    if not shape or any(isinstance(axis, bool) or not isinstance(axis, int) or axis <= 0 for axis in shape):
+    shape = tuple(raw_shape)
+    if not shape or any(
+        isinstance(axis, bool) or not isinstance(axis, int) or axis <= 0
+        for axis in shape
+    ):
         raise GlvPayloadError(f"{field} dimensions must be positive integers")
     if rank is not None and len(shape) != rank:
         raise GlvPayloadError(f"{field} must have rank {rank}, found {len(shape)}")
@@ -42,7 +43,7 @@ def _ndarray(value: Any, *, rank: int | None, field: str) -> np.ndarray:
 
 def decode_abundance(value: Any) -> np.ndarray:
     """Decodes GLV's canonical one-dimensional abundance payload."""
-    abundance = _ndarray(value, rank=1, field="abundance")
+    abundance = _tensor(value, rank=1, field="abundance")
     if np.any(abundance < 0.0):
         raise GlvPayloadError("abundance contains negative values")
     return abundance
@@ -52,7 +53,7 @@ def decode_space(value: Any) -> np.ndarray | None:
     """Decodes optional species-last spatial abundance."""
     if value is None:
         return None
-    space = _ndarray(value, rank=None, field="space")
+    space = _tensor(value, rank=None, field="space")
     if space.ndim < 2:
         raise GlvPayloadError("space must have at least one spatial axis and one species axis")
     if np.any(space < 0.0):

@@ -249,7 +249,7 @@ where
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use ndarray::Array1;
+    use physics_in_parallel::prelude::basic::Tensor;
     use scientific_workflow::prelude::basics::{
         RngRecord, SimulationTime, StateError, SystemState,
     };
@@ -273,7 +273,7 @@ mod tests {
 
     #[derive(Debug)]
     struct TestKernel {
-        scratch: Array1<f64>,
+        scratch: Tensor<f64>,
         calls: CallLog,
     }
 
@@ -285,7 +285,7 @@ mod tests {
             core: &KernelCore,
             state: KernelStateView<'_>,
         ) -> Result<(), Self::Error> {
-            (state.abundance().len() == core.species())
+            (state.abundance().size() == core.species())
                 .then_some(())
                 .ok_or(TestError)
         }
@@ -297,9 +297,11 @@ mod tests {
             _time_step: TimeStep,
         ) -> Result<KernelUpdate<'a>, Self::Error> {
             self.calls.lock().unwrap().push("kernel");
-            self.scratch.assign(state.abundance());
-            self.scratch.mapv_inplace(|value| value + 1.0);
-            Ok(KernelUpdate::abundance(self.scratch.view()))
+            self.scratch
+                .copy_from(state.abundance())
+                .map_err(|_| TestError)?;
+            self.scratch.map_in_place(|value| value + 1.0);
+            Ok(KernelUpdate::abundance(&self.scratch))
         }
     }
 
@@ -339,7 +341,7 @@ mod tests {
             if self.fail {
                 return Err(TestError);
             }
-            abundance.mapv_inplace(|value| value + 2.0);
+            abundance.map_in_place(|value| value + 2.0);
             Ok(())
         }
     }
@@ -366,7 +368,7 @@ mod tests {
             total: &mut TotalAbundance,
         ) -> Result<(), Self::Error> {
             self.0.lock().unwrap().push("invariant");
-            *total = abundance.sum();
+            *total = abundance.sum_serial();
             Ok(())
         }
     }
@@ -374,7 +376,7 @@ mod tests {
     fn state(time: SimulationTime) -> SystemState {
         let mut state = load_state_schema().unwrap().create_empty_state(time);
         state
-            .insert_payload(ABUNDANCE_FIELD, Array1::from_vec(vec![1.0]))
+            .insert_payload(ABUNDANCE_FIELD, Tensor::from_vec(&[1], vec![1.0]))
             .unwrap();
         state
             .insert_payload(SPACE_FIELD, SpatialAbundance::None)
@@ -395,7 +397,7 @@ mod tests {
             Kernel::new(
                 KernelCore::new(interaction),
                 TestKernel {
-                    scratch: Array1::zeros(1),
+                    scratch: Tensor::zeros(&[1]),
                     calls: Arc::clone(&calls),
                 },
             ),
@@ -426,7 +428,8 @@ mod tests {
             engine
                 .state()
                 .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
-                .unwrap()[0],
+                .unwrap()
+                .as_slice()[0],
             4.0
         );
         assert_eq!(engine.into_state().simulation_time(), advanced);
@@ -479,7 +482,7 @@ mod tests {
             Kernel::new(
                 KernelCore::new(interaction),
                 TestKernel {
-                    scratch: Array1::zeros(1),
+                    scratch: Tensor::zeros(&[1]),
                     calls: Arc::clone(&calls),
                 },
             ),

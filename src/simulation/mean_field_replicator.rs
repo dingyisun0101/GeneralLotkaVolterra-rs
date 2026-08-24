@@ -1,6 +1,6 @@
 //! Concrete mean-field replicator simulation.
 
-use ndarray::Array1;
+use physics_in_parallel::prelude::basic::Tensor;
 use scientific_workflow::prelude::basics::{RngRecord, SimulationTime, SystemState};
 
 use crate::engine::{Engine, EngineStepError};
@@ -19,14 +19,14 @@ use super::{
 /// Immutable inputs that distinguish one mean-field replicator simulation.
 #[derive(Clone, Debug)]
 pub struct MeanFieldReplicatorConfig {
-    growth: Array1<f64>,
+    growth: Tensor<f64>,
     cutoff: f64,
     time_step: TimeStep,
 }
 
 impl MeanFieldReplicatorConfig {
     /// Collects typed model inputs; full domain validation occurs at simulation construction.
-    pub const fn new(growth: Array1<f64>, cutoff: f64, time_step: TimeStep) -> Self {
+    pub const fn new(growth: Tensor<f64>, cutoff: f64, time_step: TimeStep) -> Self {
         Self {
             growth,
             cutoff,
@@ -35,7 +35,7 @@ impl MeanFieldReplicatorConfig {
     }
 
     /// Borrows intrinsic per-species growth rates.
-    pub const fn growth(&self) -> &Array1<f64> {
+    pub const fn growth(&self) -> &Tensor<f64> {
         &self.growth
     }
 
@@ -59,7 +59,7 @@ pub struct MeanFieldReplicator<A = MeanFieldReplicatorRk4, N = NoNoise> {
 impl MeanFieldReplicator {
     /// Builds a deterministic simulation at iteration zero from normalized frequencies.
     pub fn new(
-        initial_abundance: Array1<f64>,
+        initial_abundance: Tensor<f64>,
         interaction: InteractionMatrix,
         config: MeanFieldReplicatorConfig,
     ) -> Result<Self, DefaultSimulationBuildError> {
@@ -80,7 +80,7 @@ impl MeanFieldReplicator {
         } = config;
         let algorithm =
             MeanFieldReplicatorRk4::new(growth).map_err(DefaultSimulationBuildError::Kernel)?;
-        let species = algorithm.growth().len();
+        let species = algorithm.growth().size();
         let invariant = FrequencyInvariant::new(species, cutoff)
             .map_err(DefaultSimulationBuildError::Invariant)?;
         Self::from_plugins(

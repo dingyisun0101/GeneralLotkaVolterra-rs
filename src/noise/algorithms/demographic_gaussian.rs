@@ -40,6 +40,22 @@ impl DemographicGaussian {
         self.workspace.rng_config()
     }
 
+    /// Returns the maximum workers that this plugin's random filler may occupy.
+    pub const fn max_threads(&self) -> usize {
+        self.workspace.max_threads()
+    }
+
+    /// Sets the maximum workers that this plugin's random filler may occupy.
+    pub fn set_max_threads(&mut self, max_threads: usize) -> Result<(), NoisePluginError> {
+        self.workspace.set_max_threads(max_threads)
+    }
+
+    /// Returns this plugin with a new random-instance worker maximum.
+    pub fn with_max_threads(mut self, max_threads: usize) -> Result<Self, NoisePluginError> {
+        self.set_max_threads(max_threads)?;
+        Ok(self)
+    }
+
     /// Borrows the fixed aggregate or spatial domain.
     pub const fn domain(&self) -> &NoiseDomain {
         self.workspace.domain()

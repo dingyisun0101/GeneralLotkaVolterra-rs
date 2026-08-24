@@ -57,9 +57,7 @@ impl LocalFrequencyInvariant {
                 actual: spatial_species,
             });
         }
-        let values = space
-            .as_slice()
-            .ok_or(InvariantPolicyError::NonStandardSpaceLayout)?;
+        let values = space.as_slice();
         let cells = values.len() / self.species;
         if cells == 0 {
             return Err(InvariantPolicyError::EmptySpatialDomain);
@@ -77,10 +75,10 @@ impl InvariantPolicy for LocalFrequencyInvariant {
         space: &SpatialAbundance,
         total: &TotalAbundance,
     ) -> Result<(), Self::Error> {
-        if abundance.len() != self.species {
+        if abundance.size() != self.species {
             return Err(InvariantPolicyError::SpeciesMismatch {
                 expected: self.species,
-                actual: abundance.len(),
+                actual: abundance.size(),
             });
         }
         validate_abundance_values(abundance)?;
@@ -97,6 +95,7 @@ impl InvariantPolicy for LocalFrequencyInvariant {
                 return Err(InvariantPolicyError::SimplexViolation { cell, sum });
             }
         }
+        let abundance = abundance.as_slice();
         for species in 0..self.species {
             let expected = totals[species] / cells as f64;
             if !close(expected, abundance[species]) {
@@ -122,10 +121,10 @@ impl InvariantPolicy for LocalFrequencyInvariant {
         space: &mut SpatialAbundance,
         total: &mut TotalAbundance,
     ) -> Result<(), Self::Error> {
-        if abundance.len() != self.species {
+        if abundance.size() != self.species {
             return Err(InvariantPolicyError::SpeciesMismatch {
                 expected: self.species,
-                actual: abundance.len(),
+                actual: abundance.size(),
             });
         }
         let space = space.as_mut().ok_or(InvariantPolicyError::SpaceRequired)?;
@@ -140,9 +139,7 @@ impl InvariantPolicy for LocalFrequencyInvariant {
                 actual: spatial_species,
             });
         }
-        let values = space
-            .as_slice_mut()
-            .ok_or(InvariantPolicyError::NonStandardSpaceLayout)?;
+        let values = space.as_mut_slice();
         let cells = values.len() / self.species;
         if cells == 0 {
             return Err(InvariantPolicyError::EmptySpatialDomain);
@@ -170,7 +167,7 @@ impl InvariantPolicy for LocalFrequencyInvariant {
                 }
             }
         }
-        for (value, sum) in abundance.iter_mut().zip(&self.totals) {
+        for (value, sum) in abundance.as_mut_slice().iter_mut().zip(&self.totals) {
             *value = *sum / cells as f64;
         }
         *total = 1.0;

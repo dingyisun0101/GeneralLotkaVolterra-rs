@@ -241,7 +241,7 @@ pub(crate) fn validate_species_and_cutoff(
 pub(crate) fn validate_abundance_values(
     abundance: &AggregateAbundance,
 ) -> Result<(), InvariantPolicyError> {
-    validate_values(ABUNDANCE_FIELD, abundance.iter().copied())
+    validate_values(ABUNDANCE_FIELD, abundance.as_slice().iter().copied())
 }
 
 pub(crate) fn validate_space_values(space: &[f64]) -> Result<(), InvariantPolicyError> {

@@ -1,6 +1,6 @@
 //! Concrete spatial General Lotka–Volterra population simulation.
 
-use ndarray::{Array1, ArrayD};
+use physics_in_parallel::prelude::basic::Tensor;
 use scientific_workflow::prelude::basics::{RngRecord, SimulationTime, SystemState};
 
 use crate::engine::{Engine, EngineStepError};
@@ -20,7 +20,7 @@ use super::{
 /// Immutable inputs that distinguish one spatial General Lotka–Volterra simulation.
 #[derive(Clone, Debug)]
 pub struct SpatialGeneralLotkaVolterraConfig {
-    growth: Array1<f64>,
+    growth: Tensor<f64>,
     diffusion: Diffusion,
     cutoff: f64,
     carrying_capacity: Option<f64>,
@@ -30,7 +30,7 @@ pub struct SpatialGeneralLotkaVolterraConfig {
 impl SpatialGeneralLotkaVolterraConfig {
     /// Collects typed population configuration around PiP-owned lattice geometry.
     pub const fn new(
-        growth: Array1<f64>,
+        growth: Tensor<f64>,
         diffusion: Diffusion,
         cutoff: f64,
         carrying_capacity: Option<f64>,
@@ -46,7 +46,7 @@ impl SpatialGeneralLotkaVolterraConfig {
     }
 
     /// Borrows intrinsic per-species growth rates.
-    pub const fn growth(&self) -> &Array1<f64> {
+    pub const fn growth(&self) -> &Tensor<f64> {
         &self.growth
     }
 
@@ -80,7 +80,7 @@ pub struct SpatialGeneralLotkaVolterra<A = SpatialGeneralLotkaVolterraRk2, N = N
 impl SpatialGeneralLotkaVolterra {
     /// Builds a deterministic simulation at iteration zero from species-last populations.
     pub fn new(
-        initial_space: ArrayD<f64>,
+        initial_space: Tensor<f64>,
         interaction: InteractionMatrix,
         config: SpatialGeneralLotkaVolterraConfig,
     ) -> Result<Self, DefaultSimulationBuildError> {
@@ -104,7 +104,7 @@ impl SpatialGeneralLotkaVolterra {
             .map_err(DefaultSimulationBuildError::Kernel)?;
         let species = algorithm.species();
         let abundance = aggregate_spatial(&initial_space, species, false)?;
-        let total = abundance.sum().round().max(0.0);
+        let total = abundance.sum_serial().round().max(0.0);
         let state = assemble_initial_state(abundance, Some(initial_space), total)?;
         let invariant = PopulationInvariant::new(species, cutoff, carrying_capacity)
             .map_err(DefaultSimulationBuildError::Invariant)?;

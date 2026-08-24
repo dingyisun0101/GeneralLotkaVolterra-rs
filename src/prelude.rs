@@ -21,4 +21,7 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
-pub use crate::{GlvInputs, GlvTemplate, GlvWorkload, GlvWorkloadError};
+pub use crate::{
+    ComputePool, ComputePoolError, GlvInputs, GlvTemplate, GlvWorkload, GlvWorkloadError,
+    with_threads,
+};

@@ -14,12 +14,11 @@ use general_lotka_volterra_rs::{
     SpatialGeneralLotkaVolterraConfig, SpatialReplicator, SpatialReplicatorConfig, TOTAL_FIELD,
     TimeStep, TotalAbundance,
 };
-use ndarray::{Array1, Array2, ArrayD, IxDyn};
-use physics_in_parallel::prelude::basic::RngConfig;
+use physics_in_parallel::prelude::basic::{DenseMatrix, RngConfig, Tensor};
 use support::interaction_from_array;
 
 fn interaction(species: usize) -> InteractionMatrix {
-    interaction_from_array(Array2::zeros((species, species))).unwrap()
+    interaction_from_array(DenseMatrix::zeros(species, species)).unwrap()
 }
 
 fn time_step() -> TimeStep {
@@ -27,15 +26,15 @@ fn time_step() -> TimeStep {
 }
 
 fn mean_field_config(species: usize) -> MeanFieldReplicatorConfig {
-    MeanFieldReplicatorConfig::new(Array1::zeros(species), 0.0, time_step())
+    MeanFieldReplicatorConfig::new(Tensor::zeros(&[species]), 0.0, time_step())
 }
 
 fn spatial_replicator_config(shape: &[usize]) -> SpatialReplicatorConfig {
     let species = *shape.last().unwrap();
     SpatialReplicatorConfig::new(
-        Array1::zeros(species),
+        Tensor::zeros(&[species]),
         Diffusion::unit_spacing(
-            Array1::zeros(species),
+            Tensor::zeros(&[species]),
             &shape[..shape.len() - 1],
             BoundaryCondition::Periodic,
         )
@@ -48,9 +47,9 @@ fn spatial_replicator_config(shape: &[usize]) -> SpatialReplicatorConfig {
 fn spatial_general_lotka_volterra_config(shape: &[usize]) -> SpatialGeneralLotkaVolterraConfig {
     let species = *shape.last().unwrap();
     SpatialGeneralLotkaVolterraConfig::new(
-        Array1::zeros(species),
+        Tensor::zeros(&[species]),
         Diffusion::unit_spacing(
-            Array1::zeros(species),
+            Tensor::zeros(&[species]),
             &shape[..shape.len() - 1],
             BoundaryCondition::Neumann,
         )
@@ -61,13 +60,13 @@ fn spatial_general_lotka_volterra_config(shape: &[usize]) -> SpatialGeneralLotka
     )
 }
 
-fn space(shape: &[usize], values: Vec<f64>) -> ArrayD<f64> {
-    ArrayD::from_shape_vec(IxDyn(shape), values).unwrap()
+fn space(shape: &[usize], values: Vec<f64>) -> Tensor<f64> {
+    Tensor::from_vec(shape, values)
 }
 
-fn assert_array_close(actual: &Array1<f64>, expected: &[f64]) {
-    assert_eq!(actual.len(), expected.len());
-    for (actual, expected) in actual.iter().zip(expected) {
+fn assert_tensor_close(actual: &Tensor<f64>, expected: &[f64]) {
+    assert_eq!(actual.size(), expected.len());
+    for (actual, expected) in actual.as_slice().iter().zip(expected) {
         assert!(
             (actual - expected).abs() <= 1.0e-12,
             "{actual} != {expected}"
@@ -77,7 +76,7 @@ fn assert_array_close(actual: &Array1<f64>, expected: &[f64]) {
 
 #[derive(Debug)]
 struct IdentityAggregate {
-    output: Array1<f64>,
+    output: Tensor<f64>,
 }
 
 impl KernelAlgorithm for IdentityAggregate {
@@ -93,15 +92,15 @@ impl KernelAlgorithm for IdentityAggregate {
         state: KernelStateView<'_>,
         _time_step: TimeStep,
     ) -> Result<KernelUpdate<'algorithm>, Self::Error> {
-        self.output.assign(state.abundance());
-        Ok(KernelUpdate::abundance(self.output.view()))
+        self.output.copy_from(state.abundance()).unwrap();
+        Ok(KernelUpdate::abundance(&self.output))
     }
 }
 
 #[test]
 fn root_mean_field_api_constructs_steps_and_reconstructs() {
     let mut simulation = MeanFieldReplicator::new(
-        Array1::from_vec(vec![0.4, 0.6]),
+        Tensor::from_vec(&[2], vec![0.4, 0.6]),
         interaction(2),
         mean_field_config(2),
     )
@@ -130,7 +129,7 @@ fn root_mean_field_api_constructs_steps_and_reconstructs() {
             .state()
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Array1::from_vec(vec![0.4, 0.6])
+        &Tensor::from_vec(&[2], vec![0.4, 0.6])
     );
 }
 
@@ -144,7 +143,7 @@ fn root_spatial_apis_derive_canonical_aggregates_and_step() {
     )
     .unwrap();
     assert_eq!(replicator.kind(), SimulationKind::SpatialReplicator);
-    assert_array_close(
+    assert_tensor_close(
         replicator
             .state()
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
@@ -181,7 +180,7 @@ fn root_spatial_apis_derive_canonical_aggregates_and_step() {
         glv.abundance_representation(),
         AbundanceRepresentation::AbsoluteCount
     );
-    assert_array_close(
+    assert_tensor_close(
         glv.state()
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
@@ -213,7 +212,7 @@ fn root_spatial_apis_derive_canonical_aggregates_and_step() {
 fn construction_rejects_shape_and_matrix_mismatches() {
     assert!(
         MeanFieldReplicator::new(
-            Array1::from_vec(vec![0.5, 0.5]),
+            Tensor::from_vec(&[2], vec![0.5, 0.5]),
             interaction(1),
             mean_field_config(2),
         )
@@ -239,14 +238,14 @@ fn construction_rejects_shape_and_matrix_mismatches() {
 #[test]
 fn mean_field_accepts_compatible_custom_kernel_and_noise_plugins() {
     let state = MeanFieldReplicator::new(
-        Array1::from_vec(vec![0.25, 0.75]),
+        Tensor::from_vec(&[2], vec![0.25, 0.75]),
         interaction(2),
         mean_field_config(2),
     )
     .unwrap()
     .into_state();
     let algorithm = IdentityAggregate {
-        output: Array1::zeros(2),
+        output: Tensor::zeros(&[2]),
     };
     let noise = ProportionalGaussian::new(
         0.0,
@@ -269,7 +268,7 @@ fn mean_field_accepts_compatible_custom_kernel_and_noise_plugins() {
             .state()
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Array1::from_vec(vec![0.25, 0.75])
+        &Tensor::from_vec(&[2], vec![0.25, 0.75])
     );
 }
 mod support;

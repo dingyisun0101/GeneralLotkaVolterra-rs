@@ -1,6 +1,6 @@
 //! Concrete spatial replicator simulation.
 
-use ndarray::{Array1, ArrayD};
+use physics_in_parallel::prelude::basic::Tensor;
 use scientific_workflow::prelude::basics::{RngRecord, SimulationTime, SystemState};
 
 use crate::engine::{Engine, EngineStepError};
@@ -20,7 +20,7 @@ use super::{
 /// Immutable inputs that distinguish one spatial replicator simulation.
 #[derive(Clone, Debug)]
 pub struct SpatialReplicatorConfig {
-    growth: Array1<f64>,
+    growth: Tensor<f64>,
     diffusion: Diffusion,
     cutoff: f64,
     time_step: TimeStep,
@@ -29,7 +29,7 @@ pub struct SpatialReplicatorConfig {
 impl SpatialReplicatorConfig {
     /// Collects typed numerical configuration around PiP-owned lattice geometry.
     pub const fn new(
-        growth: Array1<f64>,
+        growth: Tensor<f64>,
         diffusion: Diffusion,
         cutoff: f64,
         time_step: TimeStep,
@@ -43,7 +43,7 @@ impl SpatialReplicatorConfig {
     }
 
     /// Borrows intrinsic per-species growth rates.
-    pub const fn growth(&self) -> &Array1<f64> {
+    pub const fn growth(&self) -> &Tensor<f64> {
         &self.growth
     }
 
@@ -72,7 +72,7 @@ pub struct SpatialReplicator<A = SpatialReplicatorRk2, N = NoNoise> {
 impl SpatialReplicator {
     /// Builds a deterministic simulation at iteration zero from species-last cells.
     pub fn new(
-        initial_space: ArrayD<f64>,
+        initial_space: Tensor<f64>,
         interaction: InteractionMatrix,
         config: SpatialReplicatorConfig,
     ) -> Result<Self, DefaultSimulationBuildError> {

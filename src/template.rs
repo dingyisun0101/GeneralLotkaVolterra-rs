@@ -4,8 +4,7 @@ use std::error::Error;
 use std::fs;
 use std::path::PathBuf;
 
-use ndarray::Array1;
-use physics_in_parallel::prelude::basic::{RngConfig, SquareLatticeConfig};
+use physics_in_parallel::prelude::basic::{RngConfig, SquareLatticeConfig, Tensor};
 use scientific_workflow::prelude::basics::{
     ExecutionScope, RngRecord, SamplingInterval, SimulationTime, StateStreamConfig, SystemState,
 };
@@ -193,9 +192,12 @@ fn run_mean_field(
         .value("/initial_abundance")
         .map(|_| task.decode_value::<InitialAbundanceInput>("/initial_abundance"))
         .transpose()?
-        .map(|input| input.resolve(task).map(Array1::from_vec))
+        .map(|input| {
+            let values = input.resolve(task)?;
+            Ok::<_, TemplateTaskError>(Tensor::try_from_vec(&[species], values)?)
+        })
         .transpose()?
-        .unwrap_or_else(|| Array1::from_elem(species, 1.0 / species as f64));
+        .unwrap_or_else(|| Tensor::from_vec(&[species], vec![1.0 / species as f64; species]));
     let growth = decode_species_values(task, "/growth", species)?;
 
     context.set_detail("constructing simulation");
@@ -290,10 +292,10 @@ fn decode_species_values(
     task: &GlvConfiguration,
     name: &str,
     species: usize,
-) -> Result<Array1<f64>, TemplateTaskError> {
+) -> Result<Tensor<f64>, TemplateTaskError> {
     match task.value(name).and_then(serde_json::Value::as_f64) {
-        Some(value) => Ok(Array1::from_elem(species, value)),
-        None => Ok(Array1::from_vec(task.decode_value(name)?)),
+        Some(value) => Ok(Tensor::from_vec(&[species], vec![value; species])),
+        None => Ok(Tensor::try_from_vec(&[species], task.decode_value(name)?)?),
     }
 }
 
@@ -627,9 +629,7 @@ fn trajectory_observation<'a>(
     evidence: EquilibriumEvidence<'a>,
 ) -> Result<TrajectoryObservation<'a>, TemplateTaskError> {
     let abundance = state.payload::<crate::AggregateAbundance>(crate::ABUNDANCE_FIELD)?;
-    let values = abundance
-        .as_slice()
-        .ok_or("GLV aggregate abundance must be contiguous")?;
+    let values = abundance.as_slice();
     Ok(TrajectoryObservation {
         iteration: state.simulation_time().iteration(),
         physical_time: state.simulation_time().physical_time(),

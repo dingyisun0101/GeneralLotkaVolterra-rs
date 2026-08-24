@@ -58,7 +58,7 @@ pub mod prelude {
     pub use crate::workload::{GlvWorkload, GlvWorkloadError};
     pub use crate::{
         ABUNDANCE_FIELD, AbundanceRepresentation, AggregateAbundance, CHECKPOINT_STREAM,
-        SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM, SpatialAbundance, TOTAL_FIELD, TotalAbundance,
-        load_state_schema, state_schema_path,
+        ComputePool, ComputePoolError, SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM, SpatialAbundance,
+        TOTAL_FIELD, TotalAbundance, load_state_schema, state_schema_path, with_threads,
     };
 }

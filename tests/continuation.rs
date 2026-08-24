@@ -18,7 +18,7 @@ use general_lotka_volterra_rs::{
     MeanFieldReplicatorConfig, SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM, SpatialAbundance,
     TOTAL_FIELD, TerminalState, TimeStep, TotalAbundance,
 };
-use ndarray::{Array1, arr2};
+use physics_in_parallel::prelude::basic::{DenseMatrix, Tensor};
 use scientific_workflow::configuration::{ConfigurationSpace, ResolvedConfiguration};
 use scientific_workflow::execution::ExecutionScope;
 use scientific_workflow::storage::{SamplingInterval, StateStreamConfig, StateStreamStorage};
@@ -43,7 +43,7 @@ fn terminal_state(state: &SystemState, reason: &TerminationReason) -> TerminalSt
     let observation = TrajectoryObservation {
         iteration: state.simulation_time().iteration(),
         physical_time: state.simulation_time().physical_time(),
-        abundance: AbundanceView::Continuous(abundance.as_slice().unwrap()),
+        abundance: AbundanceView::Continuous(abundance.as_slice()),
         detector_observable: None,
         equilibrium_evidence: EquilibriumEvidence::Unavailable,
     };
@@ -128,14 +128,14 @@ fn recording_config() -> Vec<StateStreamConfig> {
 
 fn simulation_config() -> MeanFieldReplicatorConfig {
     MeanFieldReplicatorConfig::new(
-        Array1::from_vec(vec![0.15, -0.08]),
+        Tensor::from_vec(&[2], vec![0.15, -0.08]),
         0.0,
         TimeStep::new(0.05).unwrap(),
     )
 }
 
 fn interaction() -> InteractionMatrix {
-    interaction_from_array(arr2(&[[-0.2, 0.7], [-0.4, 0.1]])).unwrap()
+    interaction_from_array(DenseMatrix::from_vec(2, 2, vec![-0.2, 0.7, -0.4, 0.1])).unwrap()
 }
 
 fn advance(
@@ -198,7 +198,7 @@ fn deterministic_continuation_matches_uninterrupted_state_and_samples() {
     .unwrap();
     let uninterrupted_directory = uninterrupted_scope.task_recording_directory(0);
     let mut uninterrupted = MeanFieldReplicator::new(
-        Array1::from_vec(vec![0.35, 0.65]),
+        Tensor::from_vec(&[2], vec![0.35, 0.65]),
         uninterrupted_interaction,
         simulation_config(),
     )
@@ -232,7 +232,7 @@ fn deterministic_continuation_matches_uninterrupted_state_and_samples() {
     .unwrap();
     let resumed_directory = resumed_scope.task_recording_directory(0);
     let mut resumed = MeanFieldReplicator::new(
-        Array1::from_vec(vec![0.35, 0.65]),
+        Tensor::from_vec(&[2], vec![0.35, 0.65]),
         resumed_interaction,
         simulation_config(),
     )

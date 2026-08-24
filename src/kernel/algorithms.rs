@@ -22,6 +22,14 @@ pub enum KernelAlgorithmError {
     /// Numerical algorithms require at least one species.
     #[error("kernel algorithm requires at least one species")]
     EmptySpecies,
+    /// A coefficient tensor must be a vector.
+    #[error("{field} tensor has rank {actual}, expected rank 1")]
+    CoefficientRank {
+        /// Configuration field name.
+        field: &'static str,
+        /// Rejected tensor rank.
+        actual: usize,
+    },
     /// Model and kernel facilities disagree about species count.
     #[error("kernel core has {actual} species, expected {expected}")]
     CoreSpeciesMismatch {

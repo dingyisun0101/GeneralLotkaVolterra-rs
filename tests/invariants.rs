@@ -6,7 +6,7 @@ use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD,
     TotalAbundance, load_state_schema,
 };
-use ndarray::{Array1, ArrayD, IxDyn};
+use physics_in_parallel::prelude::basic::Tensor;
 use scientific_workflow::system_state::{SimulationTime, SystemState};
 
 fn make_state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemState {
@@ -14,15 +14,18 @@ fn make_state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> Syste
         .unwrap()
         .create_empty_state(SimulationTime::from_iteration_and_physical_time(0, 0.0).unwrap());
     state
-        .insert_payload(ABUNDANCE_FIELD, Array1::from_vec(abundance))
+        .insert_payload(
+            ABUNDANCE_FIELD,
+            Tensor::from_vec(&[abundance.len()], abundance),
+        )
         .unwrap();
     state.insert_payload(SPACE_FIELD, space).unwrap();
     state.insert_payload(TOTAL_FIELD, total).unwrap();
     state
 }
 
-fn space(shape: &[usize], values: Vec<f64>) -> ArrayD<f64> {
-    ArrayD::from_shape_vec(IxDyn(shape), values).unwrap()
+fn space(shape: &[usize], values: Vec<f64>) -> Tensor<f64> {
+    Tensor::from_vec(shape, values)
 }
 
 fn assert_close(actual: f64, expected: f64) {
@@ -41,7 +44,7 @@ fn aggregate_frequency_repairs_nonfinite_cutoff_and_empty_mass() {
         state
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Array1::from_vec(vec![0.0, 0.0, 0.0, 1.0])
+        &Tensor::from_vec(&[4], vec![0.0, 0.0, 0.0, 1.0])
     );
     assert_eq!(*state.payload::<TotalAbundance>(TOTAL_FIELD).unwrap(), 1.0);
     validate_state(&policy, &state).unwrap();
@@ -52,7 +55,7 @@ fn aggregate_frequency_repairs_nonfinite_cutoff_and_empty_mass() {
         empty
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Array1::from_vec(vec![0.25; 4])
+        &Tensor::from_vec(&[4], vec![0.25; 4])
     );
     assert!(matches!(
         FrequencyInvariant::new(4, f64::NAN),
@@ -86,9 +89,9 @@ fn local_frequency_normalizes_every_cell_and_refreshes_the_mean() {
     let abundance = state
         .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
         .unwrap();
-    assert_close(abundance[0], 1.0 / 6.0);
-    assert_close(abundance[1], 1.0 / 6.0);
-    assert_close(abundance[2], 2.0 / 3.0);
+    assert_close(abundance.as_slice()[0], 1.0 / 6.0);
+    assert_close(abundance.as_slice()[1], 1.0 / 6.0);
+    assert_close(abundance.as_slice()[2], 2.0 / 3.0);
     assert_eq!(*state.payload::<TotalAbundance>(TOTAL_FIELD).unwrap(), 1.0);
     assert_eq!(policy.scratch_len(), scratch_len);
     validate_state(&policy, &state).unwrap();
@@ -110,14 +113,14 @@ fn population_enforces_capacity_and_preserves_rounded_total_convention() {
         .unwrap()
         .as_ref()
         .unwrap();
-    assert_close(spatial.sum(), 4.0);
-    assert_eq!(spatial[[0, 0]], 0.0);
-    assert_eq!(spatial[[1, 0]], 0.0);
+    assert_close(spatial.sum_serial(), 4.0);
+    assert_eq!(spatial.as_slice()[0], 0.0);
+    assert_eq!(spatial.as_slice()[2], 0.0);
     let abundance = state
         .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
         .unwrap();
-    assert_close(abundance[0], 0.0);
-    assert_close(abundance[1], 4.0);
+    assert_close(abundance.as_slice()[0], 0.0);
+    assert_close(abundance.as_slice()[1], 4.0);
     assert_eq!(*state.payload::<TotalAbundance>(TOTAL_FIELD).unwrap(), 4.0);
     assert_eq!(policy.scratch_len(), scratch_len);
     validate_state(&policy, &state).unwrap();
@@ -129,7 +132,7 @@ fn population_enforces_capacity_and_preserves_rounded_total_convention() {
         rounded_state
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap()
-            .sum(),
+            .sum_serial(),
         1.2,
     );
     assert_eq!(
@@ -146,7 +149,7 @@ fn population_enforces_capacity_and_preserves_rounded_total_convention() {
         zero_state
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Array1::<f64>::zeros(2)
+        &Tensor::<f64>::zeros(&[2])
     );
     assert_eq!(
         zero_state

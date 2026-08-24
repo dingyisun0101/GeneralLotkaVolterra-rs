@@ -196,12 +196,12 @@ Every simulation uses the one canonical schema in `schemas/state.json`:
 
 | Field | Rust payload | Meaning |
 | --- | --- | --- |
-| `abundance` | `Array1<f64>` | Aggregate abundance ordered by species index |
-| `space` | `Option<ArrayD<f64>>` | Optional spatial abundance (`None` when non-spatial) |
+| `abundance` | `Tensor<f64>` | Rank-one PiP tensor ordered by species index |
+| `space` | `Option<Tensor<f64>>` | Optional species-last PiP tensor (`None` when non-spatial) |
 | `total` | `f64` | Total abundance synchronized by the invariant policy |
 
 All three slots are always populated. A non-spatial state stores a concrete
-`Option<ArrayD<f64>>::None` rather than leaving the `space` slot empty. A full
+`Option<Tensor<f64>>::None` rather than leaving the `space` slot empty. A full
 checkpoint can therefore select every schema field and encode non-spatial
 space as JSON `null`.
 
@@ -441,8 +441,8 @@ Scientific Workflow remains the configuration parser. `GlvInputs` and
 source configuration. A kernel source consumes that resolved configuration; it
 does not independently parse the study files.
 
-Direct programmatic callers may supply an already-owned PiP matrix or ndarray.
-Tests use this path without filesystem setup.
+Direct programmatic callers supply an already-owned PiP matrix. Tests use this
+path without filesystem setup; GLV has no second numerical storage system.
 
 ### Resolved matrix persistence
 
@@ -715,7 +715,14 @@ GLV defines no parallel recording-configuration structs. Each stream therefore
 uses Workflow's typed `SamplingInterval`, optional nonzero storage limits,
 field selection, and validation. The standard studies declare all three
 streams. Non-spatial `space` and `checkpoint` records encode the populated
-`Option<ArrayD<f64>>::None` payload as JSON `null`.
+`Option<Tensor<f64>>::None` payload as JSON `null`.
+
+Numerical execution follows the caller's current Rayon pool. GLV and PiP do not
+create a subordinate pool during ordinary simulation or Workflow execution.
+GLV re-exports PiP's explicit reusable `ComputePool` and one-shot
+`with_threads` convenience for direct callers. A Gaussian plugin's
+`max_threads` is a separate instance-local random-fill ceiling; it neither
+resizes the execution pool nor belongs to serialized scientific configuration.
 
 `GlvRecordingMetadata` combines stable `SimulationKind` and
 `AbundanceRepresentation` values, exact resolved `TaskParameters` plus
@@ -743,8 +750,8 @@ running and recoverable. The recording directory contains Workflow's sole
 `reading.rs` is a thin adapter over Scientific Workflow storage. It registers
 direct Serde decoders for:
 
-- `Array1<f64>` under `abundance`;
-- `Option<ArrayD<f64>>` under `space`; and
+- `Tensor<f64>` under `abundance`;
+- `Option<Tensor<f64>>` under `space`; and
 - `f64` under `total`.
 
 `open_completed_glv_recording` supplies that registry to
