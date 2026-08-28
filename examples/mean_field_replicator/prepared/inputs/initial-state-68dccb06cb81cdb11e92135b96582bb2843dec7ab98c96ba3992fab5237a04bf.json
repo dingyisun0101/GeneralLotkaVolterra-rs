@@ -1,0 +1,1 @@
+{"format":"ecological.initial-state.v2","num_taxa":2,"method":"balanced_uniform","seed_taxon":null,"rng":{"seed":777,"method":"indexed_split_mix64"},"lattice":{"shape":[4,4],"boundary":"periodic","spacing":[1.0,1.0]},"sites":[1,0,0,0,1,1,1,1,0,0,0,1,1,0,1,0]}

@@ -10,7 +10,7 @@ use general_lotka_volterra_rs::{
     TimeStepError, TotalAbundance, load_state_schema,
 };
 use physics_in_parallel::prelude::basic::{DenseMatrix, Tensor};
-use scientific_workflow::system_state::{SimulationTime, SystemState};
+use scientific_workflow::prelude::{StateTime, SystemState};
 use support::interaction_from_array;
 use thiserror::Error;
 
@@ -24,7 +24,7 @@ enum TestPluginError {
 
 fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemState {
     let schema = load_state_schema().unwrap();
-    let time = SimulationTime::from_iteration_and_physical_time(0, 0.0).unwrap();
+    let time = StateTime::from_iteration_and_physical_time(0, 0.0).unwrap();
     let mut state = schema.create_empty_state(time);
     assert!(
         state
@@ -106,10 +106,6 @@ struct AdditiveNoise {
 
 impl NoiseAlgorithm for AdditiveNoise {
     type Error = TestPluginError;
-
-    fn rng_record(&self) -> Option<&scientific_workflow::rng_record::RngRecord> {
-        None
-    }
 
     fn validate(
         &self,
@@ -207,7 +203,7 @@ fn plugins_mutate_only_borrowed_payloads_and_never_advance_time() {
     let mut noise = Noise::new(AdditiveNoise { updates: 0 });
     let mut invariant = SumInvariant;
     let mut state = state(vec![1.0, 2.0], None, 3.0);
-    let initial_time = state.simulation_time();
+    let initial_time = state.time();
 
     kernel.validate_state(&state).unwrap();
     noise.validate_state(&state).unwrap();
@@ -222,7 +218,7 @@ fn plugins_mutate_only_borrowed_payloads_and_never_advance_time() {
         .unwrap();
     invariant::enforce_state(&mut invariant, &mut state).unwrap();
 
-    assert_eq!(state.simulation_time(), initial_time);
+    assert_eq!(state.time(), initial_time);
     assert_eq!(
         state
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)

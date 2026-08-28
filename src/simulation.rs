@@ -13,9 +13,7 @@ use std::error::Error;
 use std::fmt;
 
 use physics_in_parallel::prelude::basic::Tensor;
-use scientific_workflow::prelude::basics::{
-    PayloadInsertError, SimulationTime, StateError, SystemState,
-};
+use scientific_workflow::prelude::{PayloadInsertError, StateError, StateTime, SystemState};
 use serde::{Deserialize, Serialize};
 use thiserror::Error as ThisError;
 
@@ -157,11 +155,19 @@ pub(crate) fn assemble_initial_state(
     space: SpatialAbundance,
     total: f64,
 ) -> Result<SystemState, StateAssemblyError> {
-    let time = SimulationTime::from_iteration_and_physical_time(0, 0.0)
+    let schema = load_state_schema().map_err(StateAssemblyError::Schema)?;
+    assemble_initial_state_with_schema(&schema, abundance, space, total)
+}
+
+pub(crate) fn assemble_initial_state_with_schema(
+    schema: &scientific_workflow::prelude::SystemStateSchema,
+    abundance: AggregateAbundance,
+    space: SpatialAbundance,
+    total: f64,
+) -> Result<SystemState, StateAssemblyError> {
+    let time = StateTime::from_iteration_and_physical_time(0, 0.0)
         .ok_or(StateAssemblyError::InvalidInitialTime)?;
-    let mut state = load_state_schema()
-        .map_err(StateAssemblyError::Schema)?
-        .create_empty_state(time);
+    let mut state = schema.create_empty_state(time);
     drop(
         state
             .insert_payload(ABUNDANCE_FIELD, abundance)

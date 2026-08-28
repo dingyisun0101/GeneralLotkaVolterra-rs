@@ -6,7 +6,6 @@ use physics_in_parallel::prelude::basic::RngConfig;
 use crate::noise::core::{
     GaussianKind, GaussianWorkspace, NoiseAlgorithm, NoiseDomain, NoisePluginError,
 };
-use scientific_workflow::prelude::basics::RngRecord;
 
 /// Workflow metadata namespace for demographic Gaussian RNG provenance.
 pub const DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE: &str = "glv.noise.demographic_gaussian";
@@ -69,10 +68,6 @@ impl DemographicGaussian {
 
 impl NoiseAlgorithm for DemographicGaussian {
     type Error = NoisePluginError;
-
-    fn rng_record(&self) -> Option<&RngRecord> {
-        Some(self.workspace.rng_record())
-    }
 
     fn is_noop(&self) -> bool {
         self.sigma() == 0.0

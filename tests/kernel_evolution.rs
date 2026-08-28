@@ -7,7 +7,7 @@ use general_lotka_volterra_rs::{
     load_state_schema,
 };
 use physics_in_parallel::prelude::basic::{DenseMatrix, Tensor};
-use scientific_workflow::system_state::{SimulationTime, SystemState};
+use scientific_workflow::prelude::{StateTime, SystemState};
 use support::interaction_from_array;
 use thiserror::Error;
 
@@ -42,7 +42,7 @@ impl KernelAlgorithm for InvalidBothUpdate {
 
 fn spatial_state() -> SystemState {
     let schema = load_state_schema().unwrap();
-    let time = SimulationTime::from_iteration_and_physical_time(7, 1.5).unwrap();
+    let time = StateTime::from_iteration_and_physical_time(7, 1.5).unwrap();
     let mut state = schema.create_empty_state(time);
     state
         .insert_payload(ABUNDANCE_FIELD, Tensor::from_vec(&[2], vec![1.0, 2.0]))
@@ -64,7 +64,7 @@ fn invalid_multi_payload_update_commits_nothing() {
     };
     let mut kernel = Kernel::new(KernelCore::new(matrix), algorithm);
     let mut state = spatial_state();
-    let initial_time = state.simulation_time();
+    let initial_time = state.time();
 
     assert!(matches!(
         kernel.step(&mut state, TimeStep::new(0.1).unwrap()),
@@ -83,6 +83,6 @@ fn invalid_multi_payload_update_commits_nothing() {
         state.payload::<SpatialAbundance>(SPACE_FIELD).unwrap(),
         &Some(Tensor::from_vec(&[1, 2], vec![1.0, 2.0]))
     );
-    assert_eq!(state.simulation_time(), initial_time);
+    assert_eq!(state.time(), initial_time);
 }
 mod support;

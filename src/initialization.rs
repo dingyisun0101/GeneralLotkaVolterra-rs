@@ -1,44 +1,8 @@
 //! Shared categorical initial-state input and explicit GLV conversion.
 
-use ecological_model_core::initial_state::{
-    InitialState, InitialStateArtifactDescriptor, InitialStateError, InitialStateSource,
-    PersistedInitialState, persist_initial_state,
-};
-use physics_in_parallel::prelude::basic::{SquareLatticeConfig, Tensor, TensorError};
-use scientific_workflow::prelude::basics::ExecutionScope;
+use ecological_model_core::initial_state::InitialState;
+use physics_in_parallel::prelude::basic::{Tensor, TensorError};
 use thiserror::Error;
-
-/// Resolves, validates, and republishes one core categorical input.
-pub fn resolve_spatial_initial_state(
-    source: &InitialStateSource,
-    scope: &ExecutionScope,
-    lattice: SquareLatticeConfig,
-    num_taxa: usize,
-) -> Result<ResolvedSpatialInitialState, SpatialInitializationError> {
-    let initial = source.resolve(lattice, num_taxa)?;
-    let persisted = persist_initial_state(scope, &initial)?;
-    Ok(ResolvedSpatialInitialState { initial, persisted })
-}
-
-/// One resolved shared input and its current-execution artifact identity.
-pub struct ResolvedSpatialInitialState {
-    initial: InitialState,
-    persisted: PersistedInitialState,
-}
-
-impl ResolvedSpatialInitialState {
-    pub const fn initial(&self) -> &InitialState {
-        &self.initial
-    }
-
-    pub const fn descriptor(&self) -> &InitialStateArtifactDescriptor {
-        self.persisted.descriptor()
-    }
-
-    pub fn into_initial(self) -> InitialState {
-        self.initial
-    }
-}
 
 /// Converts categorical sites to an explicit species-last one-hot field.
 ///
@@ -65,8 +29,6 @@ pub fn categorical_to_species_field(
 #[derive(Debug, Error)]
 #[non_exhaustive]
 pub enum SpatialInitializationError {
-    #[error(transparent)]
-    InitialState(#[from] InitialStateError),
     #[error("site_abundance must be positive and finite, got {value}")]
     InvalidSiteAbundance { value: f64 },
     #[error(transparent)]
@@ -77,7 +39,7 @@ pub enum SpatialInitializationError {
 mod tests {
     use super::*;
     use ecological_model_core::initial_state::{DistributionSource, InitialStateRecipe};
-    use physics_in_parallel::prelude::basic::RngConfig;
+    use physics_in_parallel::prelude::basic::{RngConfig, SquareLatticeConfig};
 
     #[test]
     fn categorical_conversion_is_species_last_and_explicitly_scaled() {

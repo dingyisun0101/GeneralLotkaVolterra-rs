@@ -1,7 +1,7 @@
 //! Concrete mean-field replicator simulation.
 
 use physics_in_parallel::prelude::basic::Tensor;
-use scientific_workflow::prelude::basics::{RngRecord, SimulationTime, SystemState};
+use scientific_workflow::prelude::{StateTime, SystemState};
 
 use crate::engine::{Engine, EngineStepError};
 use crate::interaction::InteractionMatrix;
@@ -13,7 +13,7 @@ use crate::{AbundanceRepresentation, TimeStep};
 
 use super::{
     DefaultSimulationBuildError, SimulationBuildError, SimulationKind, assemble_initial_state,
-    composition_error,
+    assemble_initial_state_with_schema, composition_error,
 };
 
 /// Immutable inputs that distinguish one mean-field replicator simulation.
@@ -64,6 +64,17 @@ impl MeanFieldReplicator {
         config: MeanFieldReplicatorConfig,
     ) -> Result<Self, DefaultSimulationBuildError> {
         let state = assemble_initial_state(initial_abundance, None, 1.0)?;
+        Self::from_state(state, interaction, config)
+    }
+
+    /// Builds from the exact schema instance supplied by Workflow.
+    pub fn new_with_schema(
+        schema: &scientific_workflow::prelude::SystemStateSchema,
+        initial_abundance: Tensor<f64>,
+        interaction: InteractionMatrix,
+        config: MeanFieldReplicatorConfig,
+    ) -> Result<Self, DefaultSimulationBuildError> {
+        let state = assemble_initial_state_with_schema(schema, initial_abundance, None, 1.0)?;
         Self::from_state(state, interaction, config)
     }
 
@@ -132,11 +143,6 @@ where
         self.engine.time_step()
     }
 
-    /// Returns immutable RNG provenance declared by the selected noise plugin.
-    pub fn rng_record(&self) -> Option<&RngRecord> {
-        self.engine.rng_record()
-    }
-
     /// Computes the maximum component-wise scaled deterministic RHS residual.
     pub fn maximum_scaled_residual(
         &mut self,
@@ -150,7 +156,7 @@ where
     /// Performs one complete shared-engine step.
     pub fn step(
         &mut self,
-    ) -> Result<SimulationTime, EngineStepError<A::Error, N::Error, InvariantPolicyError>> {
+    ) -> Result<StateTime, EngineStepError<A::Error, N::Error, InvariantPolicyError>> {
         self.engine.step()
     }
 

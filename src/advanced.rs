@@ -1,22 +1,18 @@
-//! Curated API for authors of custom GLV inputs templates.
+//! Curated API for authors of custom GLV scientific compositions.
 //!
 //! Ordinary users should import [`crate::prelude`] instead. This layer exposes
 //! the same model, plugin, interaction, and Workflow building blocks used by
-//! the built-in [`crate::GlvTemplate`] implementations.
+//! [`crate::GlvUnit`].
 
-/// Imports for advanced users assembling a custom inputs template.
+/// Imports for advanced users assembling a custom simulation.
 pub mod prelude {
     pub use crate::core::{TimeStep, TimeStepError};
-    pub use crate::initialization::{
-        ResolvedSpatialInitialState, SpatialInitializationError, categorical_to_species_field,
-        resolve_spatial_initial_state,
-    };
+    pub use crate::initialization::{SpatialInitializationError, categorical_to_species_field};
     pub use crate::interaction::{
-        ArtifactDisposition, GeneratorProvenance, INTERACTION_GENERATOR_RNG_NAMESPACE,
-        INTERACTION_MATRIX_FORMAT, INTERACTION_MATRIX_METADATA_KEY, InteractionArtifactDescriptor,
-        InteractionArtifactError, InteractionArtifactLoadError, InteractionMatrix,
-        InteractionMatrixError, InteractionProvenance, InteractionSourceKind, PersistedInteraction,
-        load_verified_interaction_matrix, persist_interaction_matrix,
+        GeneratorProvenance, INTERACTION_MATRIX_FORMAT, INTERACTION_MATRIX_METADATA_KEY,
+        InteractionArtifactDescriptor, InteractionArtifactError, InteractionArtifactLoadError,
+        InteractionMatrix, InteractionMatrixError, InteractionProvenance, InteractionSourceKind,
+        PersistedInteraction, load_verified_interaction_matrix, persist_interaction_matrix,
     };
     pub use crate::invariant::{
         FrequencyInvariant, INVARIANT_TOLERANCE, InvariantError, InvariantPolicy,
@@ -34,28 +30,16 @@ pub mod prelude {
         NoiseDomain, NoisePluginError, NoiseStepError, PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE,
         ProportionalGaussian,
     };
-    pub use crate::reading::{
-        GlvCheckpointVerificationError, glv_json_decoders, open_completed_glv_recording,
-        verify_completed_glv_checkpoint,
-    };
-    pub use crate::recording::{
-        ABUNDANCE_REPRESENTATION_METADATA_KEY, COMPLETED_ITERATION_METADATA_KEY, GlvRecording,
-        GlvRecordingError, GlvRecordingMetadata, MODEL_KIND_METADATA_KEY, RecordingMetadataError,
-        TASK_ORDINAL_METADATA_KEY, TERMINAL_STATE_METADATA_KEY,
-        TERMINATION_DIAGNOSTICS_METADATA_KEY, TERMINATION_REASON_METADATA_KEY, TerminationReason,
-    };
     pub use crate::simulation::{
         DefaultSimulationBuildError, MeanFieldReplicator, MeanFieldReplicatorConfig,
         SimulationBuildError, SimulationKind, SpatialGeneralLotkaVolterra,
         SpatialGeneralLotkaVolterraConfig, SpatialReplicator, SpatialReplicatorConfig,
         StateAssemblyError,
     };
-    pub use crate::study_inputs::{GlvConfiguration, GlvInputs, GlvInputsError};
-    pub use crate::template::{GlvTemplate, TemplateTaskError};
-    pub use crate::terminal_state::{
-        TERMINAL_STATE_FORMAT, TerminalState, TerminalStateOpenError, open_terminal_state,
+    pub use crate::workflow::{
+        GlvConstants, GlvExecutionError, GlvModelConfig, GlvObservationConfig, GlvUnit,
+        ObservationConfig, SpeciesValues,
     };
-    pub use crate::workload::{GlvWorkload, GlvWorkloadError};
     pub use crate::{
         ABUNDANCE_FIELD, AbundanceRepresentation, AggregateAbundance, CHECKPOINT_STREAM,
         ComputePool, ComputePoolError, SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM, SpatialAbundance,

@@ -7,12 +7,12 @@ use general_lotka_volterra_rs::{
     state_schema_path,
 };
 use physics_in_parallel::prelude::basic::Tensor;
-use scientific_workflow::system_state::{SimulationTime, SystemState, SystemStateSchema};
+use scientific_workflow::prelude::{StateTime, SystemState, SystemStateSchema};
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-fn initial_time() -> SimulationTime {
-    SimulationTime::from_iteration_and_physical_time(0, 0.0).expect("zero is a valid physical time")
+fn initial_time() -> StateTime {
+    StateTime::from_iteration_and_physical_time(0, 0.0).expect("zero is a valid physical time")
 }
 
 fn assemble_state(

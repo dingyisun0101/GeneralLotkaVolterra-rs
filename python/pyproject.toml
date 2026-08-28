@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "general-lotka-volterra-reader"
-version = "0.4.0"
+version = "0.5.0"
 description = "Official Python payload decoders for GLV Workflow recordings"
 readme = "README.md"
 requires-python = ">=3.10"

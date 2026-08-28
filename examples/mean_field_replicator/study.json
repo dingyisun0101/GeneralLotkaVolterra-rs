@@ -1,8 +1,0 @@
-{
-  "replicate_settings": {
-    "replicates": 1,
-    "scheduling": "sequential",
-    "failure_policy": "fail_fast",
-    "base_seed": 1101
-  }
-}

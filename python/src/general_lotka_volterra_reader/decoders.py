@@ -79,8 +79,9 @@ def glv_decoders() -> dict[str, Any]:
 def open_glv_recording(directory: str | Path) -> RecordingReader:
     """Opens a completed GLV recording through Workflow's official reader."""
     reader = open_completed_recording(directory, decoders=glv_decoders())
-    model = reader.user_metadata.get("model_kind")
-    representation = reader.user_metadata.get("abundance_representation")
+    constants = reader.user_metadata.get("constants")
+    model_config = constants.get("model") if isinstance(constants, dict) else None
+    model = model_config.get("kind") if isinstance(model_config, dict) else None
     if model not in {
         "mean_field_replicator",
         "mean_field_replicator_demographic",
@@ -88,8 +89,4 @@ def open_glv_recording(directory: str | Path) -> RecordingReader:
         "spatial_general_lotka_volterra",
     }:
         raise GlvPayloadError(f"recording has unsupported GLV model identity {model!r}")
-    if representation not in {"relative_frequency", "absolute_count"}:
-        raise GlvPayloadError(
-            f"recording has unsupported abundance representation {representation!r}"
-        )
     return reader

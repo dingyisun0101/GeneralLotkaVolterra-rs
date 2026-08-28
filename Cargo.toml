@@ -1,6 +1,6 @@
 [package]
 name = "general-lotka-volterra-rs"
-version = "0.15.0"
+version = "0.16.0"
 edition = "2024"
 rust-version = "1.97"
 autoexamples = false
@@ -26,12 +26,11 @@ include = [
 resolver = "3"
 
 [dependencies]
-ecological-model-core = "0.10.0"
+ecological-model-core = "0.11.1"
 physics_in_parallel = "3.7.0"
-scientific-workflow = "0.9.0"
+scientific-workflow = "0.11.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha2 = "0.11"
 thiserror = "2"
 
 [patch.crates-io]

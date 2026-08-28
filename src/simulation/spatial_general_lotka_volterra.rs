@@ -1,7 +1,7 @@
 //! Concrete spatial General Lotka–Volterra population simulation.
 
 use physics_in_parallel::prelude::basic::Tensor;
-use scientific_workflow::prelude::basics::{RngRecord, SimulationTime, SystemState};
+use scientific_workflow::prelude::{StateTime, SystemState};
 
 use crate::engine::{Engine, EngineStepError};
 use crate::interaction::InteractionMatrix;
@@ -14,7 +14,7 @@ use crate::{AbundanceRepresentation, TimeStep};
 
 use super::{
     DefaultSimulationBuildError, SimulationBuildError, SimulationKind, aggregate_spatial,
-    assemble_initial_state, composition_error,
+    assemble_initial_state, assemble_initial_state_with_schema, composition_error,
 };
 
 /// Immutable inputs that distinguish one spatial General Lotka–Volterra simulation.
@@ -118,6 +118,48 @@ impl SpatialGeneralLotkaVolterra {
         .map_err(DefaultSimulationBuildError::Composition)
     }
 
+    /// Builds from the exact schema instance supplied by Workflow.
+    pub fn new_with_schema(
+        schema: &scientific_workflow::prelude::SystemStateSchema,
+        initial_space: Tensor<f64>,
+        interaction: InteractionMatrix,
+        config: SpatialGeneralLotkaVolterraConfig,
+    ) -> Result<Self, DefaultSimulationBuildError> {
+        let SpatialGeneralLotkaVolterraConfig {
+            growth,
+            diffusion,
+            cutoff,
+            carrying_capacity,
+            time_step,
+        } = config;
+        let algorithm = SpatialGeneralLotkaVolterraRk2::new(growth, diffusion)
+            .map_err(DefaultSimulationBuildError::Kernel)?;
+        if initial_space.shape() != algorithm.shape() {
+            return Err(DefaultSimulationBuildError::InitialSpaceShapeMismatch {
+                expected: algorithm.shape().to_vec(),
+                actual: initial_space.shape().to_vec(),
+            });
+        }
+        algorithm
+            .validate_time_step(time_step)
+            .map_err(DefaultSimulationBuildError::Kernel)?;
+        let species = algorithm.species();
+        let abundance = aggregate_spatial(&initial_space, species, false)?;
+        let total = abundance.sum_serial().round().max(0.0);
+        let state =
+            assemble_initial_state_with_schema(schema, abundance, Some(initial_space), total)?;
+        let invariant = PopulationInvariant::new(species, cutoff, carrying_capacity)
+            .map_err(DefaultSimulationBuildError::Invariant)?;
+        Self::from_plugins(
+            state,
+            Kernel::new(KernelCore::new(interaction), algorithm),
+            Noise::new(NoNoise),
+            invariant,
+            time_step,
+        )
+        .map_err(DefaultSimulationBuildError::Composition)
+    }
+
     /// Reconstructs the default deterministic composition around an existing state.
     pub fn from_state(
         state: SystemState,
@@ -187,11 +229,6 @@ where
         self.engine.time_step()
     }
 
-    /// Returns immutable RNG provenance declared by the selected noise plugin.
-    pub fn rng_record(&self) -> Option<&RngRecord> {
-        self.engine.rng_record()
-    }
-
     /// Computes the maximum component-wise scaled deterministic RHS residual.
     pub fn maximum_scaled_residual(
         &mut self,
@@ -205,7 +242,7 @@ where
     /// Performs one complete shared-engine step.
     pub fn step(
         &mut self,
-    ) -> Result<SimulationTime, EngineStepError<A::Error, N::Error, InvariantPolicyError>> {
+    ) -> Result<StateTime, EngineStepError<A::Error, N::Error, InvariantPolicyError>> {
         self.engine.step()
     }
 

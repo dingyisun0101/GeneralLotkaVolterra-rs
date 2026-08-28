@@ -5,7 +5,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use physics_in_parallel::prelude::basic::{DenseMatrix, MatrixError, Tensor};
-use scientific_workflow::prelude::basics::{StateError, SystemState};
+use scientific_workflow::prelude::{StateError, SystemState};
 use thiserror::Error as ThisError;
 
 use crate::interaction::{InteractionMatrix, InteractionProvenance};

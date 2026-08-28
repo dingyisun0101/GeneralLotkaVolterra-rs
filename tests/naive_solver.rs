@@ -13,7 +13,7 @@ use general_lotka_volterra_rs::{
 use physics_in_parallel::prelude::basic::{
     RandType, RngConfig, SquareLatticeConfig, Tensor, TensorRandFiller,
 };
-use scientific_workflow::prelude::basics::SystemState;
+use scientific_workflow::prelude::SystemState;
 use support::interaction_from_array;
 
 #[derive(Clone, Copy)]
@@ -319,9 +319,9 @@ fn assert_state(
     }
     let total = *state.payload::<TotalAbundance>(TOTAL_FIELD).unwrap();
     assert!((total - expected_total).abs() <= 2.0e-12);
-    assert_eq!(state.simulation_time().iteration(), expected_iteration);
+    assert_eq!(state.time().iteration(), expected_iteration);
     let expected_time = expected_iteration as f64 * dt;
-    assert!((state.simulation_time().physical_time().unwrap() - expected_time).abs() <= 2.0e-12);
+    assert!((state.time().physical_time().unwrap() - expected_time).abs() <= 2.0e-12);
 }
 
 #[test]

@@ -1,88 +1,48 @@
-# Mean-field replicator dynamics
+# Mean-field replicator Workflow project
 
-This complete crate evolves a non-spatial community whose state
-`x = (x_1, ..., x_S)` is a vector of relative species frequencies:
+This is the current GLV configuration boundary in one runnable project:
+
+```bash
+cargo run --manifest-path /path/to/glv/examples/mean_field_replicator/Cargo.toml
+```
+
+The application prepares a model-ready interaction matrix and one canonical
+categorical initial state through Eco Core. Both references are grouped as
+`EcologicalInputs` in `parameters.json`. GLV resolves that same envelope,
+converts categorical counts to exact aggregate frequencies, and runs the
+selected mean-field model. It does not read project JSON, generate an initial
+condition, or copy input artifacts into its output.
+
+```text
+wf_configs/ ──Workflow Config──> GlvConstants
+prepared/ ──Eco Core references──> EcologicalInputs
+                                      │
+                                      v
+                    GlvUnit -> SystemState -> Workflow writers
+                                      │
+                    signal / space / checkpoint + terminal_state
+```
+
+`wf_configs/` is required for this directory to qualify as a Workflow project
+root. The `states/` folder is conventional; `study.json` is authoritative about
+the schema location. The tiny `main.rs` only links GLV's `glv` registration,
+sets the working directory for the relative artifact roots, and enters
+Workflow.
+
+The example uses the deterministic RK4 mean-field replicator:
 
 ```text
 dx_i/dt = x_i [f_i(x) - f̄(x)]
 f_i(x)  = r_i + Σ_j A_ij x_j
-f̄(x)   = Σ_i x_i f_i(x)
 ```
 
-`A` is the interaction matrix and `r` is the intrinsic-growth vector. The
-replicator subtraction removes common fitness and preserves total frequency.
-After every deterministic or stochastic phase, the GLV frequency invariant
-sets values below `extinction_cutoff` to zero and normalizes the surviving frequencies to
-sum to one.
+`growth` may be one scalar or one value per species. Species count, initial
+frequencies, and lattice provenance come from `EcologicalInputs`.
+`extinction_cutoff`, `time_step`, and `maximum_iterations` are GLV execution
+policy. The uniform streams are `signal`, `space`, and `checkpoint`; the
+mean-field `space` payload is `null`. Completion metadata always contains Eco
+Core's common `terminal_state` product.
 
-The built-in model uses classical fourth-order Runge–Kutta integration and no
-stochastic noise. Its Workflow state has aggregate `abundance`, `space = None`,
-and `total = 1`.
-
-## Run
-
-Install Rust 1.97 or newer, copy this entire directory, and run:
-
-```sh
-cargo run --release
-```
-
-The binary asks Workflow to dispatch the configured replicates, passes each
-replicate's execution scope to GLV, and registers the built-in model as a
-Workflow progress workload:
-
-```rust
-let workload = GlvWorkload::load(
-    study_directory,
-    template,
-    replicate.execution_scope().clone(),
-)?;
-let phase = workload
-    .register(Phase::builder(1, "mean-field replicator"))
-    .build()?;
-Study::builder(workload.record_path())
-    .phase(phase)
-    .build()?
-    .run_phases([1])?;
-```
-
-An optional first argument selects another compatible Workflow configuration
-folder:
-
-```sh
-cargo run --release -- /path/to/inputs/config
-```
-
-The default configuration is this directory's `config/` folder.
-`config/parameters.json` contains shared GLV parameters and varies `extinction_cutoff`
-with `{"$sweep": [...]}`; `config/paths.json` names the interaction matrix and
-output root. `study.json` declares one sequential replicate. The matrix file
-uses rows as affected species and columns as contributing species.
-
-The main values to edit are:
-
-- `initial_condition`: optional starting frequencies; omission uses a uniform state;
-- `growth`: one intrinsic value per species, or one scalar shared by all species;
-- `time_step`: RK4 time increment;
-- `maximum_iterations`: hard iteration cap;
-- `observation`: terminal observation mode and detector toggles; and
-- `recordings`: sampling cadence, fields, and chunk-size limits per stream.
-
-The checked-in deterministic configuration enables both automatic detectors:
-equilibrium convergence and a nontrivial periodic orbit. GLV owns their
-internal evidence windows and publishes the resulting termination reason.
-
-## Outputs
-
-The declared replicate writes beneath `output/replicate_0`. Each task records:
-
-- `signal`: aggregate abundance and total;
-- `checkpoint`: restart-quality complete states.
-
-Sampling and storage limits are configured independently under `recordings`.
-The program verifies the final checkpoint before reporting success.
-Every successful task also records a classified terminal composition: an exact
-accepted fixed point or a trailing estimate when the run ended otherwise.
-
-See the [GLV `sw-version` branch](https://github.com/dingyisun0101/GeneralLotkaVolterra-rs/tree/sw-version)
-for the model API and additional complete examples.
+The checked-in initial artifact was generated once with seed `777`. That seed
+belongs to the artifact and GLV never requests it again. Deterministic execution
+needs no runtime seed.

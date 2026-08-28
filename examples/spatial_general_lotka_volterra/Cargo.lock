@@ -74,9 +74,9 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "chacha20"
-version = "0.10.1"
+version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d524456ba66e72eb8b115ff89e01e497f8e6d11d78b70b1aa13c0fbd97540a81"
+checksum = "65c35e4b699c7e15ccbe7ee35c005e4fc0a278d22238a2857e6ce2dadeda1b06"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -114,9 +114,9 @@ dependencies = [
 
 [[package]]
 name = "cpufeatures"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b2a41393f66f16b0823bb79094d54ac5fbd34ab292ddafb9a0456ac9f87d201"
+checksum = "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
 dependencies = [
  "libc",
 ]
@@ -266,12 +266,12 @@ dependencies = [
 
 [[package]]
 name = "ecological-model-core"
-version = "0.10.0"
+version = "0.11.1"
 dependencies = [
  "physics_in_parallel",
- "scientific-workflow",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
 ]
 
@@ -326,14 +326,13 @@ dependencies = [
 
 [[package]]
 name = "general-lotka-volterra-rs"
-version = "0.15.0"
+version = "0.16.0"
 dependencies = [
  "ecological-model-core",
  "physics_in_parallel",
  "scientific-workflow",
  "serde",
  "serde_json",
- "sha2",
  "thiserror",
 ]
 
@@ -445,6 +444,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "inventory"
+version = "0.3.24"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4f0c30c76f2f4ccee3fe55a2435f691ca00c0e4bd87abe4f4a851b1d4dac39b"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "itertools"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -520,9 +528,9 @@ checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
 
 [[package]]
 name = "lru"
-version = "0.18.2"
+version = "0.18.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d2f2f9b4ba7e6b24d95e7e899329d35be83bcded72c8540cdd5368932d1d90a"
+checksum = "0d317b4b9eb398e6acce275758ec6125535505e7a146fb1a9b8bda2451b0ff4c"
 dependencies = [
  "hashbrown 0.17.1",
 ]
@@ -889,19 +897,32 @@ checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "scientific-workflow"
-version = "0.9.0"
+version = "0.11.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d8685f1b3021ab20e448fbf483930c33fecc514d6c9bdb153f858f4a887d893"
+checksum = "af3d215f342892c737134bb8b0db9bd19456c20040b4bbc289d32c26f4a198d4"
 dependencies = [
  "crossterm",
  "erased-serde",
  "fs2",
+ "inventory",
  "ratatui",
+ "scientific-workflow-macros",
  "serde",
  "serde_json",
  "sha2",
  "thiserror",
  "time",
+]
+
+[[package]]
+name = "scientific-workflow-macros"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a36e78102796184b9cd89edc098f3c211be94d7aac359acd21121dcdc6ed8a1f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

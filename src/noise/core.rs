@@ -6,7 +6,7 @@ use std::fmt;
 use physics_in_parallel::prelude::basic::{
     RandType, RngConfig, RngConfigError, RngMethod, TensorRandError, TensorRandFiller,
 };
-use scientific_workflow::prelude::basics::{RngRecord, RngRecordError, StateError, SystemState};
+use scientific_workflow::prelude::{StateError, SystemState};
 use thiserror::Error as ThisError;
 
 use crate::{ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TimeStep};
@@ -95,7 +95,6 @@ pub(crate) enum GaussianKind {
 pub(crate) struct GaussianWorkspace {
     domain: NoiseDomain,
     sigma: f64,
-    rng_record: RngRecord,
     filler: TensorRandFiller,
     proposed: Vec<f64>,
 }
@@ -146,30 +145,9 @@ impl GaussianWorkspace {
             rng,
         )
         .map_err(NoisePluginError::TensorRng)?;
-        let rng = filler.rng_config();
-        let method = rng.method().expect("PiP resolves the noise RNG method");
-        let mut parameters = serde_json::Map::new();
-        parameters.insert(
-            "distribution".to_owned(),
-            serde_json::Value::from("standard_normal"),
-        );
-        parameters.insert(
-            "sampling_layout".to_owned(),
-            serde_json::Value::from("flat_species_last_v1"),
-        );
-        let rng_record = RngRecord::new(
-            namespace,
-            format!("{}+standard_normal", method.name()),
-            method.version(),
-            method.seed_encoding(),
-            rng.encode_seed().expect("PiP resolves the noise seed"),
-            Some(parameters),
-        )
-        .map_err(NoisePluginError::RngRecord)?;
         Ok(Self {
             domain,
             sigma,
-            rng_record,
             filler,
             proposed: vec![0.0; elements],
         })
@@ -195,10 +173,6 @@ impl GaussianWorkspace {
 
     pub(crate) const fn domain(&self) -> &NoiseDomain {
         &self.domain
-    }
-
-    pub(crate) const fn rng_record(&self) -> &RngRecord {
-        &self.rng_record
     }
 
     pub(crate) fn scratch_capacity(&self) -> usize {
@@ -401,9 +375,6 @@ pub enum NoisePluginError {
     /// PiP rejected random filling or distribution configuration.
     #[error("noise random sampling failed: {0}")]
     TensorRng(#[source] TensorRandError),
-    /// Workflow rejected the immutable RNG provenance declaration.
-    #[error("invalid noise RNG record: {0}")]
-    RngRecord(#[source] RngRecordError),
     /// Every noise target requires at least one species.
     #[error("noise species dimension must be greater than zero")]
     EmptySpecies,
@@ -497,9 +468,6 @@ pub trait NoiseAlgorithm {
     /// Algorithm-specific validation or stochastic-update failure.
     type Error: Error + Send + Sync + 'static;
 
-    /// Returns immutable RNG provenance, or explicitly declares deterministic behavior.
-    fn rng_record(&self) -> Option<&RngRecord>;
-
     /// Reports whether applying this algorithm would leave every payload
     /// unchanged. The conservative default keeps custom plugins active.
     fn is_noop(&self) -> bool {
@@ -561,11 +529,6 @@ where
     /// Reports whether the selected algorithm can be skipped for this run.
     pub fn is_noop(&self) -> bool {
         self.algorithm.is_noop()
-    }
-
-    /// Returns the algorithm's immutable RNG provenance when it is stochastic.
-    pub fn rng_record(&self) -> Option<&RngRecord> {
-        self.algorithm.rng_record()
     }
 
     /// Validates canonical state payloads without mutating them.

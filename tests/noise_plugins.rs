@@ -1,20 +1,19 @@
 use std::mem::size_of;
 
 use general_lotka_volterra_rs::noise::{
-    DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE, DemographicGaussian, NoNoise, Noise, NoiseDomain,
-    NoisePluginError, PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE, ProportionalGaussian,
+    DemographicGaussian, NoNoise, Noise, NoiseDomain, NoisePluginError, ProportionalGaussian,
 };
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TimeStep,
     TotalAbundance, load_state_schema,
 };
 use physics_in_parallel::prelude::basic::{RngConfig, Tensor};
-use scientific_workflow::system_state::{SimulationTime, SystemState};
+use scientific_workflow::prelude::{StateTime, SystemState};
 
 fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemState {
     let mut state = load_state_schema()
         .unwrap()
-        .create_empty_state(SimulationTime::from_iteration_and_physical_time(5, 2.0).unwrap());
+        .create_empty_state(StateTime::from_iteration_and_physical_time(5, 2.0).unwrap());
     state
         .insert_payload(
             ABUNDANCE_FIELD,
@@ -38,9 +37,8 @@ fn rng(seed: u64) -> RngConfig {
 fn no_noise_is_zero_sized_and_changes_nothing() {
     assert_eq!(size_of::<NoNoise>(), 0);
     let mut noise = Noise::new(NoNoise);
-    assert!(noise.rng_record().is_none());
     let mut state = state(vec![0.25, 0.75], None, 1.0);
-    let time = state.simulation_time();
+    let time = state.time();
     let abundance = state
         .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
         .unwrap()
@@ -48,7 +46,7 @@ fn no_noise_is_zero_sized_and_changes_nothing() {
     noise
         .apply(&mut state, TimeStep::new(0.1).unwrap())
         .unwrap();
-    assert_eq!(state.simulation_time(), time);
+    assert_eq!(state.time(), time);
     assert_eq!(
         state
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
@@ -73,15 +71,10 @@ fn demographic_noise_is_seeded_reproducible_and_reuses_scratch() {
     let capacity = algorithm_a.scratch_capacity();
     let mut noise_a = Noise::new(algorithm_a);
     let mut noise_b = Noise::new(algorithm_b);
-    let record = noise_a.rng_record().unwrap();
-    assert_eq!(record.namespace(), DEMOGRAPHIC_GAUSSIAN_RNG_NAMESPACE);
-    assert_eq!(record.method(), "chacha12+standard_normal");
-    assert_eq!(record.version(), "rand_chacha-0.10");
-    assert_eq!(record.key_encoding(), "u64_decimal");
-    assert_eq!(record.key(), "17");
+    assert_eq!(noise_a.algorithm().rng_config().seed(), Some(17));
     let mut state_a = state(vec![4.0, 9.0, 16.0], None, 29.0);
     let mut state_b = state(vec![4.0, 9.0, 16.0], None, 29.0);
-    let initial_time = state_a.simulation_time();
+    let initial_time = state_a.time();
 
     for _ in 0..3 {
         noise_a
@@ -106,7 +99,7 @@ fn demographic_noise_is_seeded_reproducible_and_reuses_scratch() {
         &Tensor::from_vec(&[3], vec![4.0, 9.0, 16.0])
     );
     assert_eq!(noise_a.algorithm().scratch_capacity(), capacity);
-    assert_eq!(state_a.simulation_time(), initial_time);
+    assert_eq!(state_a.time(), initial_time);
     assert_eq!(
         *state_a.payload::<TotalAbundance>(TOTAL_FIELD).unwrap(),
         29.0
@@ -118,10 +111,7 @@ fn proportional_spatial_noise_updates_only_space_reproducibly() {
     let domain = NoiseDomain::spatial(vec![2, 3]).unwrap();
     let mut noise_a = Noise::new(ProportionalGaussian::new(0.05, rng(99), domain.clone()).unwrap());
     let mut noise_b = Noise::new(ProportionalGaussian::new(0.05, rng(99), domain).unwrap());
-    assert_eq!(
-        noise_a.rng_record().unwrap().namespace(),
-        PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE
-    );
+    assert_eq!(noise_a.algorithm().rng_config().seed(), Some(99));
     let mut state_a = state(
         vec![0.3, 0.3, 0.4],
         spatial(vec![0.2, 0.3, 0.5, 0.4, 0.2, 0.4]),

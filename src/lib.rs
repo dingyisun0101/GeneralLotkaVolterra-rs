@@ -3,30 +3,25 @@
 use std::path::Path;
 
 use physics_in_parallel::prelude::basic::Tensor;
-use scientific_workflow::prelude::basics::{StateError, SystemStateSchema};
+use scientific_workflow::prelude::{StateError, SystemStateSchema};
 use serde::{Deserialize, Serialize};
 
 pub mod advanced;
 pub mod core;
 mod engine;
-pub mod fixed_point;
 pub mod initialization;
 pub mod interaction;
 pub mod invariant;
 pub mod kernel;
 pub mod noise;
 pub mod prelude;
-pub mod reading;
-pub mod recording;
 pub mod simulation;
-pub mod study_inputs;
-mod template;
-pub mod terminal_state;
-pub mod workload;
+pub mod workflow;
 
-pub use study_inputs::{GlvConfiguration, GlvInputs, GlvInputsError};
-pub use template::{GlvTemplate, INTERACTION_SOURCE_KEY, InteractionSource, TemplateTaskError};
-pub use workload::{GlvWorkload, GlvWorkloadError};
+pub use workflow::{
+    GlvConstants, GlvExecutionError, GlvModelConfig, GlvObservationConfig, GlvUnit,
+    ObservationConfig, SpeciesValues,
+};
 
 /// Explicit reusable worker pool for callers that want to bound an entire GLV
 /// computation. Plain GLV operations use the current Rayon pool and create no
@@ -39,13 +34,6 @@ pub use simulation::{
 };
 
 pub use core::{TimeStep, TimeStepError};
-pub use fixed_point::{
-    ACCEPTED_FIXED_POINT_FORMAT, AcceptedFixedPoint, AcceptedFixedPointError,
-    open_accepted_fixed_point,
-};
-pub use terminal_state::{
-    TERMINAL_STATE_FORMAT, TerminalState, TerminalStateOpenError, open_terminal_state,
-};
 
 /// Canonical field containing aggregate species abundance.
 pub const ABUNDANCE_FIELD: &str = "abundance";

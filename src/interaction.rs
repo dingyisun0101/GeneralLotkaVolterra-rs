@@ -4,4 +4,3 @@
 //! to `ecological-model-core`; GLV deliberately adds no matrix wrapper.
 
 pub use ecological_model_core::interaction::*;
-pub use scientific_workflow::artifact::ArtifactDisposition;

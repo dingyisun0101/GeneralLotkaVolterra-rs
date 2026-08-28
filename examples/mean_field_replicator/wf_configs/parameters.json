@@ -1,0 +1,39 @@
+{
+  "glv": {
+    "identity": "mean-field-replicator",
+    "inputs": {
+      "interaction": {
+        "format": "ecological.interaction-artifact-reference.v2",
+        "artifact_root": "prepared",
+        "descriptor": {
+          "format": "ecological.interaction-matrix.v2",
+          "species": 2,
+          "sha256": "7e1d9f2c939fd20096e1cc683dfca7dcc5447c3e03ac6e6fcf845946df85d3e7",
+          "path": "inputs/interaction-7e1d9f2c939fd20096e1cc683dfca7dcc5447c3e03ac6e6fcf845946df85d3e7.json",
+          "provenance": {"kind": "inline"}
+        }
+      },
+      "initial_state": {
+        "format": "ecological.initial-state-artifact-reference.v2",
+        "artifact_root": "prepared",
+        "descriptor": {
+          "format": "ecological.initial-state.v2",
+          "num_taxa": 2,
+          "lattice": {"shape": [4, 4], "boundary": "periodic", "spacing": [1.0, 1.0]},
+          "method": "balanced_uniform",
+          "sha256": "68dccb06cb81cdb11e92135b96582bb2843dec7ab98c96ba3992fab5237a04bf",
+          "path": "inputs/initial-state-68dccb06cb81cdb11e92135b96582bb2843dec7ab98c96ba3992fab5237a04bf.json"
+        }
+      }
+    },
+    "model": {
+      "kind": "mean_field_replicator",
+      "growth": 0.0,
+      "extinction_cutoff": 0.0000000001,
+      "time_step": 0.01
+    },
+    "recording": {"signal_interval": 1, "space_interval": 10, "checkpoint_interval": 100},
+    "observation": {"mode": "detect", "equilibrium": true, "periodic_orbit": true},
+    "maximum_iterations": 300
+  }
+}

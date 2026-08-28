@@ -6,7 +6,6 @@ use physics_in_parallel::prelude::basic::RngConfig;
 use crate::noise::core::{
     GaussianKind, GaussianWorkspace, NoiseAlgorithm, NoiseDomain, NoisePluginError,
 };
-use scientific_workflow::prelude::basics::RngRecord;
 
 /// Workflow metadata namespace for proportional Gaussian RNG provenance.
 pub const PROPORTIONAL_GAUSSIAN_RNG_NAMESPACE: &str = "glv.noise.proportional_gaussian";
@@ -69,10 +68,6 @@ impl ProportionalGaussian {
 
 impl NoiseAlgorithm for ProportionalGaussian {
     type Error = NoisePluginError;
-
-    fn rng_record(&self) -> Option<&RngRecord> {
-        Some(self.workspace.rng_record())
-    }
 
     fn is_noop(&self) -> bool {
         self.sigma() == 0.0

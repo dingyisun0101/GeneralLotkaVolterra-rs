@@ -7,7 +7,7 @@
 use std::error::Error;
 use std::fmt;
 
-use scientific_workflow::prelude::basics::{RngRecord, SimulationTime, StateError, SystemState};
+use scientific_workflow::prelude::{StateError, StateTime, SystemState};
 
 use crate::TimeStep;
 use crate::invariant::{self, InvariantError, InvariantPolicy};
@@ -40,7 +40,7 @@ pub type EngineBuildResult<A, N, I> = Result<
 
 /// Step result for one statically composed engine.
 pub type EngineStepResult<A, N, I> = Result<
-    SimulationTime,
+    StateTime,
     EngineStepError<
         <A as KernelAlgorithm>::Error,
         <N as NoiseAlgorithm>::Error,
@@ -63,7 +63,7 @@ where
         time_step: TimeStep,
     ) -> EngineBuildResult<A, N, I> {
         state
-            .simulation_time()
+            .time()
             .checked_advance(Some(time_step.get()))
             .map_err(EngineBuildError::Time)?;
         kernel
@@ -92,11 +92,6 @@ where
         self.time_step
     }
 
-    /// Returns immutable RNG provenance declared by the noise plugin.
-    pub fn rng_record(&self) -> Option<&RngRecord> {
-        self.noise.rng_record()
-    }
-
     /// Returns the authoritative deterministic RHS residual in configured units.
     pub fn maximum_scaled_residual(
         &mut self,
@@ -122,7 +117,7 @@ where
     /// the engine does not clone the full state for global rollback.
     pub fn step(&mut self) -> EngineStepResult<A, N, I> {
         self.state
-            .simulation_time()
+            .time()
             .checked_advance(Some(self.time_step.get()))
             .map_err(EngineStepError::Time)?;
         self.kernel
@@ -138,7 +133,7 @@ where
                 .map_err(EngineStepError::InvariantAfterNoise)?;
         }
         self.state
-            .advance_simulation_time(Some(self.time_step.get()))
+            .advance_time(Some(self.time_step.get()))
             .map_err(EngineStepError::Time)
     }
 }
@@ -250,9 +245,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use physics_in_parallel::prelude::basic::Tensor;
-    use scientific_workflow::prelude::basics::{
-        RngRecord, SimulationTime, StateError, SystemState,
-    };
+    use scientific_workflow::prelude::{StateError, StateTime, SystemState};
     use thiserror::Error;
 
     use super::{Engine, EngineBuildError, EngineStepError};
@@ -315,10 +308,6 @@ mod tests {
     impl NoiseAlgorithm for TestNoise {
         type Error = TestError;
 
-        fn rng_record(&self) -> Option<&RngRecord> {
-            None
-        }
-
         fn is_noop(&self) -> bool {
             self.noop
         }
@@ -373,7 +362,7 @@ mod tests {
         }
     }
 
-    fn state(time: SimulationTime) -> SystemState {
+    fn state(time: StateTime) -> SystemState {
         let mut state = load_state_schema().unwrap().create_empty_state(time);
         state
             .insert_payload(ABUNDANCE_FIELD, Tensor::from_vec(&[1], vec![1.0]))
@@ -386,7 +375,7 @@ mod tests {
     }
 
     fn engine(
-        time: SimulationTime,
+        time: StateTime,
         calls: CallLog,
         fail: bool,
         noop: bool,
@@ -415,7 +404,7 @@ mod tests {
     #[test]
     fn active_noise_preserves_shared_step_order() {
         let calls = Arc::new(Mutex::new(Vec::new()));
-        let initial = SimulationTime::from_iteration_and_physical_time(3, 1.0).unwrap();
+        let initial = StateTime::from_iteration_and_physical_time(3, 1.0).unwrap();
         let mut engine = engine(initial, Arc::clone(&calls), false, false);
         let advanced = engine.step().unwrap();
         assert_eq!(
@@ -432,13 +421,13 @@ mod tests {
                 .as_slice()[0],
             4.0
         );
-        assert_eq!(engine.into_state().simulation_time(), advanced);
+        assert_eq!(engine.into_state().time(), advanced);
     }
 
     #[test]
     fn noop_noise_skips_application_and_second_invariant() {
         let calls = Arc::new(Mutex::new(Vec::new()));
-        let time = SimulationTime::from_iteration_and_physical_time(0, 0.0).unwrap();
+        let time = StateTime::from_iteration_and_physical_time(0, 0.0).unwrap();
         let mut engine = engine(time, Arc::clone(&calls), false, true);
         engine.step().unwrap();
         assert_eq!(calls.lock().unwrap().as_slice(), ["kernel", "invariant"]);
@@ -447,20 +436,20 @@ mod tests {
     #[test]
     fn noise_failure_stops_later_work_without_advancing_time() {
         let calls = Arc::new(Mutex::new(Vec::new()));
-        let time = SimulationTime::from_iteration_and_physical_time(0, 0.0).unwrap();
+        let time = StateTime::from_iteration_and_physical_time(0, 0.0).unwrap();
         let mut engine = engine(time, Arc::clone(&calls), true, false);
         assert!(matches!(engine.step(), Err(EngineStepError::Noise(_))));
         assert_eq!(
             calls.lock().unwrap().as_slice(),
             ["kernel", "invariant", "noise"]
         );
-        assert_eq!(engine.state().simulation_time(), time);
+        assert_eq!(engine.state().time(), time);
     }
 
     #[test]
     fn impossible_time_advance_fails_before_scientific_mutation() {
         let calls = Arc::new(Mutex::new(Vec::new()));
-        let time = SimulationTime::from_iteration_and_physical_time(u64::MAX - 1, 0.0).unwrap();
+        let time = StateTime::from_iteration_and_physical_time(u64::MAX - 1, 0.0).unwrap();
         let mut engine = engine(time, Arc::clone(&calls), false, false);
         engine.step().unwrap();
         calls.lock().unwrap().clear();
@@ -478,7 +467,7 @@ mod tests {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let interaction = InteractionMatrix::from_rows(vec![vec![0.0]]).unwrap();
         let result = Engine::new(
-            state(SimulationTime::from_iteration(7)),
+            state(StateTime::from_iteration(7)),
             Kernel::new(
                 KernelCore::new(interaction),
                 TestKernel {
