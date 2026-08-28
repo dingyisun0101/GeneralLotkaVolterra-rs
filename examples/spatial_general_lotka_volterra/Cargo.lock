@@ -329,7 +329,7 @@ dependencies = [
 
 [[package]]
 name = "general-lotka-volterra-rs"
-version = "0.16.0"
+version = "0.16.1"
 dependencies = [
  "ecological-model-core",
  "physics_in_parallel",

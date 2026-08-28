@@ -29,6 +29,12 @@ provides Eco Core's canonical ecological schema directly to Workflow. The tiny
 `main.rs` only links GLV's `glv` registration, sets the working directory for
 the relative artifact roots, and enters Workflow.
 
+```text
+wf_configs/
+├── study.json
+└── parameters.json
+```
+
 The example uses the deterministic RK4 mean-field replicator:
 
 ```text

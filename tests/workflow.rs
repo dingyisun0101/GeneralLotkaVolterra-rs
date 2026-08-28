@@ -168,3 +168,23 @@ fn workflow_uses_prepared_inputs_and_records_requested_noise_seed() {
         serde_json::json!([0.5, 0.5])
     );
 }
+
+#[test]
+fn checked_in_examples_use_the_standard_provider_without_state_files() {
+    let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
+    for name in [
+        "mean_field_replicator",
+        "mean_field_replicator_demographic",
+        "spatial_general_lotka_volterra",
+        "spatial_replicator",
+    ] {
+        let project = repository.join("examples").join(name);
+        assert!(
+            !project.join("wf_configs/states").exists(),
+            "{name} must obtain its schema from GlvUnit's standard provider"
+        );
+        Study::load(&project).unwrap_or_else(|error| {
+            panic!("{name} must preflight through Workflow's public boundary: {error}")
+        });
+    }
+}
