@@ -1,9 +1,8 @@
 {
   "seed": 2001,
-  "paths": {"states": {"glv": "wf_configs/states/glv.json"}},
   "phases": {
     "simulate": {
-      "tasks": [{"execution_unit": "glv", "state": "glv"}]
+      "tasks": [{"execution_unit": "glv"}]
     }
   }
 }

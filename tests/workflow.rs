@@ -27,16 +27,15 @@ impl TempProject {
         let root =
             std::env::temp_dir().join(format!("glv-workflow-{}-{sequence}", std::process::id()));
         let configs = root.join("wf_configs");
-        fs::create_dir_all(configs.join("states")).unwrap();
+        fs::create_dir_all(&configs).unwrap();
         let inputs = prepared_inputs(&root.join("prepared"));
         fs::write(
             configs.join("study.json"),
             serde_json::to_vec_pretty(&serde_json::json!({
                 "seed": 73,
-                "paths": {"states": {"glv": "wf_configs/states/glv.json"}},
                 "phases": {
                     "simulate": {
-                        "tasks": [{"execution_unit": "glv", "state": "glv"}]
+                        "tasks": [{"execution_unit": "glv"}]
                     }
                 }
             }))
@@ -66,11 +65,6 @@ impl TempProject {
                 }
             }))
             .unwrap(),
-        )
-        .unwrap();
-        fs::write(
-            configs.join("states/glv.json"),
-            include_bytes!("../schemas/state.json"),
         )
         .unwrap();
         Self(root)
@@ -151,6 +145,10 @@ fn workflow_uses_prepared_inputs_and_records_requested_noise_seed() {
             .payload::<SpatialAbundance>(SPACE_FIELD)
             .unwrap()
             .is_none()
+    );
+    assert_eq!(
+        *final_state.payload::<TotalAbundance>(TOTAL_FIELD).unwrap(),
+        1.0
     );
 
     let requests = reader.user_metadata()["workflow"]["seed_derivation"]["requests"]

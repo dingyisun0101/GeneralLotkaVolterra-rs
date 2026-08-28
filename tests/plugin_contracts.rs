@@ -7,7 +7,7 @@ use general_lotka_volterra_rs::kernel::{
 use general_lotka_volterra_rs::noise::{Noise, NoiseAlgorithm};
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TimeStep,
-    TimeStepError, TotalAbundance, load_state_schema,
+    TimeStepError, TotalAbundance, ecological_state_schema,
 };
 use physics_in_parallel::prelude::basic::{DenseMatrix, Tensor};
 use scientific_workflow::prelude::{StateTime, SystemState};
@@ -23,7 +23,7 @@ enum TestPluginError {
 }
 
 fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemState {
-    let schema = load_state_schema().unwrap();
+    let schema = ecological_state_schema().resolve().unwrap();
     let time = StateTime::from_iteration_and_physical_time(0, 0.0).unwrap();
     let mut state = schema.create_empty_state(time);
     assert!(

@@ -14,7 +14,7 @@ use crate::{AbundanceRepresentation, TimeStep};
 
 use super::{
     DefaultSimulationBuildError, SimulationBuildError, SimulationKind, aggregate_spatial,
-    assemble_initial_state, assemble_initial_state_with_schema, composition_error,
+    assemble_state, composition_error, resolve_schema,
 };
 
 /// Immutable inputs that distinguish one spatial replicator simulation.
@@ -95,7 +95,8 @@ impl SpatialReplicator {
             .map_err(DefaultSimulationBuildError::Kernel)?;
         let species = algorithm.species();
         let abundance = aggregate_spatial(&initial_space, species, true)?;
-        let state = assemble_initial_state(abundance, Some(initial_space), 1.0)?;
+        let schema = resolve_schema()?;
+        let state = assemble_state(&schema, abundance, Some(initial_space), 1.0)?;
         let invariant = LocalFrequencyInvariant::new(species, cutoff)
             .map_err(DefaultSimulationBuildError::Invariant)?;
         Self::from_plugins(
@@ -134,8 +135,7 @@ impl SpatialReplicator {
             .map_err(DefaultSimulationBuildError::Kernel)?;
         let species = algorithm.species();
         let abundance = aggregate_spatial(&initial_space, species, true)?;
-        let state =
-            assemble_initial_state_with_schema(schema, abundance, Some(initial_space), 1.0)?;
+        let state = assemble_state(schema, abundance, Some(initial_space), 1.0)?;
         let invariant = LocalFrequencyInvariant::new(species, cutoff)
             .map_err(DefaultSimulationBuildError::Invariant)?;
         Self::from_plugins(

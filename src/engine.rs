@@ -255,7 +255,7 @@ mod tests {
     use crate::noise::{Noise, NoiseAlgorithm};
     use crate::{
         ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TimeStep,
-        TotalAbundance, load_state_schema,
+        TotalAbundance, ecological_state_schema,
     };
 
     type CallLog = Arc<Mutex<Vec<&'static str>>>;
@@ -363,7 +363,10 @@ mod tests {
     }
 
     fn state(time: StateTime) -> SystemState {
-        let mut state = load_state_schema().unwrap().create_empty_state(time);
+        let mut state = ecological_state_schema()
+            .resolve()
+            .unwrap()
+            .create_empty_state(time);
         state
             .insert_payload(ABUNDANCE_FIELD, Tensor::from_vec(&[1], vec![1.0]))
             .unwrap();

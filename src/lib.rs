@@ -1,9 +1,6 @@
 #![doc = include_str!("../README.md")]
 
-use std::path::Path;
-
 use physics_in_parallel::prelude::basic::Tensor;
-use scientific_workflow::prelude::{StateError, SystemStateSchema};
 use serde::{Deserialize, Serialize};
 
 pub mod advanced;
@@ -17,6 +14,10 @@ pub mod noise;
 pub mod prelude;
 pub mod simulation;
 pub mod workflow;
+
+pub use ecological_model_core::state_schema::{
+    ECOLOGICAL_STATE_SCHEMA_ID, ecological_state_schema,
+};
 
 pub use workflow::{
     GlvConstants, GlvExecutionError, GlvModelConfig, GlvObservationConfig, GlvUnit,
@@ -86,14 +87,4 @@ impl AbundanceRepresentation {
             Self::AbsoluteCount => "absolute_count",
         }
     }
-}
-
-/// Returns the checked-in canonical state-schema path.
-pub fn state_schema_path() -> &'static Path {
-    Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/schemas/state.json"))
-}
-
-/// Loads and validates the canonical GLV state schema.
-pub fn load_state_schema() -> Result<SystemStateSchema, StateError> {
-    SystemStateSchema::load_json_template(state_schema_path())
 }

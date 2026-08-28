@@ -14,7 +14,7 @@ use crate::{AbundanceRepresentation, TimeStep};
 
 use super::{
     DefaultSimulationBuildError, SimulationBuildError, SimulationKind, aggregate_spatial,
-    assemble_initial_state, assemble_initial_state_with_schema, composition_error,
+    assemble_state, composition_error, resolve_schema,
 };
 
 /// Immutable inputs that distinguish one spatial General Lotka–Volterra simulation.
@@ -105,7 +105,8 @@ impl SpatialGeneralLotkaVolterra {
         let species = algorithm.species();
         let abundance = aggregate_spatial(&initial_space, species, false)?;
         let total = abundance.sum_serial().round().max(0.0);
-        let state = assemble_initial_state(abundance, Some(initial_space), total)?;
+        let schema = resolve_schema()?;
+        let state = assemble_state(&schema, abundance, Some(initial_space), total)?;
         let invariant = PopulationInvariant::new(species, cutoff, carrying_capacity)
             .map_err(DefaultSimulationBuildError::Invariant)?;
         Self::from_plugins(
@@ -146,8 +147,7 @@ impl SpatialGeneralLotkaVolterra {
         let species = algorithm.species();
         let abundance = aggregate_spatial(&initial_space, species, false)?;
         let total = abundance.sum_serial().round().max(0.0);
-        let state =
-            assemble_initial_state_with_schema(schema, abundance, Some(initial_space), total)?;
+        let state = assemble_state(schema, abundance, Some(initial_space), total)?;
         let invariant = PopulationInvariant::new(species, cutoff, carrying_capacity)
             .map_err(DefaultSimulationBuildError::Invariant)?;
         Self::from_plugins(

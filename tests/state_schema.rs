@@ -1,15 +1,10 @@
-use std::fs;
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use general_lotka_volterra_rs::{
-    ABUNDANCE_FIELD, AbundanceRepresentation, AggregateAbundance, CHECKPOINT_STREAM, SIGNAL_STREAM,
-    SPACE_FIELD, SPACE_STREAM, SpatialAbundance, TOTAL_FIELD, TotalAbundance, load_state_schema,
-    state_schema_path,
+    ABUNDANCE_FIELD, AbundanceRepresentation, AggregateAbundance, CHECKPOINT_STREAM,
+    ECOLOGICAL_STATE_SCHEMA_ID, SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM, SpatialAbundance,
+    TOTAL_FIELD, TotalAbundance, ecological_state_schema,
 };
 use physics_in_parallel::prelude::basic::Tensor;
 use scientific_workflow::prelude::{StateTime, SystemState, SystemStateSchema};
-
-static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 fn initial_time() -> StateTime {
     StateTime::from_iteration_and_physical_time(0, 0.0).expect("zero is a valid physical time")
@@ -35,35 +30,24 @@ fn assemble_state(
 
 #[test]
 fn canonical_schema_has_one_exact_round_trip() {
-    let schema = load_state_schema().expect("canonical schema loads");
+    let provider = ecological_state_schema();
+    assert_eq!(provider.id(), ECOLOGICAL_STATE_SCHEMA_ID);
+    let schema = provider.resolve().expect("canonical schema resolves");
     let fields = schema.field_schemas();
     assert_eq!(fields.len(), 3);
     assert_eq!(fields[0].name(), ABUNDANCE_FIELD);
     assert_eq!(fields[1].name(), SPACE_FIELD);
     assert_eq!(fields[2].name(), TOTAL_FIELD);
 
-    let checked_in = fs::read_to_string(state_schema_path()).expect("schema file is readable");
-    let generated = schema
-        .to_json_template()
-        .expect("schema serializes to its canonical JSON representation");
-    assert_eq!(generated, checked_in.trim_end());
-
-    let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-    let directory = std::env::temp_dir().join(format!(
-        "glv-state-schema-round-trip-{}-{sequence}",
-        std::process::id()
-    ));
-    fs::create_dir(&directory).expect("unique temporary directory is created");
-    let path = directory.join("state.json");
-    fs::write(&path, generated).expect("round-trip template is written");
-    let restored = SystemStateSchema::load_json_template(&path).expect("round trip reloads");
-    assert_eq!(restored.to_json_template().unwrap(), checked_in.trim_end());
-    fs::remove_dir_all(directory).expect("temporary directory is removed");
+    let embedded: serde_json::Value = serde_json::from_slice(provider.document()).unwrap();
+    let generated: serde_json::Value =
+        serde_json::from_str(&schema.to_json_template().unwrap()).unwrap();
+    assert_eq!(generated, embedded);
 }
 
 #[test]
 fn non_spatial_and_spatial_models_share_the_populated_space_slot() {
-    let schema = load_state_schema().unwrap();
+    let schema = ecological_state_schema().resolve().unwrap();
 
     let non_spatial = assemble_state(&schema, Tensor::from_vec(&[2], vec![0.25, 0.75]), None, 1.0);
     assert_eq!(non_spatial.populated_field_count(), 3);
@@ -93,7 +77,7 @@ fn non_spatial_and_spatial_models_share_the_populated_space_slot() {
 
 #[test]
 fn coordinated_spatial_mutation_updates_abundance_space_and_total() {
-    let schema = load_state_schema().unwrap();
+    let schema = ecological_state_schema().resolve().unwrap();
     let mut state = assemble_state(
         &schema,
         Tensor::from_vec(&[2], vec![1.0, 2.0]),
@@ -127,7 +111,7 @@ fn coordinated_spatial_mutation_updates_abundance_space_and_total() {
 
 #[test]
 fn payload_insertion_and_extraction_preserve_tensor_ownership() {
-    let schema = load_state_schema().unwrap();
+    let schema = ecological_state_schema().resolve().unwrap();
     let abundance = Tensor::from_vec(&[3], vec![1.0, 2.0, 3.0]);
     let original_pointer = abundance.as_slice().as_ptr();
     let mut state = assemble_state(&schema, abundance, None, 6.0);

@@ -43,6 +43,9 @@ pub mod prelude {
     pub use crate::{
         ABUNDANCE_FIELD, AbundanceRepresentation, AggregateAbundance, CHECKPOINT_STREAM,
         ComputePool, ComputePoolError, SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM, SpatialAbundance,
-        TOTAL_FIELD, TotalAbundance, load_state_schema, state_schema_path, with_threads,
+        TOTAL_FIELD, TotalAbundance, with_threads,
+    };
+    pub use ecological_model_core::state_schema::{
+        ECOLOGICAL_STATE_SCHEMA_ID, ecological_state_schema,
     };
 }

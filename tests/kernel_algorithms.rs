@@ -3,7 +3,7 @@ use general_lotka_volterra_rs::kernel::{
     SpatialGeneralLotkaVolterraRk2, SpatialReplicatorRk2,
 };
 use general_lotka_volterra_rs::{
-    ABUNDANCE_FIELD, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, load_state_schema,
+    ABUNDANCE_FIELD, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, ecological_state_schema,
 };
 use physics_in_parallel::prelude::basic::{DenseMatrix, SquareLatticeConfig, Tensor};
 use scientific_workflow::prelude::{StateTime, SystemState};
@@ -11,7 +11,10 @@ use support::interaction_from_array;
 
 fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemState {
     let time = StateTime::from_iteration_and_physical_time(0, 0.0).unwrap();
-    let mut state = load_state_schema().unwrap().create_empty_state(time);
+    let mut state = ecological_state_schema()
+        .resolve()
+        .unwrap()
+        .create_empty_state(time);
     state
         .insert_payload(
             ABUNDANCE_FIELD,

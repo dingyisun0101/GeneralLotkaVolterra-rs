@@ -12,8 +12,8 @@ use crate::noise::{NoNoise, Noise, NoiseAlgorithm};
 use crate::{AbundanceRepresentation, TimeStep};
 
 use super::{
-    DefaultSimulationBuildError, SimulationBuildError, SimulationKind, assemble_initial_state,
-    assemble_initial_state_with_schema, composition_error,
+    DefaultSimulationBuildError, SimulationBuildError, SimulationKind, assemble_state,
+    composition_error, resolve_schema,
 };
 
 /// Immutable inputs that distinguish one mean-field replicator simulation.
@@ -63,7 +63,8 @@ impl MeanFieldReplicator {
         interaction: InteractionMatrix,
         config: MeanFieldReplicatorConfig,
     ) -> Result<Self, DefaultSimulationBuildError> {
-        let state = assemble_initial_state(initial_abundance, None, 1.0)?;
+        let schema = resolve_schema()?;
+        let state = assemble_state(&schema, initial_abundance, None, 1.0)?;
         Self::from_state(state, interaction, config)
     }
 
@@ -74,7 +75,7 @@ impl MeanFieldReplicator {
         interaction: InteractionMatrix,
         config: MeanFieldReplicatorConfig,
     ) -> Result<Self, DefaultSimulationBuildError> {
-        let state = assemble_initial_state_with_schema(schema, initial_abundance, None, 1.0)?;
+        let state = assemble_state(schema, initial_abundance, None, 1.0)?;
         Self::from_state(state, interaction, config)
     }
 

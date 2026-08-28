@@ -4,7 +4,7 @@ use general_lotka_volterra_rs::kernel::{
 };
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TimeStep,
-    load_state_schema,
+    ecological_state_schema,
 };
 use physics_in_parallel::prelude::basic::{DenseMatrix, Tensor};
 use scientific_workflow::prelude::{StateTime, SystemState};
@@ -41,7 +41,7 @@ impl KernelAlgorithm for InvalidBothUpdate {
 }
 
 fn spatial_state() -> SystemState {
-    let schema = load_state_schema().unwrap();
+    let schema = ecological_state_schema().resolve().unwrap();
     let time = StateTime::from_iteration_and_physical_time(7, 1.5).unwrap();
     let mut state = schema.create_empty_state(time);
     state

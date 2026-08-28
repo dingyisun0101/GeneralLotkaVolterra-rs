@@ -11,6 +11,10 @@ interaction artifact reference and a verified canonical initial-state
 reference. GLV does not own shared-input generation, configuration loading, or
 recording persistence.
 
+Eco Core also supplies the canonical ecological state schema. `GlvUnit`
+advertises that standard provider, so GLV projects declare neither a copied
+schema file nor a task-level state name.
+
 ## Input conversion
 
 ```text
@@ -30,12 +34,14 @@ input generators.
 
 ## Lifecycle
 
-`preflight` validates descriptor dimensions, schema order, GLV parameters,
-observation policy, and stochastic/detector compatibility without reading
-artifacts. `initialize` resolves the two artifacts, converts the initial state,
-and constructs a simulation from the exact schema instance supplied by
-Workflow. `step` performs one complete numerical transition and then updates
-the bounded observer. `member` is side-effect free.
+`preflight` calls `validate_constants` for descriptor dimensions, schema order,
+GLV parameters, observation policy, and stochastic/detector compatibility
+without reading artifacts. `initialize` follows `resolve_inputs` →
+`assemble_state` → `build_member` using the exact schema instance supplied by
+Workflow. Simulator uses the same architectural vocabulary while retaining
+different payload types and mathematics. `step` performs one complete
+numerical transition and then updates the bounded observer. `member` is
+side-effect free.
 
 Workflow owns all stream sampling and persistence. GLV declares uniform
 `signal`, `space`, and `checkpoint` streams and returns structured completion

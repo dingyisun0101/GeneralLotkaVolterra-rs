@@ -24,10 +24,10 @@ prepared/ ──Eco Core references──> EcologicalInputs
 ```
 
 `wf_configs/` is required for this directory to qualify as a Workflow project
-root. The `states/` folder is conventional; `study.json` is authoritative about
-the schema location. The tiny `main.rs` only links GLV's `glv` registration,
-sets the working directory for the relative artifact roots, and enters
-Workflow.
+root. No state-schema file or `study.json` state key is needed: `GlvUnit`
+provides Eco Core's canonical ecological schema directly to Workflow. The tiny
+`main.rs` only links GLV's `glv` registration, sets the working directory for
+the relative artifact roots, and enters Workflow.
 
 The example uses the deterministic RK4 mean-field replicator:
 

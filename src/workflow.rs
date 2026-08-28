@@ -1,6 +1,9 @@
 //! Workflow execution-unit integration for built-in GLV dynamics.
 
-use ecological_model_core::inputs::{EcologicalInputs, EcologicalInputsError};
+use ecological_model_core::inputs::{
+    EcologicalInputs, EcologicalInputsError, ResolvedEcologicalInputs,
+};
+use ecological_model_core::state_schema::ecological_state_schema;
 use ecological_model_core::terminal_state::{
     StopReason, TERMINAL_STATE_METADATA_KEY, TerminationSignal,
 };
@@ -14,6 +17,7 @@ use scientific_workflow::prelude::{
     ExecutionUnit, InitializationContext, MemberCompletion, MemberView, ObservationPlan,
     ObservationStream, SystemState, SystemStateSchema, UnitResult,
 };
+use scientific_workflow::state::StateSchemaProvider;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use thiserror::Error;
@@ -24,8 +28,7 @@ use crate::kernel::{Kernel, KernelAlgorithm, KernelCore, MeanFieldReplicatorRk4}
 use crate::noise::{DemographicGaussian, Noise, NoiseAlgorithm, NoiseDomain};
 use crate::simulation::{
     MeanFieldReplicator, MeanFieldReplicatorConfig, SpatialGeneralLotkaVolterra,
-    SpatialGeneralLotkaVolterraConfig, SpatialReplicator, SpatialReplicatorConfig,
-    assemble_initial_state_with_schema,
+    SpatialGeneralLotkaVolterraConfig, SpatialReplicator, SpatialReplicatorConfig, assemble_state,
 };
 use crate::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD, TimeStep};
 
@@ -405,6 +408,10 @@ pub struct GlvUnit {
 impl ExecutionUnit for GlvUnit {
     type Constants = GlvConstants;
 
+    fn standard_state_schema() -> Option<StateSchemaProvider> {
+        Some(ecological_state_schema())
+    }
+
     fn preflight(
         constants: &Self::Constants,
         schema: &SystemStateSchema,
@@ -434,11 +441,8 @@ impl ExecutionUnit for GlvUnit {
             observation,
             maximum_iterations,
         } = constants;
-        let (interaction, initial) = inputs.resolve()?.into_parts();
-        let species = interaction.species();
-        let simulation =
-            build_simulation(schema, &identity, context, model, interaction, &initial)?;
-        debug_assert_eq!(species, initial.num_taxa());
+        let inputs = resolve_inputs(inputs)?;
+        let simulation = build_member(schema, &identity, context, model, inputs)?;
         let mut unit = Self {
             identity: identity.into_boxed_str(),
             simulation,
@@ -578,15 +582,20 @@ fn validate_constants(
     Ok(())
 }
 
-fn build_simulation(
+fn resolve_inputs(inputs: EcologicalInputs) -> Result<ResolvedEcologicalInputs, GlvExecutionError> {
+    Ok(inputs.resolve()?)
+}
+
+fn build_member(
     schema: &SystemStateSchema,
     identity: &str,
     context: &InitializationContext,
     model: GlvModelConfig,
-    interaction: ecological_model_core::interaction::InteractionMatrix,
-    initial: &ecological_model_core::initial_state::InitialState,
+    inputs: ResolvedEcologicalInputs,
 ) -> UnitResult<Box<dyn RuntimeSimulation>> {
+    let (interaction, initial) = inputs.into_parts();
     let species = interaction.species();
+    debug_assert_eq!(species, initial.num_taxa());
     Ok(match model {
         GlvModelConfig::MeanFieldReplicator {
             growth,
@@ -618,7 +627,7 @@ fn build_simulation(
                 )
             };
             let abundance = Tensor::from_vec(&[species], initial.frequencies());
-            let state = assemble_initial_state_with_schema(schema, abundance, None, 1.0)?;
+            let state = assemble_state(schema, abundance, None, 1.0)?;
             let kernel = Kernel::new(
                 KernelCore::new(interaction),
                 MeanFieldReplicatorRk4::new(growth.tensor(species, "growth")?)?,
@@ -643,7 +652,7 @@ fn build_simulation(
             extinction_cutoff,
             time_step,
         } => {
-            let space = categorical_to_species_field(initial, 1.0)?;
+            let space = categorical_to_species_field(&initial, 1.0)?;
             let diffusion = crate::kernel::Diffusion::new(
                 diffusion.tensor(species, "diffusion")?,
                 initial.space().config().clone(),
@@ -668,7 +677,7 @@ fn build_simulation(
             initial_population_per_site,
             time_step,
         } => {
-            let space = categorical_to_species_field(initial, initial_population_per_site)?;
+            let space = categorical_to_species_field(&initial, initial_population_per_site)?;
             let diffusion = crate::kernel::Diffusion::new(
                 diffusion.tensor(species, "diffusion")?,
                 initial.space().config().clone(),

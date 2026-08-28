@@ -4,13 +4,14 @@ use general_lotka_volterra_rs::invariant::{
 };
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD,
-    TotalAbundance, load_state_schema,
+    TotalAbundance, ecological_state_schema,
 };
 use physics_in_parallel::prelude::basic::Tensor;
 use scientific_workflow::prelude::{StateTime, SystemState};
 
 fn make_state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemState {
-    let mut state = load_state_schema()
+    let mut state = ecological_state_schema()
+        .resolve()
         .unwrap()
         .create_empty_state(StateTime::from_iteration_and_physical_time(0, 0.0).unwrap());
     state

@@ -33,11 +33,13 @@ Ownership is strict:
   state/time containers, derives requested runtime seeds, and writes results.
 - The application or Dispatcher prepares shared scientific inputs through Eco
   Core and supplies their immutable references.
-- Eco Core owns ecological artifacts, validation, resolution, and the common
-  terminal-state format. It is model-neutral and has no dependency on GLV,
-  Simulator, Dispatcher, or another private application crate.
-- GLV converts the canonical initial state for its selected dynamics, owns
-  numerical evolution and invariants, and reports completion.
+- Eco Core owns ecological artifacts, the canonical ecological state schema,
+  validation, resolution, and the common terminal-state format. It is
+  model-neutral and has no dependency on GLV, Simulator, Dispatcher, or
+  another private application crate.
+- GLV advertises Eco Core's standard schema to Workflow, resolves the prepared
+  inputs, assembles its mathematical payloads into that schema, owns numerical
+  evolution and invariants, and reports completion.
 - Physics in Parallel owns tensors, matrices, lattice geometry, diffusion
   primitives, random engines, and bounded numerical parallelism.
 
@@ -69,8 +71,10 @@ realization while retaining model-specific state representations.
 ## Project configuration
 
 A Workflow project root must contain `wf_configs/study.json` and
-`wf_configs/parameters.json`. A `states/` folder is recommended but not
-required; the named path in `study.json` is authoritative.
+`wf_configs/parameters.json`. GLV does not require a local state-schema file:
+its `ExecutionUnit` supplies Eco Core's canonical schema through Workflow's
+standard provider API. Accordingly, a GLV task omits both `paths.states` and
+the task-level `state` key.
 
 ```text
 my-study/
@@ -78,9 +82,28 @@ my-study/
 ├── src/main.rs
 └── wf_configs/
     ├── study.json
-    ├── parameters.json
-    └── states/glv.json
+    └── parameters.json
 ```
+
+The minimal `study.json` boundary is:
+
+```json
+{
+  "seed": 2001,
+  "phases": {
+    "simulate": {
+      "tasks": [{"execution_unit": "glv"}]
+    }
+  }
+}
+```
+
+Workflow asks `GlvUnit::standard_state_schema()` for the provider, records the
+provider identity `ecological-model-core.ecological-state.v1`, and resolves a
+fresh schema for the task. GLV then follows the same lifecycle vocabulary as
+Simulator: `validate_constants` → `resolve_inputs` → `assemble_state` →
+`build_member` → step/observe. The two crates share this orchestration shape,
+while each retains its own payload types and mathematical update rules.
 
 The executable only links GLV's registration and enters Workflow:
 
@@ -188,7 +211,7 @@ pinned Git revision:
 ```toml
 [dependencies]
 general-lotka-volterra-rs = { path = "../glv" }
-scientific-workflow = "0.11.3"
+scientific-workflow = "0.11.6"
 ```
 
 A local clone is appropriate when changing numerical methods, invariants,
