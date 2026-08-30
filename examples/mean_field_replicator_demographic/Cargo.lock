@@ -266,9 +266,9 @@ dependencies = [
 
 [[package]]
 name = "ecological-state-toolkit"
-version = "0.12.1"
+version = "0.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "421113c2e13f8c7f9f60fba8fc01f92ea0f7817803371a96aae7a3663747796a"
+checksum = "372914008cc7b1c48488df442ecd1f8f4dde139c6d7e2084ef1e2fece46559e5"
 dependencies = [
  "physics_in_parallel",
  "scientific-workflow",
