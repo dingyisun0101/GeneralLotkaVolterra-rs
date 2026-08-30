@@ -1,4 +1,4 @@
-use ecological_model_core::interaction::{InteractionMatrix, InteractionMatrixError};
+use ecological_state_toolkit::interaction::{InteractionMatrix, InteractionMatrixError};
 use physics_in_parallel::prelude::basic::DenseMatrix;
 
 pub fn interaction_from_array(

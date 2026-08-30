@@ -45,7 +45,7 @@ pub mod prelude {
         ComputePool, ComputePoolError, SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM, SpatialAbundance,
         TOTAL_FIELD, TotalAbundance, with_threads,
     };
-    pub use ecological_model_core::state_schema::{
+    pub use ecological_state_toolkit::state_schema::{
         ECOLOGICAL_STATE_SCHEMA_ID, ecological_state_schema,
     };
 }

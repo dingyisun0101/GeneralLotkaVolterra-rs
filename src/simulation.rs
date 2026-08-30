@@ -72,7 +72,7 @@ pub enum StateAssemblyError {
     /// The canonical zero iteration/physical-time coordinate was rejected.
     #[error("canonical initial simulation time is invalid")]
     InvalidInitialTime,
-    /// Eco Core's canonical schema could not be resolved.
+    /// Ecological State Toolkit's canonical schema could not be resolved.
     #[error("canonical ecological state schema could not be resolved: {0}")]
     Schema(#[source] StateError),
     /// Workflow rejected the aggregate allocation and retained it in this error.
@@ -152,7 +152,7 @@ pub enum DefaultSimulationBuildError {
 
 pub(crate) fn resolve_schema()
 -> Result<scientific_workflow::prelude::SystemStateSchema, StateAssemblyError> {
-    ecological_model_core::state_schema::ecological_state_schema()
+    ecological_state_toolkit::state_schema::ecological_state_schema()
         .resolve()
         .map_err(StateAssemblyError::Schema)
 }

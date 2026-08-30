@@ -15,7 +15,7 @@ pub mod prelude;
 pub mod simulation;
 pub mod workflow;
 
-pub use ecological_model_core::state_schema::{
+pub use ecological_state_toolkit::state_schema::{
     ECOLOGICAL_STATE_SCHEMA_ID, ecological_state_schema,
 };
 

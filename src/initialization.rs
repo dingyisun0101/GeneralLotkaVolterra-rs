@@ -1,6 +1,6 @@
 //! Shared categorical initial-state input and explicit GLV conversion.
 
-use ecological_model_core::initial_state::InitialState;
+use ecological_state_toolkit::initial_state::InitialState;
 use physics_in_parallel::prelude::basic::{Tensor, TensorError};
 use thiserror::Error;
 
@@ -38,7 +38,7 @@ pub enum SpatialInitializationError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ecological_model_core::initial_state::{DistributionSource, InitialStateRecipe};
+    use ecological_state_toolkit::initial_state::{DistributionSource, InitialStateRecipe};
     use physics_in_parallel::prelude::basic::{RngConfig, SquareLatticeConfig};
 
     #[test]

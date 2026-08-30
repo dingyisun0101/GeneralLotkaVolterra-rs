@@ -1,5 +1,10 @@
 # General Lotka–Volterra for Rust
 
+> **Breaking 0.17 update:** GLV now uses `ecological-state-toolkit` 0.12 and
+> its renamed Rust import. There is no compatibility dependency on
+> `ecological-model-core`; consumers that exchange toolkit-owned types must use
+> the new crate.
+
 `general-lotka-volterra-rs` provides allocation-conscious GLV and replicator
 dynamics as a Scientific Workflow `ExecutionUnit`. Workflow registers the unit
 under `glv`; the selected model remains an internal scientific composition.
@@ -9,7 +14,7 @@ under `glv`; the selected model remains an internal scientific composition.
 ```text
 application / Dispatcher
 ├── Workflow Config ──> GlvConstants ───────────────────────┐
-└── Eco Core ──> interaction + initial-state artifacts ─┐   │
+└── Ecological State Toolkit ──> interaction + initial-state artifacts ─┐   │
                                                         v   v
                                                   EcologicalInputs
                                                         │
@@ -33,11 +38,11 @@ Ownership is strict:
   state/time containers, derives requested runtime seeds, and writes results.
 - The application or Dispatcher prepares shared scientific inputs through Eco
   Core and supplies their immutable references.
-- Eco Core owns ecological artifacts, the canonical ecological state schema,
+- Ecological State Toolkit owns ecological artifacts, the canonical ecological state schema,
   validation, resolution, and the common terminal-state format. It is
   model-neutral and has no dependency on GLV, Simulator, Dispatcher, or
   another private application crate.
-- GLV advertises Eco Core's standard schema to Workflow, resolves the prepared
+- GLV advertises Ecological State Toolkit's standard schema to Workflow, resolves the prepared
   inputs, assembles its mathematical payloads into that schema, owns numerical
   evolution and invariants, and reports completion.
 - Physics in Parallel owns tensors, matrices, lattice geometry, diffusion
@@ -72,7 +77,7 @@ realization while retaining model-specific state representations.
 
 A Workflow project root must contain `wf_configs/study.json` and
 `wf_configs/parameters.json`. GLV does not require a local state-schema file:
-its `ExecutionUnit` supplies Eco Core's canonical schema through Workflow's
+its `ExecutionUnit` supplies Ecological State Toolkit's canonical schema through Workflow's
 standard provider API. Accordingly, a GLV task omits both `paths.states` and
 the task-level `state` key.
 
@@ -99,7 +104,7 @@ The minimal `study.json` boundary is:
 ```
 
 Workflow asks `GlvUnit::standard_state_schema()` for the provider, records the
-provider identity `ecological-model-core.ecological-state.v1`, and resolves a
+provider identity `ecological-state-toolkit.ecological-state.v1`, and resolves a
 fresh schema for the task. GLV then follows the same lifecycle vocabulary as
 Simulator: `validate_constants` → `resolve_inputs` → `assemble_state` →
 `build_member` → step/observe. The two crates share this orchestration shape,
@@ -172,7 +177,7 @@ Current runnable examples cover
 
 ## Seeds and reproducibility
 
-Input-generation seeds belong to the immutable Eco Core artifacts and are not
+Input-generation seeds belong to the immutable Ecological State Toolkit artifacts and are not
 requested again by GLV. Deterministic models need no runtime seed. The
 demographic model requests one member-scoped `noise` seed from Workflow only
 when its nested `rng.seed` is absent. Workflow records the actual derived seed
@@ -199,7 +204,7 @@ GLV's bounded equilibrium and periodic-orbit evidence policy. Stochastic GLV
 requires `terminal_only`, because a noisy instantaneous residual is not valid
 deterministic equilibrium evidence.
 
-Every successful completion includes Eco Core's common `terminal_state` inside
+Every successful completion includes Ecological State Toolkit's common `terminal_state` inside
 Workflow's completion metadata. Its classification distinguishes an accepted
 equilibrium or periodic orbit from a trailing terminal estimate.
 

@@ -11,7 +11,7 @@ interaction artifact reference and a verified canonical initial-state
 reference. GLV does not own shared-input generation, configuration loading, or
 recording persistence.
 
-Eco Core also supplies the canonical ecological state schema. `GlvUnit`
+Ecological State Toolkit also supplies the canonical ecological state schema. `GlvUnit`
 advertises that standard provider, so GLV projects declare neither a copied
 schema file nor a task-level state name.
 
@@ -45,7 +45,7 @@ side-effect free.
 
 Workflow owns all stream sampling and persistence. GLV declares uniform
 `signal`, `space`, and `checkpoint` streams and returns structured completion
-metadata containing Eco Core's `terminal_state`.
+metadata containing Ecological State Toolkit's `terminal_state`.
 
 ## Reproducibility
 

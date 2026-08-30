@@ -7,7 +7,7 @@ cargo run --manifest-path /path/to/glv/examples/mean_field_replicator/Cargo.toml
 ```
 
 The application prepares a model-ready interaction matrix and one canonical
-categorical initial state through Eco Core. Both references are grouped as
+categorical initial state through Ecological State Toolkit. Both references are grouped as
 `EcologicalInputs` in `parameters.json`. GLV resolves that same envelope,
 converts categorical counts to exact aggregate frequencies, and runs the
 selected mean-field model. It does not read project JSON, generate an initial
@@ -15,7 +15,7 @@ condition, or copy input artifacts into its output.
 
 ```text
 wf_configs/ ──Workflow Config──> GlvConstants
-prepared/ ──Eco Core references──> EcologicalInputs
+prepared/ ──Ecological State Toolkit references──> EcologicalInputs
                                       │
                                       v
                     GlvUnit -> SystemState -> Workflow writers
@@ -25,7 +25,7 @@ prepared/ ──Eco Core references──> EcologicalInputs
 
 `wf_configs/` is required for this directory to qualify as a Workflow project
 root. No state-schema file or `study.json` state key is needed: `GlvUnit`
-provides Eco Core's canonical ecological schema directly to Workflow. The tiny
+provides Ecological State Toolkit's canonical ecological schema directly to Workflow. The tiny
 `main.rs` only links GLV's `glv` registration, sets the working directory for
 the relative artifact roots, and enters Workflow.
 

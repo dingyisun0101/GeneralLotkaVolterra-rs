@@ -1,13 +1,13 @@
 //! Workflow execution-unit integration for built-in GLV dynamics.
 
-use ecological_model_core::inputs::{
+use ecological_state_toolkit::inputs::{
     EcologicalInputs, EcologicalInputsError, ResolvedEcologicalInputs,
 };
-use ecological_model_core::state_schema::ecological_state_schema;
-use ecological_model_core::terminal_state::{
+use ecological_state_toolkit::state_schema::ecological_state_schema;
+use ecological_state_toolkit::terminal_state::{
     StopReason, TERMINAL_STATE_METADATA_KEY, TerminationSignal,
 };
-use ecological_model_core::trajectory::{
+use ecological_state_toolkit::trajectory::{
     AbundanceView, DetectionPolicy, EquilibriumEvidence, EquilibriumPolicy, PeriodicOrbitPolicy,
     ResidualTolerance, TerminalPolicy, TrajectoryObservation, TrajectoryObservationPolicy,
     TrajectoryObserver, TrajectoryObserverError,

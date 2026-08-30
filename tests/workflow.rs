@@ -2,11 +2,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use ecological_model_core::initial_state::{
+use ecological_state_toolkit::initial_state::{
     InitialStateArtifactReference, InitialStateRecipe, persist_initial_state,
 };
-use ecological_model_core::inputs::EcologicalInputs;
-use ecological_model_core::interaction::{
+use ecological_state_toolkit::inputs::EcologicalInputs;
+use ecological_state_toolkit::interaction::{
     InteractionArtifactReference, InteractionMatrix, persist_interaction_matrix,
 };
 use general_lotka_volterra_rs::{
