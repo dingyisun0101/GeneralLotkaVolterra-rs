@@ -1,6 +1,6 @@
 # General Lotka–Volterra for Rust
 
-> **Breaking 0.17 update:** GLV now uses `ecological-state-toolkit` 0.12 and
+> **Breaking 0.17 update:** GLV now uses `ecological-state-toolkit` 0.12.1 and
 > its renamed Rust import. There is no compatibility dependency on
 > `ecological-model-core`; consumers that exchange toolkit-owned types must use
 > the new crate.
