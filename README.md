@@ -210,19 +210,17 @@ equilibrium or periodic orbit from a trailing terminal estimate.
 
 ## Installation
 
-The crate currently declares `publish = false`, so use a local checkout or a
-pinned Git revision:
+Use the coordinated crates.io releases for application development:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = { path = "../glv" }
+general-lotka-volterra-rs = "0.17.2"
 scientific-workflow = "0.13.2"
 ```
 
-A local clone is appropriate when changing numerical methods, invariants,
-payloads, or sibling crates together. A pinned Git dependency is preferable
-when consuming a fixed revision without editing it. The minimum toolchain is
-Rust 1.97, edition 2024.
+A local clone remains appropriate when changing numerical methods, invariants,
+payloads, or sibling crates together. The minimum toolchain is Rust 1.97,
+edition 2024.
 
 ## Public API
 

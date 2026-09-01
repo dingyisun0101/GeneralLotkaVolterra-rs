@@ -266,7 +266,9 @@ dependencies = [
 
 [[package]]
 name = "ecological-state-toolkit"
-version = "0.12.2"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "850159a359013b3d8b8f941f19a304e38e4839b927e23d8cfb72d366b17f264e"
 dependencies = [
  "physics_in_parallel",
  "scientific-workflow",
@@ -327,7 +329,7 @@ dependencies = [
 
 [[package]]
 name = "general-lotka-volterra-rs"
-version = "0.17.1"
+version = "0.17.2"
 dependencies = [
  "ecological-state-toolkit",
  "physics_in_parallel",
