@@ -216,7 +216,7 @@ pinned Git revision:
 ```toml
 [dependencies]
 general-lotka-volterra-rs = { path = "../glv" }
-scientific-workflow = "0.13.0"
+scientific-workflow = "0.13.1"
 ```
 
 A local clone is appropriate when changing numerical methods, invariants,

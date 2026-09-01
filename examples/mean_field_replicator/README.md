@@ -3,8 +3,12 @@
 This is the current GLV configuration boundary in one runnable project:
 
 ```bash
+python -m pip install "scientific-workflow-reader[npy]==0.4.0"
 cargo run --manifest-path /path/to/glv/examples/mean_field_replicator/Cargo.toml
 ```
+
+The final reserved `$npy` phase converts the completed member recording into
+C-contiguous arrays.
 
 The application prepares a model-ready interaction matrix and one canonical
 categorical initial state through Ecological State Toolkit. Both references are grouped as

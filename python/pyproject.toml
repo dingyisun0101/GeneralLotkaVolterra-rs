@@ -11,7 +11,7 @@ requires-python = ">=3.10"
 license = "MIT"
 dependencies = [
   "numpy>=2,<3",
-  "scientific-workflow-reader>=0.3,<0.4",
+  "scientific-workflow-reader>=0.4,<0.5",
 ]
 
 [tool.setuptools.packages.find]

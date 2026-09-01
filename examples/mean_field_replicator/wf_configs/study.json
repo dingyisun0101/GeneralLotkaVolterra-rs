@@ -5,6 +5,9 @@
   "phases": {
     "simulate": {
       "tasks": [{"execution_unit": "glv"}]
+    },
+    "$npy": {
+      "after": ["simulate"]
     }
   }
 }

@@ -5,9 +5,10 @@ recording integrity and JSONL reconstruction; PiP tensors are serialized
 directly into those records, and this package validates and converts GLV's
 `abundance`, optional species-last `space`, and `total` payloads.
 
-Version 0.5 reads Workflow 0.11 member recordings and validates the GLV model
-kind from the recorded `GlvConstants`. It decodes the current PiP dense-tensor
-payload and has no legacy recording compatibility layer.
+Version 0.5 uses `scientific-workflow-reader` 0.4 for Workflow recording format
+7 and validates the GLV model kind from the recorded `GlvConstants`. It decodes
+the current PiP dense-tensor payload and has no legacy recording compatibility
+layer.
 
 ```python
 from general_lotka_volterra_reader import open_glv_recording
