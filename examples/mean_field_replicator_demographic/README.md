@@ -1,6 +1,6 @@
 # Mean-field replicator with demographic noise
 
-This Workflow 0.13.1 project selects `mean_field_replicator_demographic`. It
+This Workflow 0.13.2 project selects `mean_field_replicator_demographic`. It
 consumes the same checked-in `EcologicalInputs` fixture as the deterministic and
 spatial examples, then requests one member-scoped runtime seed named `noise`.
 Workflow records the actual derived seed with the member output.
@@ -12,7 +12,8 @@ Stochastic GLV uses `observation.mode = terminal_only`; deterministic
 equilibrium evidence is intentionally unavailable under active noise.
 
 ```bash
-python -m pip install "scientific-workflow-reader[npy]==0.4.0"
+python -m pip install \
+  "scientific-workflow-reader[npy] @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@6c8e7d4#subdirectory=python"
 cargo run --manifest-path examples/mean_field_replicator_demographic/Cargo.toml
 ```
 

@@ -3,7 +3,8 @@
 This is the current GLV configuration boundary in one runnable project:
 
 ```bash
-python -m pip install "scientific-workflow-reader[npy]==0.4.0"
+python -m pip install \
+  "scientific-workflow-reader[npy] @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@6c8e7d4#subdirectory=python"
 cargo run --manifest-path /path/to/glv/examples/mean_field_replicator/Cargo.toml
 ```
 
