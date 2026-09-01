@@ -1,4 +1,6 @@
 {
+  "workflow_schema": 1,
+  "threads": 4,
   "seed": 2001,
   "phases": {
     "simulate": {
