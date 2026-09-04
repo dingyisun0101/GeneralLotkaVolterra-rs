@@ -4,11 +4,12 @@ use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
 
-use physics_in_parallel::prelude::basic::{DenseMatrix, MatrixError, Tensor};
+use physics_in_parallel::prelude::basic::{Matrix, MatrixError, Tensor};
 use scientific_workflow::prelude::{StateError, SystemState};
 use thiserror::Error as ThisError;
 
 use crate::interaction::{InteractionMatrix, InteractionProvenance};
+use crate::tensor_compat::DenseTensorExt;
 use crate::{ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TimeStep};
 
 /// Invalid shared matrix application.
@@ -51,12 +52,12 @@ impl KernelCore {
     }
 
     /// Borrows the exact immutable interaction matrix.
-    pub fn interaction(&self) -> &DenseMatrix<f64> {
+    pub fn interaction(&self) -> &Matrix<f64> {
         self.interaction.values()
     }
 
     /// Clones only the shared matrix handle, never its coefficient allocation.
-    pub fn shared_interaction(&self) -> Arc<DenseMatrix<f64>> {
+    pub fn shared_interaction(&self) -> Arc<Matrix<f64>> {
         self.interaction.shared_values()
     }
 

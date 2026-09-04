@@ -115,7 +115,7 @@ pub enum KernelAlgorithmError {
     },
     /// PiP rejected lattice geometry or finite-difference layout.
     #[error("invalid lattice configuration: {0}")]
-    SpaceConfig(#[from] physics_in_parallel::prelude::basic::SquareLatticeConfigError),
+    SpaceConfig(#[from] physics_in_parallel::prelude::basic::SquareLatticeGeometryError),
     /// Explicit diffusion would exceed the conservative stability limit.
     #[error("time step {actual} exceeds explicit diffusion stability limit {maximum}")]
     UnstableTimeStep {

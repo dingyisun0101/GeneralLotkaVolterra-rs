@@ -12,7 +12,7 @@ use std::convert::Infallible;
 use std::error::Error;
 use std::fmt;
 
-use physics_in_parallel::prelude::basic::Tensor;
+use physics_in_parallel::prelude::basic::{Backend, Tensor};
 use scientific_workflow::prelude::{PayloadInsertError, StateError, StateTime, SystemState};
 use serde::{Deserialize, Serialize};
 use thiserror::Error as ThisError;
@@ -20,6 +20,7 @@ use thiserror::Error as ThisError;
 use crate::engine::EngineBuildError;
 use crate::invariant::InvariantPolicyError;
 use crate::kernel::KernelAlgorithmError;
+use crate::tensor_compat::DenseTensorExt;
 use crate::{
     ABUNDANCE_FIELD, AbundanceRepresentation, AggregateAbundance, SPACE_FIELD, SpatialAbundance,
     TOTAL_FIELD, TotalAbundance,
@@ -189,7 +190,8 @@ pub(crate) fn aggregate_spatial(
 ) -> Result<AggregateAbundance, DefaultSimulationBuildError> {
     let values = space.as_slice();
     let cells = values.len() / species;
-    let mut abundance = Tensor::zeros(&[species]);
+    let mut abundance =
+        Tensor::zeros(&[species], Backend::Dense).expect("validated spatial species axis");
     for cell in values.chunks_exact(species) {
         for (target, value) in abundance.as_mut_slice().iter_mut().zip(cell) {
             *target += *value;

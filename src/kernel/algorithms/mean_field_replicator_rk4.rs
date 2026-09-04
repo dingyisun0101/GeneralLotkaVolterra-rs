@@ -1,10 +1,11 @@
 //! Allocation-free mean-field replicator RK4 evolution.
 
-use physics_in_parallel::prelude::basic::Tensor;
+use physics_in_parallel::prelude::basic::{Backend, Tensor};
 
 use crate::kernel::core::{
     KernelAlgorithm, KernelCore, KernelResidual, KernelStateView, KernelUpdate,
 };
+use crate::tensor_compat::DenseTensorExt;
 use crate::{ABUNDANCE_FIELD, TimeStep};
 
 use super::{KernelAlgorithmError, validate_values};
@@ -46,19 +47,23 @@ impl MeanFieldReplicatorRk4 {
         }
         Ok(Self {
             growth,
-            k1: Tensor::zeros(&[species]),
-            k2: Tensor::zeros(&[species]),
-            k3: Tensor::zeros(&[species]),
-            k4: Tensor::zeros(&[species]),
-            temporary: Tensor::zeros(&[species]),
-            interaction: Tensor::zeros(&[species]),
-            output: Tensor::zeros(&[species]),
+            k1: Tensor::zeros(&[species], Backend::Dense).expect("validated species shape"),
+            k2: Tensor::zeros(&[species], Backend::Dense).expect("validated species shape"),
+            k3: Tensor::zeros(&[species], Backend::Dense).expect("validated species shape"),
+            k4: Tensor::zeros(&[species], Backend::Dense).expect("validated species shape"),
+            temporary: Tensor::zeros(&[species], Backend::Dense).expect("validated species shape"),
+            interaction: Tensor::zeros(&[species], Backend::Dense)
+                .expect("validated species shape"),
+            output: Tensor::zeros(&[species], Backend::Dense).expect("validated species shape"),
         })
     }
 
     /// Creates a zero-growth RK4 algorithm.
     pub fn zero_growth(species: usize) -> Result<Self, KernelAlgorithmError> {
-        Self::new(Tensor::zeros(&[species]))
+        Self::new(
+            Tensor::zeros(&[species], Backend::Dense)
+                .map_err(|_| KernelAlgorithmError::EmptySpecies)?,
+        )
     }
 
     /// Borrows the immutable growth vector.

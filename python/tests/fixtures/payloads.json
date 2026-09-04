@@ -1,6 +1,6 @@
 {
-  "abundance": {"kind": "tensor", "version": 1, "scalar": "f64", "shape": [3], "data": [0.2, 0.3, 0.5]},
-  "space": {"kind": "tensor", "version": 1, "scalar": "f64", "shape": [1, 2, 2], "data": [0.2, 0.8, 0.3, 0.7]},
+  "abundance": {"backend": "dense", "tensor": {"kind": "tensor", "version": 2, "scalar": "f64", "shape": [3], "data": [0.2, 0.3, 0.5]}},
+  "space": {"backend": "dense", "tensor": {"kind": "tensor", "version": 2, "scalar": "f64", "shape": [1, 2, 2], "data": [0.2, 0.8, 0.3, 0.7]}},
   "absent_space": null,
   "total": 1.0
 }

@@ -214,8 +214,8 @@ Use the coordinated crates.io releases for application development:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = "0.17.2"
-scientific-workflow = "0.13.2"
+general-lotka-volterra-rs = "0.18.0"
+scientific-workflow = "0.13.3"
 ```
 
 A local clone remains appropriate when changing numerical methods, invariants,

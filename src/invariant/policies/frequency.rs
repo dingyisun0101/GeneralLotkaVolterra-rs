@@ -1,5 +1,6 @@
 //! Aggregate frequency cutoff and simplex normalization.
 
+use crate::tensor_compat::DenseTensorExt;
 use crate::{AggregateAbundance, SpatialAbundance, TotalAbundance};
 
 use crate::invariant::core::{

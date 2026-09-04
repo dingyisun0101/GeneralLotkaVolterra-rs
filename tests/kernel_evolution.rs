@@ -1,3 +1,5 @@
+use support::*;
+
 use general_lotka_volterra_rs::kernel::{
     Kernel, KernelAlgorithm, KernelCore, KernelStateView, KernelStepError, KernelUpdate,
     KernelUpdateError,
@@ -6,7 +8,7 @@ use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TimeStep,
     ecological_state_schema,
 };
-use physics_in_parallel::prelude::basic::{DenseMatrix, Tensor};
+use physics_in_parallel::prelude::basic::Tensor;
 use scientific_workflow::prelude::{StateTime, SystemState};
 use support::interaction_from_array;
 use thiserror::Error;
@@ -45,10 +47,10 @@ fn spatial_state() -> SystemState {
     let time = StateTime::from_iteration_and_physical_time(7, 1.5).unwrap();
     let mut state = schema.create_empty_state(time);
     state
-        .insert_payload(ABUNDANCE_FIELD, Tensor::from_vec(&[2], vec![1.0, 2.0]))
+        .insert_payload(ABUNDANCE_FIELD, dense_tensor(&[2], vec![1.0, 2.0]))
         .unwrap();
     state
-        .insert_payload(SPACE_FIELD, Some(Tensor::from_vec(&[1, 2], vec![1.0, 2.0])))
+        .insert_payload(SPACE_FIELD, Some(dense_tensor(&[1, 2], vec![1.0, 2.0])))
         .unwrap();
     state.insert_payload(TOTAL_FIELD, 3.0_f64).unwrap();
     state
@@ -56,11 +58,10 @@ fn spatial_state() -> SystemState {
 
 #[test]
 fn invalid_multi_payload_update_commits_nothing() {
-    let matrix =
-        interaction_from_array(DenseMatrix::from_vec(2, 2, vec![1.0, 0.0, 0.0, 1.0])).unwrap();
+    let matrix = interaction_from_array(dense_matrix(2, 2, vec![1.0, 0.0, 0.0, 1.0])).unwrap();
     let algorithm = InvalidBothUpdate {
-        abundance: Tensor::zeros(&[2]),
-        space: Tensor::zeros(&[1, 2]),
+        abundance: zero_tensor(&[2]),
+        space: zero_tensor(&[1, 2]),
     };
     let mut kernel = Kernel::new(KernelCore::new(matrix), algorithm);
     let mut state = spatial_state();
@@ -77,11 +78,11 @@ fn invalid_multi_payload_update_commits_nothing() {
         state
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Tensor::from_vec(&[2], vec![1.0, 2.0])
+        &dense_tensor(&[2], vec![1.0, 2.0])
     );
     assert_eq!(
         state.payload::<SpatialAbundance>(SPACE_FIELD).unwrap(),
-        &Some(Tensor::from_vec(&[1, 2], vec![1.0, 2.0]))
+        &Some(dense_tensor(&[1, 2], vec![1.0, 2.0]))
     );
     assert_eq!(state.time(), initial_time);
 }

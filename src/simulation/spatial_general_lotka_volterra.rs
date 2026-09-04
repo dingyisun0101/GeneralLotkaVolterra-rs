@@ -10,6 +10,7 @@ use crate::kernel::{
     Diffusion, Kernel, KernelAlgorithm, KernelCore, KernelStepError, SpatialGeneralLotkaVolterraRk2,
 };
 use crate::noise::{NoNoise, Noise, NoiseAlgorithm};
+use crate::tensor_compat::DenseTensorExt;
 use crate::{AbundanceRepresentation, TimeStep};
 
 use super::{

@@ -1,11 +1,11 @@
 mod support;
+use support::*;
 
 use general_lotka_volterra_rs::advanced::prelude::{
     ABUNDANCE_FIELD, AggregateAbundance, BoundaryCondition, Diffusion, MeanFieldReplicator,
     MeanFieldReplicatorConfig, SPACE_FIELD, SpatialAbundance, SpatialGeneralLotkaVolterra,
     SpatialGeneralLotkaVolterraConfig, TimeStep,
 };
-use physics_in_parallel::prelude::basic::{DenseMatrix, Tensor};
 use serde_json::Value;
 use support::interaction_from_array;
 
@@ -42,14 +42,14 @@ fn mean_field_replicator_matches_independent_high_resolution_ground_truth() {
     let case = &fixture["cases"]["mean_field"];
     let initial = values(&case["initial_abundance"]);
     let species = initial.len();
-    let matrix = DenseMatrix::from_vec(species, species, values(&case["interaction"]));
+    let matrix = dense_matrix(species, species, values(&case["interaction"]));
     let interaction = interaction_from_array(matrix).unwrap();
     let time_step = TimeStep::new(fixture["rust_time_step"].as_f64().unwrap()).unwrap();
     let mut simulation = MeanFieldReplicator::new(
-        Tensor::from_vec(&[species], initial),
+        dense_tensor(&[species], initial),
         interaction,
         MeanFieldReplicatorConfig::new(
-            Tensor::from_vec(&[species], values(&case["growth"])),
+            dense_tensor(&[species], values(&case["growth"])),
             case["cutoff"].as_f64().unwrap(),
             time_step,
         ),
@@ -84,12 +84,12 @@ fn spatial_glv_matches_independent_ground_truth_with_and_without_diffusion() {
             .map(|value| value.as_u64().unwrap() as usize)
             .collect::<Vec<_>>();
         let species = *shape.last().unwrap();
-        let matrix = DenseMatrix::from_vec(species, species, values(&case["interaction"]));
+        let matrix = dense_matrix(species, species, values(&case["interaction"]));
         let interaction = interaction_from_array(matrix).unwrap();
-        let initial = Tensor::from_vec(&shape, values(&case["initial_space"]));
+        let initial = dense_tensor(&shape, values(&case["initial_space"]));
         let boundary: BoundaryCondition = serde_json::from_value(case["boundary"].clone()).unwrap();
         let diffusion = Diffusion::unit_spacing(
-            Tensor::from_vec(&[species], values(&case["diffusion"])),
+            dense_tensor(&[species], values(&case["diffusion"])),
             &shape[..shape.len() - 1],
             boundary,
         )
@@ -98,7 +98,7 @@ fn spatial_glv_matches_independent_ground_truth_with_and_without_diffusion() {
             initial,
             interaction,
             SpatialGeneralLotkaVolterraConfig::new(
-                Tensor::from_vec(&[species], values(&case["growth"])),
+                dense_tensor(&[species], values(&case["growth"])),
                 diffusion,
                 case["cutoff"].as_f64().unwrap(),
                 None,

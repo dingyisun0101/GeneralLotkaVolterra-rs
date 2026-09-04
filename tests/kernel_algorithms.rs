@@ -1,3 +1,5 @@
+use support::*;
+
 use general_lotka_volterra_rs::kernel::{
     BoundaryCondition, Diffusion, Kernel, KernelAlgorithmError, KernelCore,
     SpatialGeneralLotkaVolterraRk2, SpatialReplicatorRk2,
@@ -5,7 +7,7 @@ use general_lotka_volterra_rs::kernel::{
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, ecological_state_schema,
 };
-use physics_in_parallel::prelude::basic::{DenseMatrix, SquareLatticeConfig, Tensor};
+use physics_in_parallel::prelude::basic::SquareLatticeGeometry;
 use scientific_workflow::prelude::{StateTime, SystemState};
 use support::interaction_from_array;
 
@@ -16,10 +18,7 @@ fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemStat
         .unwrap()
         .create_empty_state(time);
     state
-        .insert_payload(
-            ABUNDANCE_FIELD,
-            Tensor::from_vec(&[abundance.len()], abundance),
-        )
+        .insert_payload(ABUNDANCE_FIELD, dense_tensor(&[abundance.len()], abundance))
         .unwrap();
     state.insert_payload(SPACE_FIELD, space).unwrap();
     state.insert_payload(TOTAL_FIELD, total).unwrap();
@@ -28,18 +27,18 @@ fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemStat
 
 #[test]
 fn spatial_facilities_validate_layout_diffusion_and_stability() {
-    let space = SquareLatticeConfig::try_new(&[2], BoundaryCondition::Neumann, None).unwrap();
+    let space = SquareLatticeGeometry::new(&[2], BoundaryCondition::Neumann, None).unwrap();
     assert!(matches!(
-        Diffusion::new(Tensor::from_vec(&[1], vec![-0.1]), space.clone()),
+        Diffusion::new(dense_tensor(&[1], vec![-0.1]), space.clone()),
         Err(KernelAlgorithmError::InvalidDiffusion { .. })
     ));
 
-    let diffusion = Diffusion::new(Tensor::from_vec(&[1], vec![0.5]), space).unwrap();
+    let diffusion = Diffusion::new(dense_tensor(&[1], vec![0.5]), space).unwrap();
     assert_eq!(
         diffusion.space_config().boundary(),
         BoundaryCondition::Neumann
     );
-    let algorithm = SpatialGeneralLotkaVolterraRk2::new(Tensor::zeros(&[1]), diffusion).unwrap();
+    let algorithm = SpatialGeneralLotkaVolterraRk2::new(zero_tensor(&[1]), diffusion).unwrap();
     assert_eq!(algorithm.shape(), [2, 1]);
     assert_eq!(algorithm.species(), 1);
     algorithm
@@ -53,15 +52,15 @@ fn spatial_facilities_validate_layout_diffusion_and_stability() {
 
 #[test]
 fn spatial_kernel_rejects_shape_mismatch() {
-    let values = Tensor::from_vec(
+    let values = dense_tensor(
         &[2, 6],
         vec![0.2, 0.3, 0.5, 0.4, 0.2, 0.4, 0.1, 0.7, 0.2, 0.3, 0.3, 0.4],
     );
 
-    let interaction = interaction_from_array(DenseMatrix::zeros(3, 3)).unwrap();
+    let interaction = interaction_from_array(zero_matrix(3, 3)).unwrap();
     let algorithm = SpatialReplicatorRk2::new(
-        Tensor::zeros(&[3]),
-        Diffusion::unit_spacing(Tensor::zeros(&[3]), &[2, 2], BoundaryCondition::Periodic).unwrap(),
+        zero_tensor(&[3]),
+        Diffusion::unit_spacing(zero_tensor(&[3]), &[2, 2], BoundaryCondition::Periodic).unwrap(),
     )
     .unwrap();
     let kernel = Kernel::new(KernelCore::new(interaction), algorithm);

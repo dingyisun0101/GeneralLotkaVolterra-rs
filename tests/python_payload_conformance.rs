@@ -1,3 +1,6 @@
+mod support;
+use support::*;
+
 use std::fs;
 use std::path::PathBuf;
 
@@ -9,8 +12,8 @@ fn python_decoder_fixture_is_exact_canonical_serde_output() {
     let path =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("python/tests/fixtures/payloads.json");
     let fixture: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
-    let abundance = Tensor::from_vec(&[3], vec![0.2, 0.3, 0.5]);
-    let space = Tensor::from_vec(&[1, 2, 2], vec![0.2, 0.8, 0.3, 0.7]);
+    let abundance = dense_tensor(&[3], vec![0.2, 0.3, 0.5]);
+    let space = dense_tensor(&[1, 2, 2], vec![0.2, 0.8, 0.3, 0.7]);
     assert_eq!(
         serde_json::to_value(abundance).unwrap(),
         fixture["abundance"]

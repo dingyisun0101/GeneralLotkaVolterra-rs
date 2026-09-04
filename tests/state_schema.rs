@@ -1,9 +1,11 @@
+mod support;
+use support::*;
+
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AbundanceRepresentation, AggregateAbundance, CHECKPOINT_STREAM,
     ECOLOGICAL_STATE_SCHEMA_ID, SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM, SpatialAbundance,
     TOTAL_FIELD, TotalAbundance, ecological_state_schema,
 };
-use physics_in_parallel::prelude::basic::Tensor;
 use scientific_workflow::prelude::{StateTime, SystemState, SystemStateSchema};
 
 fn initial_time() -> StateTime {
@@ -49,7 +51,7 @@ fn canonical_schema_has_one_exact_round_trip() {
 fn non_spatial_and_spatial_models_share_the_populated_space_slot() {
     let schema = ecological_state_schema().resolve().unwrap();
 
-    let non_spatial = assemble_state(&schema, Tensor::from_vec(&[2], vec![0.25, 0.75]), None, 1.0);
+    let non_spatial = assemble_state(&schema, dense_tensor(&[2], vec![0.25, 0.75]), None, 1.0);
     assert_eq!(non_spatial.populated_field_count(), 3);
     assert!(
         non_spatial
@@ -58,10 +60,10 @@ fn non_spatial_and_spatial_models_share_the_populated_space_slot() {
             .is_none()
     );
 
-    let space = Tensor::from_vec(&[2, 3, 2], vec![0.5; 12]);
+    let space = dense_tensor(&[2, 3, 2], vec![0.5; 12]);
     let spatial = assemble_state(
         &schema,
-        Tensor::from_vec(&[2], vec![3.0, 3.0]),
+        dense_tensor(&[2], vec![3.0, 3.0]),
         Some(space.clone()),
         6.0,
     );
@@ -80,8 +82,8 @@ fn coordinated_spatial_mutation_updates_abundance_space_and_total() {
     let schema = ecological_state_schema().resolve().unwrap();
     let mut state = assemble_state(
         &schema,
-        Tensor::from_vec(&[2], vec![1.0, 2.0]),
-        Some(Tensor::from_vec(&[1, 2], vec![1.0; 2])),
+        dense_tensor(&[2], vec![1.0, 2.0]),
+        Some(dense_tensor(&[1, 2], vec![1.0; 2])),
         3.0,
     );
 
@@ -112,7 +114,7 @@ fn coordinated_spatial_mutation_updates_abundance_space_and_total() {
 #[test]
 fn payload_insertion_and_extraction_preserve_tensor_ownership() {
     let schema = ecological_state_schema().resolve().unwrap();
-    let abundance = Tensor::from_vec(&[3], vec![1.0, 2.0, 3.0]);
+    let abundance = dense_tensor(&[3], vec![1.0, 2.0, 3.0]);
     let original_pointer = abundance.as_slice().as_ptr();
     let mut state = assemble_state(&schema, abundance, None, 6.0);
 
@@ -127,7 +129,7 @@ fn payload_insertion_and_extraction_preserve_tensor_ownership() {
         .take_payload::<AggregateAbundance>(ABUNDANCE_FIELD)
         .expect("aggregate abundance can be extracted");
     assert_eq!(extracted.as_slice().as_ptr(), original_pointer);
-    assert_eq!(extracted, Tensor::from_vec(&[3], vec![1.0, 2.0, 3.0]));
+    assert_eq!(extracted, dense_tensor(&[3], vec![1.0, 2.0, 3.0]));
 }
 
 #[test]

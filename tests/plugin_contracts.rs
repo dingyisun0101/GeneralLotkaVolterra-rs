@@ -1,3 +1,5 @@
+use support::*;
+
 use general_lotka_volterra_rs::interaction::InteractionMatrixError;
 use general_lotka_volterra_rs::invariant::{self, InvariantPolicy};
 use general_lotka_volterra_rs::kernel::{
@@ -9,7 +11,7 @@ use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TimeStep,
     TimeStepError, TotalAbundance, ecological_state_schema,
 };
-use physics_in_parallel::prelude::basic::{DenseMatrix, Tensor};
+use physics_in_parallel::prelude::basic::Tensor;
 use scientific_workflow::prelude::{StateTime, SystemState};
 use support::interaction_from_array;
 use thiserror::Error;
@@ -28,10 +30,7 @@ fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemStat
     let mut state = schema.create_empty_state(time);
     assert!(
         state
-            .insert_payload(
-                ABUNDANCE_FIELD,
-                Tensor::from_vec(&[abundance.len()], abundance)
-            )
+            .insert_payload(ABUNDANCE_FIELD, dense_tensor(&[abundance.len()], abundance))
             .unwrap()
             .is_none()
     );
@@ -51,7 +50,7 @@ impl EulerInteraction {
     fn new(require_space: bool) -> Self {
         Self {
             require_space,
-            scratch: Tensor::zeros(&[1]),
+            scratch: zero_tensor(&[1]),
             steps: 0,
         }
     }
@@ -81,7 +80,7 @@ impl KernelAlgorithm for EulerInteraction {
         time_step: TimeStep,
     ) -> Result<KernelUpdate<'algorithm>, Self::Error> {
         if self.scratch.size() != core.species() {
-            self.scratch = Tensor::zeros(&[core.species()]);
+            self.scratch = zero_tensor(&[core.species()]);
         }
         let abundance = state.abundance();
         core.apply_interaction(abundance.as_slice(), self.scratch.as_mut_slice())
@@ -170,8 +169,7 @@ impl InvariantPolicy for SumInvariant {
 
 #[test]
 fn kernel_core_validates_and_applies_one_shared_matrix() {
-    let matrix =
-        interaction_from_array(DenseMatrix::from_vec(2, 2, vec![2.0, -1.0, 0.5, 3.0])).unwrap();
+    let matrix = interaction_from_array(dense_matrix(2, 2, vec![2.0, -1.0, 0.5, 3.0])).unwrap();
     let core = KernelCore::new(matrix);
     let shared = core.shared_interaction();
     assert!(std::ptr::eq(core.interaction(), shared.as_ref()));
@@ -181,11 +179,11 @@ fn kernel_core_validates_and_applies_one_shared_matrix() {
     assert_eq!(output, [6.0, 8.0]);
 
     assert!(matches!(
-        interaction_from_array(DenseMatrix::zeros(2, 3)),
+        interaction_from_array(zero_matrix(2, 3)),
         Err(InteractionMatrixError::NonSquare { .. })
     ));
     assert!(matches!(
-        interaction_from_array(DenseMatrix::from_vec(1, 1, vec![f64::NAN])),
+        interaction_from_array(dense_matrix(1, 1, vec![f64::NAN])),
         Err(InteractionMatrixError::NonFiniteEntry { .. })
     ));
     assert!(matches!(
@@ -197,7 +195,7 @@ fn kernel_core_validates_and_applies_one_shared_matrix() {
 #[test]
 fn plugins_mutate_only_borrowed_payloads_and_never_advance_time() {
     let core = KernelCore::new(
-        interaction_from_array(DenseMatrix::from_vec(2, 2, vec![0.0, 1.0, 1.0, 0.0])).unwrap(),
+        interaction_from_array(dense_matrix(2, 2, vec![0.0, 1.0, 1.0, 0.0])).unwrap(),
     );
     let mut kernel = Kernel::new(core, EulerInteraction::new(false));
     let mut noise = Noise::new(AdditiveNoise { updates: 0 });
@@ -223,7 +221,7 @@ fn plugins_mutate_only_borrowed_payloads_and_never_advance_time() {
         state
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Tensor::from_vec(&[2], vec![2.25, 2.75])
+        &dense_tensor(&[2], vec![2.25, 2.75])
     );
     assert_eq!(*state.payload::<TotalAbundance>(TOTAL_FIELD).unwrap(), 5.0);
     assert_eq!(kernel.algorithm().steps, 1);
@@ -233,7 +231,7 @@ fn plugins_mutate_only_borrowed_payloads_and_never_advance_time() {
 #[test]
 fn incompatible_spatial_kernel_fails_validation_before_evolution() {
     let core = KernelCore::new(
-        interaction_from_array(DenseMatrix::from_vec(2, 2, vec![1.0, 0.0, 0.0, 1.0])).unwrap(),
+        interaction_from_array(dense_matrix(2, 2, vec![1.0, 0.0, 0.0, 1.0])).unwrap(),
     );
     let kernel = Kernel::new(core, EulerInteraction::new(true));
     let state = state(vec![0.5, 0.5], None, 1.0);
@@ -248,11 +246,11 @@ fn incompatible_spatial_kernel_fails_validation_before_evolution() {
 #[test]
 fn validated_time_steps_reject_invalid_increments_before_mutation() {
     let core = KernelCore::new(
-        interaction_from_array(DenseMatrix::from_vec(2, 2, vec![1.0, 0.0, 0.0, 1.0])).unwrap(),
+        interaction_from_array(dense_matrix(2, 2, vec![1.0, 0.0, 0.0, 1.0])).unwrap(),
     );
     let kernel = Kernel::new(core, EulerInteraction::new(false));
     let noise = Noise::new(AdditiveNoise { updates: 0 });
-    let state = state(vec![0.5, 0.5], Some(Tensor::zeros(&[1, 2])), 1.0);
+    let state = state(vec![0.5, 0.5], Some(zero_tensor(&[1, 2])), 1.0);
 
     assert!(matches!(
         TimeStep::new(f64::NAN),
@@ -268,7 +266,7 @@ fn validated_time_steps_reject_invalid_increments_before_mutation() {
         state
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Tensor::from_vec(&[2], vec![0.5, 0.5])
+        &dense_tensor(&[2], vec![0.5, 0.5])
     );
 }
 mod support;

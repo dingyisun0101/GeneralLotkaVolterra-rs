@@ -16,9 +16,16 @@ class GlvPayloadError(ValueError):
 
 def _tensor(value: Any, *, rank: int | None, field: str) -> np.ndarray:
     expected_keys = {"kind", "version", "scalar", "shape", "data"}
-    if not isinstance(value, dict) or set(value) != expected_keys:
-        raise GlvPayloadError(f"{field} must be a PiP dense tensor v1 object")
-    if value["kind"] != "tensor" or value["version"] != 1:
+    if (
+        not isinstance(value, dict)
+        or set(value) != {"backend", "tensor"}
+        or value["backend"] != "dense"
+        or not isinstance(value["tensor"], dict)
+        or set(value["tensor"]) != expected_keys
+    ):
+        raise GlvPayloadError(f"{field} must be a PiP 4 dense tensor object")
+    value = value["tensor"]
+    if value["kind"] != "tensor" or value["version"] != 2:
         raise GlvPayloadError(f"{field} has unsupported PiP tensor format")
     if value["scalar"] != "f64":
         raise GlvPayloadError(f"{field} must use the PiP f64 scalar type")

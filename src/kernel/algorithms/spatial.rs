@@ -1,8 +1,11 @@
 //! Shared species-last layout, diffusion, and midpoint RK2 facilities.
 
-use physics_in_parallel::prelude::basic::{BoundaryCondition, SquareLatticeConfig, Tensor};
+use physics_in_parallel::prelude::basic::{
+    Backend, BoundaryCondition, SquareLatticeGeometry, Tensor,
+};
 
 use crate::kernel::core::{KernelCore, KernelStateView};
+use crate::tensor_compat::DenseTensorExt;
 use crate::{ABUNDANCE_FIELD, SPACE_FIELD, TimeStep};
 
 use super::{KernelAlgorithmError, validate_values};
@@ -11,14 +14,14 @@ use super::{KernelAlgorithmError, validate_values};
 #[derive(Clone, Debug)]
 pub struct Diffusion {
     coefficients: Tensor<f64>,
-    space: SquareLatticeConfig,
+    space: SquareLatticeGeometry,
 }
 
 impl Diffusion {
     /// Validates diffusion coefficients and spacing independently of a layout.
     pub fn new(
         coefficients: Tensor<f64>,
-        space: SquareLatticeConfig,
+        space: SquareLatticeGeometry,
     ) -> Result<Self, KernelAlgorithmError> {
         if coefficients.rank() != 1 {
             return Err(KernelAlgorithmError::CoefficientRank {
@@ -43,7 +46,7 @@ impl Diffusion {
         shape: &[usize],
         boundary: BoundaryCondition,
     ) -> Result<Self, KernelAlgorithmError> {
-        let space = SquareLatticeConfig::try_new(shape, boundary, None)?;
+        let space = SquareLatticeGeometry::new(shape, boundary, None)?;
         Self::new(coefficients, space)
     }
 
@@ -53,7 +56,7 @@ impl Diffusion {
     }
 
     /// Borrows PiP's complete lattice geometry and finite-difference policy.
-    pub const fn space_config(&self) -> &SquareLatticeConfig {
+    pub const fn space_config(&self) -> &SquareLatticeGeometry {
         &self.space
     }
 
@@ -138,9 +141,9 @@ impl SpatialRk2 {
             species,
             growth,
             diffusion,
-            k1: Tensor::zeros(&shape),
-            temporary: Tensor::zeros(&shape),
-            output: Tensor::zeros(&shape),
+            k1: Tensor::zeros(&shape, Backend::Dense).expect("validated spatial shape"),
+            temporary: Tensor::zeros(&shape, Backend::Dense).expect("validated spatial shape"),
+            output: Tensor::zeros(&shape, Backend::Dense).expect("validated spatial shape"),
         })
     }
 
@@ -337,7 +340,7 @@ fn rhs(
 mod tests {
     use super::*;
     use crate::interaction::InteractionMatrix;
-    use physics_in_parallel::prelude::basic::DenseMatrix;
+    use physics_in_parallel::prelude::basic::Matrix;
 
     fn assert_close(actual: &[f64], expected: &[f64]) {
         assert_eq!(actual.len(), expected.len());
@@ -360,31 +363,39 @@ mod tests {
                     })
                 })
                 .collect();
-            let matrix = DenseMatrix::from_vec(species, species, matrix_values.clone());
+            let matrix =
+                Matrix::from_values(species, species, Backend::Dense, matrix_values.clone())
+                    .unwrap();
             let interaction =
                 InteractionMatrix::from_matrix(matrix).expect("test matrix is square and finite");
             let core = KernelCore::new(interaction);
-            let growth = Tensor::from_vec(
+            let growth = Tensor::from_values(
                 &[species],
+                Backend::Dense,
                 (0..species).map(|index| 0.1 * (index + 1) as f64).collect(),
-            );
+            )
+            .unwrap();
 
             for cells in [1, 3, 17] {
                 let lattice =
-                    SquareLatticeConfig::try_new(&[cells], BoundaryCondition::Periodic, None)
+                    SquareLatticeGeometry::new(&[cells], BoundaryCondition::Periodic, None)
                         .unwrap();
-                let diffusion = Diffusion::new(Tensor::zeros(&[species]), lattice).unwrap();
+                let diffusion =
+                    Diffusion::new(Tensor::zeros(&[species], Backend::Dense).unwrap(), lattice)
+                        .unwrap();
                 let shape = [cells, species];
-                let space = Tensor::from_vec(
+                let space = Tensor::from_values(
                     &shape,
+                    Backend::Dense,
                     (0..cells * species)
                         .map(|index| 0.25 + (index + 1) as f64 / 37.0)
                         .collect(),
-                );
+                )
+                .unwrap();
 
                 for dynamics in [SpatialDynamics::Glv, SpatialDynamics::Replicator] {
-                    let mut actual = Tensor::zeros(&shape);
-                    let mut interaction_scratch = Tensor::zeros(&shape);
+                    let mut actual = Tensor::zeros(&shape, Backend::Dense).unwrap();
+                    let mut interaction_scratch = Tensor::zeros(&shape, Backend::Dense).unwrap();
                     rhs(
                         &core,
                         &growth,

@@ -1,3 +1,6 @@
+mod support;
+use support::*;
+
 use std::mem::size_of;
 
 use general_lotka_volterra_rs::noise::{
@@ -7,7 +10,6 @@ use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TimeStep,
     TotalAbundance, ecological_state_schema,
 };
-use physics_in_parallel::prelude::basic::{RngConfig, Tensor};
 use scientific_workflow::prelude::{StateTime, SystemState};
 
 fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemState {
@@ -16,10 +18,7 @@ fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemStat
         .unwrap()
         .create_empty_state(StateTime::from_iteration_and_physical_time(5, 2.0).unwrap());
     state
-        .insert_payload(
-            ABUNDANCE_FIELD,
-            Tensor::from_vec(&[abundance.len()], abundance),
-        )
+        .insert_payload(ABUNDANCE_FIELD, dense_tensor(&[abundance.len()], abundance))
         .unwrap();
     state.insert_payload(SPACE_FIELD, space).unwrap();
     state.insert_payload(TOTAL_FIELD, total).unwrap();
@@ -27,11 +26,11 @@ fn state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> SystemStat
 }
 
 fn spatial(values: Vec<f64>) -> SpatialAbundance {
-    Some(Tensor::from_vec(&[2, 3], values))
+    Some(dense_tensor(&[2, 3], values))
 }
 
-fn rng(seed: u64) -> RngConfig {
-    RngConfig::new(Some(seed), None)
+fn rng(seed: u64) -> physics_in_parallel::prelude::basic::ResolvedRng {
+    stateful_rng(seed)
 }
 
 #[test]
@@ -59,20 +58,12 @@ fn no_noise_is_zero_sized_and_changes_nothing() {
 #[test]
 fn demographic_noise_is_seeded_reproducible_and_reuses_scratch() {
     let domain = NoiseDomain::aggregate(3).unwrap();
-    let algorithm_a = DemographicGaussian::new(0.2, rng(17), domain.clone())
-        .unwrap()
-        .with_max_threads(1)
-        .unwrap();
-    let algorithm_b = DemographicGaussian::new(0.2, rng(17), domain)
-        .unwrap()
-        .with_max_threads(4)
-        .unwrap();
-    assert_eq!(algorithm_a.max_threads(), 1);
-    assert_eq!(algorithm_b.max_threads(), 4);
+    let algorithm_a = DemographicGaussian::new(0.2, rng(17), domain.clone()).unwrap();
+    let algorithm_b = DemographicGaussian::new(0.2, rng(17), domain).unwrap();
     let capacity = algorithm_a.scratch_capacity();
     let mut noise_a = Noise::new(algorithm_a);
     let mut noise_b = Noise::new(algorithm_b);
-    assert_eq!(noise_a.algorithm().rng_config().seed(), Some(17));
+    assert_eq!(noise_a.algorithm().rng_config().seed(), 17);
     let mut state_a = state(vec![4.0, 9.0, 16.0], None, 29.0);
     let mut state_b = state(vec![4.0, 9.0, 16.0], None, 29.0);
     let initial_time = state_a.time();
@@ -97,7 +88,7 @@ fn demographic_noise_is_seeded_reproducible_and_reuses_scratch() {
         state_a
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Tensor::from_vec(&[3], vec![4.0, 9.0, 16.0])
+        &dense_tensor(&[3], vec![4.0, 9.0, 16.0])
     );
     assert_eq!(noise_a.algorithm().scratch_capacity(), capacity);
     assert_eq!(state_a.time(), initial_time);
@@ -112,7 +103,7 @@ fn proportional_spatial_noise_updates_only_space_reproducibly() {
     let domain = NoiseDomain::spatial(vec![2, 3]).unwrap();
     let mut noise_a = Noise::new(ProportionalGaussian::new(0.05, rng(99), domain.clone()).unwrap());
     let mut noise_b = Noise::new(ProportionalGaussian::new(0.05, rng(99), domain).unwrap());
-    assert_eq!(noise_a.algorithm().rng_config().seed(), Some(99));
+    assert_eq!(noise_a.algorithm().rng_config().seed(), 99);
     let mut state_a = state(
         vec![0.3, 0.3, 0.4],
         spatial(vec![0.2, 0.3, 0.5, 0.4, 0.2, 0.4]),
@@ -164,15 +155,6 @@ fn invalid_noise_configuration_and_inputs_fail_before_mutation() {
         NoiseDomain::spatial(Vec::<usize>::new()),
         Err(NoisePluginError::MissingSpeciesAxis)
     ));
-    assert!(matches!(
-        DemographicGaussian::new(0.1, rng(1), NoiseDomain::aggregate(2).unwrap())
-            .unwrap()
-            .with_max_threads(0),
-        Err(NoisePluginError::TensorRng(
-            physics_in_parallel::prelude::basic::TensorRandError::InvalidMaxThreads
-        ))
-    ));
-
     let mut noise = Noise::new(
         ProportionalGaussian::new(0.1, rng(5), NoiseDomain::aggregate(2).unwrap()).unwrap(),
     );
@@ -195,7 +177,7 @@ fn invalid_noise_configuration_and_inputs_fail_before_mutation() {
 
 #[test]
 fn spatial_noise_rejects_shape_mismatch() {
-    let values = Tensor::from_vec(
+    let values = dense_tensor(
         &[2, 6],
         vec![0.2, 0.3, 0.5, 0.4, 0.2, 0.4, 0.1, 0.7, 0.2, 0.3, 0.3, 0.4],
     );

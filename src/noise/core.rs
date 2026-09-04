@@ -4,11 +4,12 @@ use std::error::Error;
 use std::fmt;
 
 use physics_in_parallel::prelude::basic::{
-    RandType, RngConfig, RngConfigError, RngMethod, TensorRandError, TensorRandFiller,
+    Backend, RandType, ResolvedRng, Tensor, TensorRandError, TensorRandFiller,
 };
 use scientific_workflow::prelude::{StateError, SystemState};
 use thiserror::Error as ThisError;
 
+use crate::tensor_compat::DenseTensorExt;
 use crate::{ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TimeStep};
 
 /// Fixed payload domain and scratch dimensions for a stochastic plugin.
@@ -96,7 +97,7 @@ pub(crate) struct GaussianWorkspace {
     domain: NoiseDomain,
     sigma: f64,
     filler: TensorRandFiller,
-    proposed: Vec<f64>,
+    proposed: Tensor<f64>,
 }
 
 impl fmt::Debug for GaussianWorkspace {
@@ -105,9 +106,8 @@ impl fmt::Debug for GaussianWorkspace {
             .debug_struct("GaussianWorkspace")
             .field("domain", &self.domain)
             .field("sigma", &self.sigma)
-            .field("rng", &self.filler.rng_config())
-            .field("random_max_threads", &self.filler.max_threads())
-            .field("proposed_len", &self.proposed.len())
+            .field("rng", &self.filler.resolved_rng())
+            .field("proposed_len", &self.proposed.size())
             .finish_non_exhaustive()
     }
 }
@@ -115,29 +115,15 @@ impl fmt::Debug for GaussianWorkspace {
 impl GaussianWorkspace {
     pub(crate) fn new(
         sigma: f64,
-        rng: RngConfig,
+        rng: ResolvedRng,
         domain: NoiseDomain,
-        namespace: &'static str,
+        _namespace: &'static str,
     ) -> Result<Self, NoisePluginError> {
         if !sigma.is_finite() || sigma < 0.0 {
             return Err(NoisePluginError::InvalidSigma { value: sigma });
         }
         let elements = domain.elements();
-        let rng = rng
-            .resolve_for(
-                namespace,
-                RngMethod::ChaCha12,
-                &[
-                    RngMethod::Pcg64,
-                    RngMethod::Pcg64Mcg,
-                    RngMethod::SmallRng,
-                    RngMethod::ChaCha8,
-                    RngMethod::ChaCha12,
-                    RngMethod::ChaCha20,
-                ],
-            )
-            .map_err(NoisePluginError::RngConfig)?;
-        let filler = TensorRandFiller::try_new(
+        let filler = TensorRandFiller::new(
             RandType::Normal {
                 mean: 0.0,
                 std: 1.0,
@@ -149,7 +135,8 @@ impl GaussianWorkspace {
             domain,
             sigma,
             filler,
-            proposed: vec![0.0; elements],
+            proposed: Tensor::zeros(&[elements], Backend::Dense)
+                .expect("validated nonzero noise domain"),
         })
     }
 
@@ -157,18 +144,8 @@ impl GaussianWorkspace {
         self.sigma
     }
 
-    pub(crate) fn rng_config(&self) -> RngConfig {
-        self.filler.rng_config()
-    }
-
-    pub(crate) const fn max_threads(&self) -> usize {
-        self.filler.max_threads()
-    }
-
-    pub(crate) fn set_max_threads(&mut self, max_threads: usize) -> Result<(), NoisePluginError> {
-        self.filler
-            .set_max_threads(max_threads)
-            .map_err(NoisePluginError::TensorRng)
+    pub(crate) fn rng_config(&self) -> ResolvedRng {
+        self.filler.resolved_rng()
     }
 
     pub(crate) const fn domain(&self) -> &NoiseDomain {
@@ -176,7 +153,7 @@ impl GaussianWorkspace {
     }
 
     pub(crate) fn scratch_capacity(&self) -> usize {
-        self.proposed.capacity()
+        self.proposed.size()
     }
 
     pub(crate) fn validate(
@@ -232,12 +209,13 @@ impl GaussianWorkspace {
             return Ok(());
         }
         self.filler
-            .try_fill_slice(&mut self.proposed)
+            .fill(&mut self.proposed)
             .map_err(NoisePluginError::TensorRng)?;
-        for (values, eta) in target
-            .chunks_exact(self.domain.species())
-            .zip(self.proposed.chunks_exact_mut(self.domain.species()))
-        {
+        for (values, eta) in target.chunks_exact(self.domain.species()).zip(
+            self.proposed
+                .as_mut_slice()
+                .chunks_exact_mut(self.domain.species()),
+        ) {
             match kind {
                 GaussianKind::Demographic => {
                     apply_demographic(values, eta, scale);
@@ -248,14 +226,14 @@ impl GaussianWorkspace {
             }
         }
         match &self.domain {
-            NoiseDomain::Aggregate { .. } => {
-                abundance.as_mut_slice().copy_from_slice(&self.proposed)
-            }
+            NoiseDomain::Aggregate { .. } => abundance
+                .as_mut_slice()
+                .copy_from_slice(self.proposed.as_slice()),
             NoiseDomain::Spatial { .. } => space
                 .as_mut()
                 .expect("space presence was validated before noise commit")
                 .as_mut_slice()
-                .copy_from_slice(&self.proposed),
+                .copy_from_slice(self.proposed.as_slice()),
         }
         Ok(())
     }
@@ -369,9 +347,6 @@ fn apply_demographic(values: &[f64], eta: &mut [f64], scale: f64) {
 #[derive(Debug, ThisError)]
 #[non_exhaustive]
 pub enum NoisePluginError {
-    /// Universal RNG settings were incompatible with Gaussian noise.
-    #[error("invalid noise RNG configuration: {0}")]
-    RngConfig(#[source] RngConfigError),
     /// PiP rejected random filling or distribution configuration.
     #[error("noise random sampling failed: {0}")]
     TensorRng(#[source] TensorRandError),

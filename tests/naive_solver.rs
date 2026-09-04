@@ -1,4 +1,5 @@
 mod support;
+use support::*;
 
 use general_lotka_volterra_rs::invariant::FrequencyInvariant;
 use general_lotka_volterra_rs::kernel::{
@@ -11,7 +12,7 @@ use general_lotka_volterra_rs::{
     SpatialReplicator, SpatialReplicatorConfig, TOTAL_FIELD, TimeStep, TotalAbundance,
 };
 use physics_in_parallel::prelude::basic::{
-    RandType, RngConfig, SquareLatticeConfig, Tensor, TensorRandFiller,
+    RandType, SquareLatticeGeometry, Tensor, TensorRandFiller,
 };
 use scientific_workflow::prelude::SystemState;
 use support::interaction_from_array;
@@ -29,19 +30,14 @@ enum NaiveDynamics {
 }
 
 fn tensor(values: &[f64]) -> Tensor<f64> {
-    Tensor::from_vec(&[values.len()], values.to_vec())
+    dense_tensor(&[values.len()], values.to_vec())
 }
 
 fn interaction(
     species: usize,
     values: &[f64],
 ) -> general_lotka_volterra_rs::interaction::InteractionMatrix {
-    interaction_from_array(physics_in_parallel::prelude::basic::DenseMatrix::from_vec(
-        species,
-        species,
-        values.to_vec(),
-    ))
-    .unwrap()
+    interaction_from_array(dense_matrix(species, species, values.to_vec())).unwrap()
 }
 
 fn matrix_vector(matrix: &[f64], species: usize, input: &[f64]) -> Vec<f64> {
@@ -373,11 +369,11 @@ fn demographic_mean_field_matches_naive_seeded_solver_at_every_step() {
     .into_state();
     let noise = DemographicGaussian::new(
         sigma,
-        RngConfig::new(Some(8_675_309), None),
+        stateful_rng(8_675_309),
         NoiseDomain::aggregate(3).unwrap(),
     )
     .unwrap();
-    let mut normal_filler = TensorRandFiller::try_new(
+    let mut normal_filler = TensorRandFiller::new(
         RandType::Normal {
             mean: 0.0,
             std: 1.0,
@@ -397,13 +393,13 @@ fn demographic_mean_field_matches_naive_seeded_solver_at_every_step() {
     )
     .unwrap();
     let mut expected = initial.to_vec();
-    let mut normal = vec![0.0; initial.len()];
+    let mut normal = zero_tensor(&[initial.len()]);
 
     for iteration in 1..=20 {
         naive_mean_field_step(&mut expected, &growth, &matrix, cutoff, dt);
         let deterministic = expected.clone();
-        normal_filler.try_fill_slice(&mut normal).unwrap();
-        apply_naive_demographic_noise(&mut expected, &mut normal, sigma, dt);
+        normal_filler.fill(&mut normal).unwrap();
+        apply_naive_demographic_noise(&mut expected, normal.as_mut_slice(), sigma, dt);
         enforce_frequency(&mut expected, cutoff);
         assert_ne!(expected, deterministic, "demographic noise was not active");
         simulation.step().unwrap();
@@ -427,9 +423,9 @@ fn spatial_replicator_matches_naive_periodic_solver_at_every_step() {
     let cutoff = 0.04;
     let dt = 0.07;
     let lattice =
-        SquareLatticeConfig::try_new(&shape, BoundaryCondition::Periodic, Some(&spacing)).unwrap();
+        SquareLatticeGeometry::new(&shape, BoundaryCondition::Periodic, Some(&spacing)).unwrap();
     let mut simulation = SpatialReplicator::new(
-        Tensor::from_vec(&full_shape, initial.to_vec()),
+        dense_tensor(&full_shape, initial.to_vec()),
         interaction(species, &matrix),
         SpatialReplicatorConfig::new(
             tensor(&growth),
@@ -487,9 +483,9 @@ fn spatial_glv_matches_naive_neumann_solver_at_every_step() {
     let carrying_capacity = Some(carrying_capacity_value);
     let dt = 0.08;
     let lattice =
-        SquareLatticeConfig::try_new(&shape, BoundaryCondition::Neumann, Some(&spacing)).unwrap();
+        SquareLatticeGeometry::new(&shape, BoundaryCondition::Neumann, Some(&spacing)).unwrap();
     let mut simulation = SpatialGeneralLotkaVolterra::new(
-        Tensor::from_vec(&full_shape, initial.to_vec()),
+        dense_tensor(&full_shape, initial.to_vec()),
         interaction(species, &matrix),
         SpatialGeneralLotkaVolterraConfig::new(
             tensor(&growth),

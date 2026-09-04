@@ -12,7 +12,9 @@ use ecological_state_toolkit::trajectory::{
     ResidualTolerance, TerminalPolicy, TrajectoryObservation, TrajectoryObservationPolicy,
     TrajectoryObserver, TrajectoryObserverError,
 };
-use physics_in_parallel::prelude::basic::{RngConfig, Tensor};
+use physics_in_parallel::prelude::basic::{
+    Backend, ResolvedRng, RngMethod, SquareLatticeGeometry, Tensor,
+};
 use scientific_workflow::prelude::{
     ExecutionUnit, InitializationContext, MemberCompletion, MemberView, ObservationPlan,
     ObservationStream, SystemState, SystemStateSchema, UnitResult,
@@ -30,6 +32,7 @@ use crate::simulation::{
     MeanFieldReplicator, MeanFieldReplicatorConfig, SpatialGeneralLotkaVolterra,
     SpatialGeneralLotkaVolterraConfig, SpatialReplicator, SpatialReplicatorConfig, assemble_state,
 };
+use crate::tensor_compat::DenseTensorExt;
 use crate::{ABUNDANCE_FIELD, SPACE_FIELD, TOTAL_FIELD, TimeStep};
 
 const NOISE_SEED_PURPOSE: &str = "noise";
@@ -91,7 +94,8 @@ impl SpeciesValues {
                 value,
             });
         }
-        Ok(Tensor::from_vec(&[species], values))
+        Ok(Tensor::from_values(&[species], Backend::Dense, values)
+            .expect("validated species values have the requested length"))
     }
 
     fn validate(&self, species: usize, field: &'static str) -> Result<(), GlvExecutionError> {
@@ -126,7 +130,7 @@ pub enum GlvModelConfig {
         time_step: f64,
         sigma: f64,
         #[serde(default)]
-        rng: RngConfig,
+        rng: Option<ResolvedRng>,
     },
     SpatialReplicator {
         growth: SpeciesValues,
@@ -148,7 +152,7 @@ impl GlvModelConfig {
     fn validate(
         &self,
         species: usize,
-        lattice: &physics_in_parallel::prelude::basic::SquareLatticeConfig,
+        lattice: &SquareLatticeGeometry,
     ) -> Result<(), GlvExecutionError> {
         let (growth, cutoff, time_step) = match self {
             Self::MeanFieldReplicator {
@@ -603,7 +607,7 @@ fn build_member(
             time_step,
         } => Box::new(MeanFieldReplicator::new_with_schema(
             schema,
-            Tensor::from_vec(&[species], initial.frequencies()),
+            Tensor::from_values(&[species], Backend::Dense, initial.frequencies())?,
             interaction,
             MeanFieldReplicatorConfig::new(
                 growth.tensor(species, "growth")?,
@@ -618,15 +622,14 @@ fn build_member(
             sigma,
             rng,
         } => {
-            let rng = if rng.seed().is_some() {
-                rng
-            } else {
-                RngConfig::new(
-                    Some(context.member_seed(identity, NOISE_SEED_PURPOSE)?),
-                    rng.method(),
-                )
+            let rng = match rng {
+                Some(rng) => rng,
+                None => ResolvedRng::new(
+                    context.member_seed(identity, NOISE_SEED_PURPOSE)?,
+                    RngMethod::ChaCha12,
+                ),
             };
-            let abundance = Tensor::from_vec(&[species], initial.frequencies());
+            let abundance = Tensor::from_values(&[species], Backend::Dense, initial.frequencies())?;
             let state = assemble_state(schema, abundance, None, 1.0)?;
             let kernel = Kernel::new(
                 KernelCore::new(interaction),
@@ -655,7 +658,7 @@ fn build_member(
             let space = categorical_to_species_field(&initial, 1.0)?;
             let diffusion = crate::kernel::Diffusion::new(
                 diffusion.tensor(species, "diffusion")?,
-                initial.space().config().clone(),
+                initial.space().geometry().clone(),
             )?;
             Box::new(SpatialReplicator::new_with_schema(
                 schema,
@@ -680,7 +683,7 @@ fn build_member(
             let space = categorical_to_species_field(&initial, initial_population_per_site)?;
             let diffusion = crate::kernel::Diffusion::new(
                 diffusion.tensor(species, "diffusion")?,
-                initial.space().config().clone(),
+                initial.space().geometry().clone(),
             )?;
             Box::new(SpatialGeneralLotkaVolterra::new_with_schema(
                 schema,

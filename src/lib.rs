@@ -13,6 +13,7 @@ pub mod kernel;
 pub mod noise;
 pub mod prelude;
 pub mod simulation;
+mod tensor_compat;
 pub mod workflow;
 
 pub use ecological_state_toolkit::state_schema::{
@@ -24,10 +25,8 @@ pub use workflow::{
     ObservationConfig, SpeciesValues,
 };
 
-/// Explicit reusable worker pool for callers that want to bound an entire GLV
-/// computation. Plain GLV operations use the current Rayon pool and create no
-/// pool of their own.
-pub use physics_in_parallel::prelude::basic::{ComputePool, ComputePoolError, with_threads};
+/// Process-wide PiP worker participation controls.
+pub use physics_in_parallel::prelude::basic::{ParallelismError, max_threads, set_max_threads};
 
 pub use simulation::{
     MeanFieldReplicator, MeanFieldReplicatorConfig, SpatialGeneralLotkaVolterra,

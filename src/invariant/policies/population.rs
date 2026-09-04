@@ -1,5 +1,6 @@
 //! Spatial population feasibility, capacity, and aggregate synchronization.
 
+use crate::tensor_compat::DenseTensorExt;
 use crate::{AggregateAbundance, SpatialAbundance, TotalAbundance};
 
 use crate::invariant::core::{

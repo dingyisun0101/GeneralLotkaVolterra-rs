@@ -1,7 +1,7 @@
 //! Gaussian fluctuations scaled by the square root of local abundance.
 
 use crate::{AggregateAbundance, SpatialAbundance, TimeStep};
-use physics_in_parallel::prelude::basic::RngConfig;
+use physics_in_parallel::prelude::basic::ResolvedRng;
 
 use crate::noise::core::{
     GaussianKind, GaussianWorkspace, NoiseAlgorithm, NoiseDomain, NoisePluginError,
@@ -18,7 +18,11 @@ pub struct DemographicGaussian {
 
 impl DemographicGaussian {
     /// Creates a seeded demographic plugin for one fixed payload domain.
-    pub fn new(sigma: f64, rng: RngConfig, domain: NoiseDomain) -> Result<Self, NoisePluginError> {
+    pub fn new(
+        sigma: f64,
+        rng: ResolvedRng,
+        domain: NoiseDomain,
+    ) -> Result<Self, NoisePluginError> {
         Ok(Self {
             workspace: GaussianWorkspace::new(
                 sigma,
@@ -35,24 +39,8 @@ impl DemographicGaussian {
     }
 
     /// Returns the fully resolved PiP RNG configuration.
-    pub fn rng_config(&self) -> RngConfig {
+    pub fn rng_config(&self) -> ResolvedRng {
         self.workspace.rng_config()
-    }
-
-    /// Returns the maximum workers that this plugin's random filler may occupy.
-    pub const fn max_threads(&self) -> usize {
-        self.workspace.max_threads()
-    }
-
-    /// Sets the maximum workers that this plugin's random filler may occupy.
-    pub fn set_max_threads(&mut self, max_threads: usize) -> Result<(), NoisePluginError> {
-        self.workspace.set_max_threads(max_threads)
-    }
-
-    /// Returns this plugin with a new random-instance worker maximum.
-    pub fn with_max_threads(mut self, max_threads: usize) -> Result<Self, NoisePluginError> {
-        self.set_max_threads(max_threads)?;
-        Ok(self)
     }
 
     /// Borrows the fixed aggregate or spatial domain.

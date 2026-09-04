@@ -244,7 +244,7 @@ where
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use physics_in_parallel::prelude::basic::Tensor;
+    use physics_in_parallel::prelude::basic::{Backend, Tensor};
     use scientific_workflow::prelude::{StateError, StateTime, SystemState};
     use thiserror::Error;
 
@@ -253,6 +253,7 @@ mod tests {
     use crate::invariant::InvariantPolicy;
     use crate::kernel::{Kernel, KernelAlgorithm, KernelCore, KernelStateView, KernelUpdate};
     use crate::noise::{Noise, NoiseAlgorithm};
+    use crate::tensor_compat::DenseTensorExt;
     use crate::{
         ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TimeStep,
         TotalAbundance, ecological_state_schema,
@@ -368,7 +369,10 @@ mod tests {
             .unwrap()
             .create_empty_state(time);
         state
-            .insert_payload(ABUNDANCE_FIELD, Tensor::from_vec(&[1], vec![1.0]))
+            .insert_payload(
+                ABUNDANCE_FIELD,
+                Tensor::from_values(&[1], Backend::Dense, vec![1.0]).unwrap(),
+            )
             .unwrap();
         state
             .insert_payload(SPACE_FIELD, SpatialAbundance::None)
@@ -389,7 +393,7 @@ mod tests {
             Kernel::new(
                 KernelCore::new(interaction),
                 TestKernel {
-                    scratch: Tensor::zeros(&[1]),
+                    scratch: Tensor::zeros(&[1], Backend::Dense).unwrap(),
                     calls: Arc::clone(&calls),
                 },
             ),
@@ -474,7 +478,7 @@ mod tests {
             Kernel::new(
                 KernelCore::new(interaction),
                 TestKernel {
-                    scratch: Tensor::zeros(&[1]),
+                    scratch: Tensor::zeros(&[1], Backend::Dense).unwrap(),
                     calls: Arc::clone(&calls),
                 },
             ),

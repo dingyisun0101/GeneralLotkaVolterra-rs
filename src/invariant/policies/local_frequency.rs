@@ -1,5 +1,6 @@
 //! Per-cell spatial frequency normalization and aggregate refresh.
 
+use crate::tensor_compat::DenseTensorExt;
 use crate::{AggregateAbundance, SpatialAbundance, TotalAbundance};
 
 use crate::invariant::core::{

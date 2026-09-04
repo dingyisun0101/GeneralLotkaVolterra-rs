@@ -42,8 +42,8 @@ pub mod prelude {
     };
     pub use crate::{
         ABUNDANCE_FIELD, AbundanceRepresentation, AggregateAbundance, CHECKPOINT_STREAM,
-        ComputePool, ComputePoolError, SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM, SpatialAbundance,
-        TOTAL_FIELD, TotalAbundance, with_threads,
+        ParallelismError, SIGNAL_STREAM, SPACE_FIELD, SPACE_STREAM, SpatialAbundance, TOTAL_FIELD,
+        TotalAbundance, max_threads, set_max_threads,
     };
     pub use ecological_state_toolkit::state_schema::{
         ECOLOGICAL_STATE_SCHEMA_ID, ecological_state_schema,

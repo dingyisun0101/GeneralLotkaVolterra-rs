@@ -1,3 +1,6 @@
+mod support;
+use support::*;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -12,7 +15,7 @@ use ecological_state_toolkit::interaction::{
 use general_lotka_volterra_rs::{
     ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TotalAbundance,
 };
-use physics_in_parallel::prelude::basic::{RngConfig, SquareLatticeConfig};
+use physics_in_parallel::prelude::basic::SquareLatticeGeometry;
 use scientific_workflow::persistence::{JsonPayloadDecoderRegistry, StoredStateSeriesReader};
 use scientific_workflow::runtime::{TaskRunKind, execute};
 use scientific_workflow::study::Study;
@@ -89,9 +92,9 @@ fn prepared_inputs(root: &Path) -> EcologicalInputs {
     let interaction = InteractionMatrix::from_rows(vec![vec![0.0, 0.0], vec![0.0, 0.0]]).unwrap();
     let interaction = persist_interaction_matrix(root, &interaction).unwrap();
     let initial = InitialStateRecipe::BalancedUniform {
-        rng: RngConfig::new(Some(101), None),
+        rng: indexed_rng(101),
     }
-    .create(SquareLatticeConfig::periodic(&[8, 8]), 2)
+    .create(SquareLatticeGeometry::periodic(&[8, 8]).unwrap(), 2)
     .unwrap();
     let initial = persist_initial_state(root, &initial).unwrap();
     EcologicalInputs::new(

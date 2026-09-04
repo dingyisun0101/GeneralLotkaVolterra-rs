@@ -1,6 +1,6 @@
 # Spatial General Lotka–Volterra populations
 
-This Workflow 0.13.2 project converts the canonical Ecological State Toolkit categorical lattice
+This Workflow 0.13.3 project converts the canonical Ecological State Toolkit categorical lattice
 to a species-last population field. `initial_population_per_site` is the sole
 GLV-specific scale applied during conversion. The source realization and
 interaction artifact are shared with the other examples.

@@ -7,7 +7,7 @@ directly into those records, and this package validates and converts GLV's
 
 Version 0.5 uses `scientific-workflow-reader` 0.4 for Workflow recording format
 7 and validates the GLV model kind from the recorded `GlvConstants`. It decodes
-the current PiP dense-tensor payload and has no legacy recording compatibility
+the PiP 4 dense-tensor payload and has no legacy recording compatibility
 layer.
 
 ```python

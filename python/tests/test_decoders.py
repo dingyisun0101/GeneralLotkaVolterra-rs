@@ -19,11 +19,14 @@ class DecoderTests(unittest.TestCase):
 
     def test_species_last_space_is_reshaped(self) -> None:
         value = {
-            "kind": "tensor",
-            "version": 1,
-            "scalar": "f64",
-            "shape": [2, 2, 2],
-            "data": list(range(8)),
+            "backend": "dense",
+            "tensor": {
+                "kind": "tensor",
+                "version": 2,
+                "scalar": "f64",
+                "shape": [2, 2, 2],
+                "data": list(range(8)),
+            },
         }
         decoded = decode_space(value)
         self.assertEqual(decoded.shape, (2, 2, 2))
@@ -32,11 +35,14 @@ class DecoderTests(unittest.TestCase):
     def test_invalid_shape_fails_closed(self) -> None:
         with self.assertRaises(GlvPayloadError):
             decode_abundance({
-                "kind": "tensor",
-                "version": 1,
-                "scalar": "f64",
-                "shape": [2],
-                "data": [1.0],
+                "backend": "dense",
+                "tensor": {
+                    "kind": "tensor",
+                    "version": 2,
+                    "scalar": "f64",
+                    "shape": [2],
+                    "data": [1.0],
+                },
             })
 
 

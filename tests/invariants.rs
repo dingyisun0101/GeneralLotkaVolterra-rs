@@ -1,3 +1,6 @@
+mod support;
+use support::*;
+
 use general_lotka_volterra_rs::invariant::{
     FrequencyInvariant, InvariantPolicyError, LocalFrequencyInvariant, PopulationInvariant,
     enforce_state, validate_state,
@@ -15,10 +18,7 @@ fn make_state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> Syste
         .unwrap()
         .create_empty_state(StateTime::from_iteration_and_physical_time(0, 0.0).unwrap());
     state
-        .insert_payload(
-            ABUNDANCE_FIELD,
-            Tensor::from_vec(&[abundance.len()], abundance),
-        )
+        .insert_payload(ABUNDANCE_FIELD, dense_tensor(&[abundance.len()], abundance))
         .unwrap();
     state.insert_payload(SPACE_FIELD, space).unwrap();
     state.insert_payload(TOTAL_FIELD, total).unwrap();
@@ -26,7 +26,7 @@ fn make_state(abundance: Vec<f64>, space: SpatialAbundance, total: f64) -> Syste
 }
 
 fn space(shape: &[usize], values: Vec<f64>) -> Tensor<f64> {
-    Tensor::from_vec(shape, values)
+    dense_tensor(shape, values)
 }
 
 fn assert_close(actual: f64, expected: f64) {
@@ -45,7 +45,7 @@ fn aggregate_frequency_repairs_nonfinite_cutoff_and_empty_mass() {
         state
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Tensor::from_vec(&[4], vec![0.0, 0.0, 0.0, 1.0])
+        &dense_tensor(&[4], vec![0.0, 0.0, 0.0, 1.0])
     );
     assert_eq!(*state.payload::<TotalAbundance>(TOTAL_FIELD).unwrap(), 1.0);
     validate_state(&policy, &state).unwrap();
@@ -56,7 +56,7 @@ fn aggregate_frequency_repairs_nonfinite_cutoff_and_empty_mass() {
         empty
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Tensor::from_vec(&[4], vec![0.25; 4])
+        &dense_tensor(&[4], vec![0.25; 4])
     );
     assert!(matches!(
         FrequencyInvariant::new(4, f64::NAN),
@@ -150,7 +150,7 @@ fn population_enforces_capacity_and_preserves_rounded_total_convention() {
         zero_state
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Tensor::<f64>::zeros(&[2])
+        &zero_tensor(&[2])
     );
     assert_eq!(
         zero_state

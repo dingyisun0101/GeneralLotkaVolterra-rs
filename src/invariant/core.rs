@@ -6,6 +6,7 @@ use std::fmt;
 use scientific_workflow::prelude::{StateError, SystemState};
 use thiserror::Error as ThisError;
 
+use crate::tensor_compat::DenseTensorExt;
 use crate::{
     ABUNDANCE_FIELD, AggregateAbundance, SPACE_FIELD, SpatialAbundance, TOTAL_FIELD, TotalAbundance,
 };

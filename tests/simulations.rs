@@ -1,3 +1,5 @@
+use support::*;
+
 use std::convert::Infallible;
 
 use general_lotka_volterra_rs::interaction::InteractionMatrix;
@@ -14,11 +16,11 @@ use general_lotka_volterra_rs::{
     SpatialGeneralLotkaVolterraConfig, SpatialReplicator, SpatialReplicatorConfig, TOTAL_FIELD,
     TimeStep, TotalAbundance,
 };
-use physics_in_parallel::prelude::basic::{DenseMatrix, RngConfig, Tensor};
+use physics_in_parallel::prelude::basic::Tensor;
 use support::interaction_from_array;
 
 fn interaction(species: usize) -> InteractionMatrix {
-    interaction_from_array(DenseMatrix::zeros(species, species)).unwrap()
+    interaction_from_array(zero_matrix(species, species)).unwrap()
 }
 
 fn time_step() -> TimeStep {
@@ -26,15 +28,15 @@ fn time_step() -> TimeStep {
 }
 
 fn mean_field_config(species: usize) -> MeanFieldReplicatorConfig {
-    MeanFieldReplicatorConfig::new(Tensor::zeros(&[species]), 0.0, time_step())
+    MeanFieldReplicatorConfig::new(zero_tensor(&[species]), 0.0, time_step())
 }
 
 fn spatial_replicator_config(shape: &[usize]) -> SpatialReplicatorConfig {
     let species = *shape.last().unwrap();
     SpatialReplicatorConfig::new(
-        Tensor::zeros(&[species]),
+        zero_tensor(&[species]),
         Diffusion::unit_spacing(
-            Tensor::zeros(&[species]),
+            zero_tensor(&[species]),
             &shape[..shape.len() - 1],
             BoundaryCondition::Periodic,
         )
@@ -47,9 +49,9 @@ fn spatial_replicator_config(shape: &[usize]) -> SpatialReplicatorConfig {
 fn spatial_general_lotka_volterra_config(shape: &[usize]) -> SpatialGeneralLotkaVolterraConfig {
     let species = *shape.last().unwrap();
     SpatialGeneralLotkaVolterraConfig::new(
-        Tensor::zeros(&[species]),
+        zero_tensor(&[species]),
         Diffusion::unit_spacing(
-            Tensor::zeros(&[species]),
+            zero_tensor(&[species]),
             &shape[..shape.len() - 1],
             BoundaryCondition::Neumann,
         )
@@ -61,7 +63,7 @@ fn spatial_general_lotka_volterra_config(shape: &[usize]) -> SpatialGeneralLotka
 }
 
 fn space(shape: &[usize], values: Vec<f64>) -> Tensor<f64> {
-    Tensor::from_vec(shape, values)
+    dense_tensor(shape, values)
 }
 
 fn assert_tensor_close(actual: &Tensor<f64>, expected: &[f64]) {
@@ -100,7 +102,7 @@ impl KernelAlgorithm for IdentityAggregate {
 #[test]
 fn root_mean_field_api_constructs_steps_and_reconstructs() {
     let mut simulation = MeanFieldReplicator::new(
-        Tensor::from_vec(&[2], vec![0.4, 0.6]),
+        dense_tensor(&[2], vec![0.4, 0.6]),
         interaction(2),
         mean_field_config(2),
     )
@@ -129,7 +131,7 @@ fn root_mean_field_api_constructs_steps_and_reconstructs() {
             .state()
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Tensor::from_vec(&[2], vec![0.4, 0.6])
+        &dense_tensor(&[2], vec![0.4, 0.6])
     );
 }
 
@@ -212,7 +214,7 @@ fn root_spatial_apis_derive_canonical_aggregates_and_step() {
 fn construction_rejects_shape_and_matrix_mismatches() {
     assert!(
         MeanFieldReplicator::new(
-            Tensor::from_vec(&[2], vec![0.5, 0.5]),
+            dense_tensor(&[2], vec![0.5, 0.5]),
             interaction(1),
             mean_field_config(2),
         )
@@ -238,21 +240,18 @@ fn construction_rejects_shape_and_matrix_mismatches() {
 #[test]
 fn mean_field_accepts_compatible_custom_kernel_and_noise_plugins() {
     let state = MeanFieldReplicator::new(
-        Tensor::from_vec(&[2], vec![0.25, 0.75]),
+        dense_tensor(&[2], vec![0.25, 0.75]),
         interaction(2),
         mean_field_config(2),
     )
     .unwrap()
     .into_state();
     let algorithm = IdentityAggregate {
-        output: Tensor::zeros(&[2]),
+        output: zero_tensor(&[2]),
     };
-    let noise = ProportionalGaussian::new(
-        0.0,
-        RngConfig::new(Some(42), None),
-        NoiseDomain::aggregate(2).unwrap(),
-    )
-    .unwrap();
+    let noise =
+        ProportionalGaussian::new(0.0, stateful_rng(42), NoiseDomain::aggregate(2).unwrap())
+            .unwrap();
     let mut simulation = MeanFieldReplicator::from_plugins(
         state,
         Kernel::new(KernelCore::new(interaction(2)), algorithm),
@@ -268,7 +267,7 @@ fn mean_field_accepts_compatible_custom_kernel_and_noise_plugins() {
             .state()
             .payload::<AggregateAbundance>(ABUNDANCE_FIELD)
             .unwrap(),
-        &Tensor::from_vec(&[2], vec![0.25, 0.75])
+        &dense_tensor(&[2], vec![0.25, 0.75])
     );
 }
 mod support;
