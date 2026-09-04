@@ -330,6 +330,8 @@ dependencies = [
 [[package]]
 name = "general-lotka-volterra-rs"
 version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad6e477bba8bba249e42fb0e162ec8b162ef15a15a899ffa2aee166ed0061240"
 dependencies = [
  "ecological-state-toolkit",
  "physics_in_parallel",
