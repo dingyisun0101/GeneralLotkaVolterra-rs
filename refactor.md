@@ -8,6 +8,10 @@ Public APIs and PiP 4.1.0-alpha are unchanged. Python remains on companion
 one doctest, three Python decoder tests, formatting, Clippy with warnings
 denied, and registry package verification passed.
 
+All four private example crates now consume registry GLV 0.18.2, Eco Core
+0.13.3, and Workflow 0.13.7. Their lockfiles were updated after publication,
+and all four passed `cargo check --locked --all-targets`.
+
 The earlier migration and validation history follows.
 
 Initial audit on 2026-09-05: local `sw-version` based on
