@@ -8,8 +8,8 @@
         "descriptor": {
           "format": "ecological.interaction-matrix.v2",
           "species": 2,
-          "sha256": "7e1d9f2c939fd20096e1cc683dfca7dcc5447c3e03ac6e6fcf845946df85d3e7",
-          "path": "inputs/interaction-7e1d9f2c939fd20096e1cc683dfca7dcc5447c3e03ac6e6fcf845946df85d3e7.json",
+          "sha256": "1e1d101c4d2df30379c0826083897440ced0f48117e1bc0bc167ae0adab281f7",
+          "path": "inputs/interaction-1e1d101c4d2df30379c0826083897440ced0f48117e1bc0bc167ae0adab281f7.json",
           "provenance": {"kind": "inline"}
         }
       },

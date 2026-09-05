@@ -3,8 +3,10 @@
 This is the current GLV configuration boundary in one runnable project:
 
 ```bash
+python3.14 -m venv .venv
+source .venv/bin/activate
 python -m pip install \
-  "scientific-workflow-reader[npy] @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@6c8e7d4#subdirectory=python"
+  "scientific-workflow[npy] @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@v0.13.5#subdirectory=python"
 cargo run --manifest-path /path/to/glv/examples/mean_field_replicator/Cargo.toml
 ```
 
@@ -57,3 +59,12 @@ Core's common `terminal_state` product.
 The checked-in initial artifact was generated once with seed `777`. That seed
 belongs to the artifact and GLV never requests it again. Deterministic execution
 needs no runtime seed.
+
+The interaction fixture contains `[[0, 1], [-1, 0]]`. For GLV 0.18.1 it was
+regenerated through Eco Core 0.13.2's `persist_interaction_matrix` to use the
+current PiP container encoding. All four examples reference the same verified
+artifact and its content checksum.
+
+Linux and Python 3.14+ are required. Activate `.venv` before every launch,
+including in each new shell; Cargo does not install or activate Python. Keep
+`wf_configs/study.json` and `wf_configs/parameters.json` in their standard locations.

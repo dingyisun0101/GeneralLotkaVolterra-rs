@@ -191,5 +191,24 @@ fn checked_in_examples_use_the_standard_provider_without_state_files() {
         Study::load(&project).unwrap_or_else(|error| {
             panic!("{name} must preflight through Workflow's public boundary: {error}")
         });
+        let parameters: serde_json::Value =
+            serde_json::from_slice(&fs::read(project.join("wf_configs/parameters.json")).unwrap())
+                .unwrap();
+        let mut inputs = parameters["glv"]["inputs"].clone();
+        for field in ["interaction", "initial_state"] {
+            let root = inputs[field]["artifact_root"].as_str().unwrap();
+            inputs[field]["artifact_root"] = serde_json::to_value(project.join(root)).unwrap();
+        }
+        let inputs: EcologicalInputs = serde_json::from_value(inputs).unwrap();
+        let (interaction, initial) = inputs
+            .resolve()
+            .unwrap_or_else(|error| {
+                panic!("{name} must load its checked-in ecological inputs: {error}")
+            })
+            .into_parts();
+        assert_eq!(interaction.species(), 2);
+        assert_eq!(interaction.coefficient(0, 1), 1.0);
+        assert_eq!(interaction.coefficient(1, 0), -1.0);
+        assert_eq!(initial.counts(), &[8, 8]);
     }
 }

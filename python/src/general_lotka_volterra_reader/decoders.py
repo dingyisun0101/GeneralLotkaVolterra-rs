@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-from scientific_workflow_reader import RecordingReader, open_completed_recording
+from scientific_workflow import RecordingReader, open_completed_recording
 
 
 class GlvPayloadError(ValueError):

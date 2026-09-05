@@ -7,11 +7,11 @@ name = "general-lotka-volterra-reader"
 version = "0.5.0"
 description = "Official Python payload decoders for GLV Workflow recordings"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.14"
 license = "MIT"
 dependencies = [
   "numpy>=2,<3",
-  "scientific-workflow-reader @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@6c8e7d4#subdirectory=python",
+  "scientific-workflow @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@v0.13.5#subdirectory=python",
 ]
 
 [tool.setuptools.packages.find]

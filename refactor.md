@@ -1,10 +1,11 @@
-# GLV migration to Workflow 0.13.5
+# GLV migration to Workflow 0.13.5 and PiP 4.1.0-alpha
 
-Reviewed on 2026-09-05: local `sw-version` based on
+Initial audit on 2026-09-05: local `sw-version` based on
 `f472c6de81b6fb4ca7e50f3288e829a9de8a5554`, including existing uncommitted Cargo,
 README, and example manifest/lockfile changes. Those edits were preserved. The
 validation copy used the working-tree files; this is not a claim about an
-unmodified remote GLV commit.
+unmodified remote GLV commit. The subsequent 0.18.1 implementation and validation
+are recorded below.
 
 ## Coordinated release requirements
 
@@ -38,7 +39,7 @@ format 8. Both new readers accept 7 and 8. **NPY remains v2** and project schema
 remains 1. Read the [upstream migration guide](https://github.com/dingyisun0101/Scientific-Workflow/blob/v0.13.5/docs/migration-0.13.5.md)
 and [API references](https://github.com/dingyisun0101/Scientific-Workflow/blob/v0.13.5/README.md#subsystem-contracts).
 
-## Changes needed here
+## Migration contract
 
 Update Workflow from 0.13.4 to 0.13.5 in the root and independent example Cargo
 manifests/lockfiles. Current GLV execution units, schemas, state ownership, and
@@ -68,7 +69,57 @@ replacement, **all three Python decoder tests passed** against the installed
 companion wheel. Independent example workspaces were reviewed for dependency
 updates but were not all executed.
 
-After migration run `cargo test --workspace --all-targets` and
-`PYTHONPATH=python/src python -m unittest discover -s python/tests -v`, then update
-and exercise relevant independent example lockfiles. Preserve existing user edits
-when preparing the GLV change; this document is the only file added by this task.
+## Implemented in 0.18.1
+
+The public Rust crate is bumped from 0.18.0 to 0.18.1. It now uses published
+Eco Core 0.13.2, Workflow 0.13.5, and exactly PiP 4.1.0-alpha. Earlier PiP
+versions have been yanked; applications exchanging PiP types with GLV must
+upgrade their direct dependencies too. Dependency-tree checks confirm a single
+version of PiP and Workflow through Eco Core and GLV. The four independent
+example crates retain version 0.1.0 and `publish = false`; their GLV and Workflow
+dependencies target the new releases.
+
+The Python distribution retains its name and local version. Its Python minimum
+is now 3.14, its Workflow companion pin is the v0.13.5 Git tag (Python 0.4.3),
+and its decoder imports use `scientific_workflow`. Reader and example READMEs
+document Linux, environment creation, activation before every launch, and the
+optional NPY extra. Periodic sampling and the scientific Rust implementation
+are unchanged.
+
+Running the examples exposed a stale checked-in interaction fixture: its flat
+matrix JSON was rejected by current Eco Core/PiP with `missing field backend`.
+The same matrix `[[0, 1], [-1, 0]]` was regenerated with Eco Core 0.13.2's
+`persist_interaction_matrix`. All four parameter files now reference its new
+content-addressed filename and checksum. The existing seed-777 initial state
+remains valid. The example preflight test now resolves and checks the actual
+inputs; it failed on the old fixture and passed after regeneration.
+
+Validation on 2026-09-05:
+
+- All 42 Rust tests passed against the released dependencies with
+  `cargo test --locked --workspace --all-targets`. Both Workflow integration
+  tests passed again after strengthening the example fixture regression check.
+- `cargo test --locked --doc` passed its one documentation test, and formatting
+  passed `cargo fmt --all -- --check`.
+- All three Python decoder tests passed in an activated Python 3.14 environment
+  with the companion installed from the release tag. The local reader package
+  also built and installed successfully, and `python -m pip check` passed.
+- All four independent example studies completed in isolated copies using a
+  temporary GLV source override, including their reserved `$npy` phases. The
+  deterministic mean-field run reached 300 iterations; the other three reached
+  100 iterations. Each produced a verified NPY v2 batch from format-7 recordings.
+- The installed GLV reader reconstructed every stream in those recordings.
+  Official NPY whole-series views matched all coordinates and 1,382 numeric
+  field records exactly, including spatial tensors. GLV's tensor fields are
+  structured projections at `/tensor`; `total` is a numeric series with one
+  value per record. No application-side manifest path synthesis was required.
+- `cargo publish --dry-run --locked --allow-dirty` verified the release package.
+  `cargo publish --locked --allow-dirty` published GLV 0.18.1 to crates.io and
+  confirmed registry availability; `cargo info` verified the published version.
+- After publication, all four example lockfiles were refreshed against crates.io
+  GLV 0.18.1 and passed `cargo check --locked --all-targets`. All five lockfiles
+  select Eco Core 0.13.2, PiP 4.1.0-alpha, and Workflow 0.13.5, with no source
+  overrides in the checked-in example manifests or lockfiles.
+
+Existing local edits were preserved. Downstream applications must refresh their
+own lockfiles to consume this coordinated release.
