@@ -1,5 +1,15 @@
 # GLV migration to Workflow 0.13.5 and PiP 4.1.0-alpha
 
+## Current dependency update: 0.18.2
+
+Version 0.18.2 consumes published Workflow 0.13.7 and Eco Core 0.13.3.
+Public APIs and PiP 4.1.0-alpha are unchanged. Python remains on companion
+0.4.3, now pinned through Workflow's public `v0.13.7` tag. All 42 Rust tests,
+one doctest, three Python decoder tests, formatting, Clippy with warnings
+denied, and registry package verification passed.
+
+The earlier migration and validation history follows.
+
 Initial audit on 2026-09-05: local `sw-version` based on
 `f472c6de81b6fb4ca7e50f3288e829a9de8a5554`, including existing uncommitted Cargo,
 README, and example manifest/lockfile changes. Those edits were preserved. The

@@ -11,7 +11,7 @@ requires-python = ">=3.14"
 license = "MIT"
 dependencies = [
   "numpy>=2,<3",
-  "scientific-workflow @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@v0.13.5#subdirectory=python",
+  "scientific-workflow @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@v0.13.7#subdirectory=python",
 ]
 
 [tool.setuptools.packages.find]
