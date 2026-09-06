@@ -1,0 +1,2 @@
+numpy<3,>=2
+scientific-workflow @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@v0.13.9#subdirectory=python
