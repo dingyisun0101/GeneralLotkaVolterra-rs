@@ -36,6 +36,7 @@ impl TempProject {
             configs.join("study.json"),
             serde_json::to_vec_pretty(&serde_json::json!({
                 "workflow_schema": 1,
+                "active_phases": [0],
                 "threads": 2,
                 "seed": 73,
                 "phases": {

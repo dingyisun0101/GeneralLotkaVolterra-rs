@@ -1,5 +1,6 @@
 {
   "workflow_schema": 1,
+  "active_phases": [0,1],
   "threads": 4,
   "seed": 2001,
   "phases": {
