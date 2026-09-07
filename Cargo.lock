@@ -272,9 +272,9 @@ dependencies = [
 
 [[package]]
 name = "ecological-state-toolkit"
-version = "0.13.5"
+version = "0.13.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "475bb8bc1c527d0b2f76e27686d83d1ecbb91963375d9bf6fb7b5041f4850a32"
+checksum = "3a1947b480df410bf68ff66acbdceb02defe15837861ce5a5a6a6277f9497cc5"
 dependencies = [
  "nalgebra",
  "physics_in_parallel",
@@ -336,7 +336,7 @@ dependencies = [
 
 [[package]]
 name = "general-lotka-volterra-rs"
-version = "0.18.3"
+version = "0.18.4"
 dependencies = [
  "ecological-state-toolkit",
  "physics_in_parallel",
@@ -1113,9 +1113,9 @@ dependencies = [
 
 [[package]]
 name = "scientific-workflow"
-version = "0.13.9"
+version = "0.13.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "802a4929f4e8e18419127f3ac9c966ab59959d0ceb3ecc081c6d097bfef7762e"
+checksum = "4b3888968eb1d479d2627151f888b8e26e416e2d3a8444b2f7a6b1e3f1aeaa50"
 dependencies = [
  "crossterm",
  "erased-serde",
