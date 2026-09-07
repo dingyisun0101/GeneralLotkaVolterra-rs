@@ -6,7 +6,7 @@ rust-version = "1.97"
 publish = false
 
 [dependencies]
-general-lotka-volterra-rs = "0.18.5"
-scientific-workflow = "0.13.11"
+general-lotka-volterra-rs = "0.18.6"
+scientific-workflow = "0.14.0"
 
 [workspace]
