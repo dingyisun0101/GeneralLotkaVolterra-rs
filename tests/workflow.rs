@@ -38,6 +38,7 @@ impl TempProject {
                 "workflow_schema": 1,
                 "active_phases": [0],
                 "threads": 2,
+                "compute": {"mode": "auto"},
                 "seed": 73,
                 "phases": {
                     "simulate": {

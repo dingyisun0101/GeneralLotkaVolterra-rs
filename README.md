@@ -1,6 +1,6 @@
 # General Lotka–Volterra for Rust
 
-> **0.18.5 dependency update:** GLV uses Eco Core 0.13.7, Workflow 0.13.11,
+> **0.18.6 dependency update:** GLV uses Eco Core 0.13.8, Workflow 0.14.0,
 > and PiP 4.1.0-alpha. Consumers exchanging PiP types with GLV must also use
 > `physics_in_parallel = "=4.1.0-alpha"`. The Python reader now requires Linux,
 > Python 3.14+, and the `scientific-workflow` 0.4.5 companion; see
@@ -224,8 +224,8 @@ Use the coordinated crates.io releases for application development:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = "0.18.5"
-scientific-workflow = "0.13.11"
+general-lotka-volterra-rs = "0.18.6"
+scientific-workflow = "0.14.0"
 ```
 
 A local clone remains appropriate when changing numerical methods, invariants,

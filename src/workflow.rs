@@ -412,6 +412,8 @@ pub struct GlvUnit {
 impl ExecutionUnit for GlvUnit {
     type Constants = GlvConstants;
 
+    const THREAD_COUNT_INVARIANT: bool = true;
+
     fn standard_state_schema() -> Option<StateSchemaProvider> {
         Some(ecological_state_schema())
     }
