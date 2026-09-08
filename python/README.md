@@ -26,7 +26,7 @@ also install the conversion extra:
 ```sh
 source .venv/bin/activate
 python -m pip install \
-  'scientific-workflow[npy] @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@v0.14.1#subdirectory=python'
+  'scientific-workflow[npy] @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@v0.14.2#subdirectory=python'
 ```
 
 The Workflow companion is installed from the release Git tag or GitHub release
