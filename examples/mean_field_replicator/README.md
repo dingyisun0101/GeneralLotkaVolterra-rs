@@ -6,7 +6,7 @@ This is the current GLV configuration boundary in one runnable project:
 python3.14 -m venv .venv
 source .venv/bin/activate
 python -m pip install \
-  "scientific-workflow[npy] @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@v0.14.1#subdirectory=python"
+  "scientific-workflow[npy] @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@v0.14.2#subdirectory=python"
 cargo run --manifest-path /path/to/glv/examples/mean_field_replicator/Cargo.toml
 ```
 
