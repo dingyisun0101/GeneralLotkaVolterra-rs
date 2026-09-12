@@ -1,6 +1,19 @@
 # GLV migration to Workflow 0.13.5 and PiP 4.1.0-alpha
 
-## Current dependency update: 0.18.8
+## Current dependency update: 0.19.0
+
+Version 0.19.0 consumes published Workflow 0.15.0 and Eco Core 0.14.0. Public
+Workflow types require coordinated downstream migration; PiP remains
+4.1.0-alpha. Rust tests, Clippy/rustdoc with warnings denied, doctests, three
+Python decoder tests, and Rust/Python package checks passed. Commit and tag were
+pushed before crates.io publication. The private Python reader is 0.5.1 and
+consumes Workflow 0.5 from PyPI.
+
+All four private examples consume the online releases and completed through a
+real dashboard terminal, including NPY conversion. Users launch in screen/tmux;
+disk recovery requires typing `resume`, and NPY auto admission ramps gradually.
+
+## Previous dependency update: 0.18.8
 
 Version 0.18.8 consumes published Workflow 0.14.2 and Eco Core 0.13.10.
 Public APIs and PiP 4.1.0-alpha are unchanged. Python remains on companion
