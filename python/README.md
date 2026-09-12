@@ -5,8 +5,8 @@ recording integrity and JSONL reconstruction; PiP tensors are serialized
 directly into those records, and this package validates and converts GLV's
 `abundance`, optional species-last `space`, and `total` payloads.
 
-This package uses `scientific-workflow` 0.4.5 (import `scientific_workflow`),
-released with Workflow 0.13.10, for recording formats 7 and 8. It validates the
+This package uses `scientific-workflow` 0.5.0 (import `scientific_workflow`),
+released with Workflow 0.15.0, for recording formats 7 and 8. It validates the
 GLV model kind from the recorded `GlvConstants` and decodes PiP 4.1.0-alpha's
 schema-v2 dense-tensor payloads. Ordinary GLV sampling remains periodic in
 format 7.
@@ -26,11 +26,10 @@ also install the conversion extra:
 ```sh
 source .venv/bin/activate
 python -m pip install \
-  'scientific-workflow[npy] @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@v0.14.2#subdirectory=python'
+  'scientific-workflow[npy]==0.5.0'
 ```
 
-The Workflow companion is installed from the release Git tag or GitHub release
-assets, not PyPI. Its former `scientific_workflow_reader` import has been removed.
+The Workflow companion is installed from its published PyPI release. Its former `scientific_workflow_reader` import has been removed.
 
 ```python
 from general_lotka_volterra_reader import open_glv_recording

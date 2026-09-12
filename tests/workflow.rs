@@ -17,7 +17,10 @@ use general_lotka_volterra_rs::{
 };
 use physics_in_parallel::prelude::basic::SquareLatticeGeometry;
 use scientific_workflow::persistence::{JsonPayloadDecoderRegistry, StoredStateSeriesReader};
-use scientific_workflow::runtime::{TaskRunKind, execute};
+use scientific_workflow::runtime::TaskRunKind;
+#[path = "support/dashboard.rs"]
+mod dashboard;
+use dashboard::execute;
 use scientific_workflow::study::Study;
 
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
@@ -118,6 +121,9 @@ fn decoders() -> JsonPayloadDecoderRegistry {
 
 #[test]
 fn workflow_uses_prepared_inputs_and_records_requested_noise_seed() {
+    if !dashboard::in_dashboard("workflow_uses_prepared_inputs_and_records_requested_noise_seed") {
+        return;
+    }
     let project = TempProject::new();
     let summary = execute(Study::load(project.path()).unwrap()).unwrap();
     let task = &summary.replicates()[0].phases()[0].tasks()[0];

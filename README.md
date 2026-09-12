@@ -1,11 +1,17 @@
 # General Lotka–Volterra for Rust
 
-> **0.18.8 dependency update:** GLV uses Eco Core 0.13.10, Workflow 0.14.2,
+> **Breaking 0.19.0 dependency update:** GLV uses Eco Core 0.14.0, Workflow 0.15.0,
 > and PiP 4.1.0-alpha. Consumers exchanging PiP types with GLV must also use
 > `physics_in_parallel = "=4.1.0-alpha"`. The Python reader now requires Linux,
-> Python 3.14+, and the `scientific-workflow` 0.4.5 companion; see
+> Python 3.14+, and the `scientific-workflow` 0.5.0 companion; see
 > [Python installation](python/README.md). PiP's schema-v2 tensor format and
 > GLV's periodic sampling are retained.
+
+Workflow types exchanged with GLV must come from Workflow 0.15.0. Scientific
+models, schemas, and recording formats are unchanged. Run studies inside
+`screen` or `tmux`: the dashboard is required, and disk pauses require freeing
+space then typing `resume`. NPY uses gradual automatic worker admission by
+default; lower its limit only when reserving resources for other work.
 
 Every Workflow study must explicitly list its zero-based dependency-order
 `active_phases`. The included single-phase examples select `[0]`.
@@ -224,8 +230,8 @@ Use the coordinated crates.io releases for application development:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = "0.18.8"
-scientific-workflow = "0.14.2"
+general-lotka-volterra-rs = "0.19.0"
+scientific-workflow = "0.15.0"
 ```
 
 A local clone remains appropriate when changing numerical methods, invariants,
@@ -268,3 +274,7 @@ and common terminal metadata.
 ## License
 
 Licensed under either MIT or Apache-2.0, at your option.
+
+Workflow integration tests use a real PTY and retain their recording/schema
+assertions. Run `cargo test --all-targets --locked` with Python 3.14 available;
+the test driver types exit after the dashboard records completion.
