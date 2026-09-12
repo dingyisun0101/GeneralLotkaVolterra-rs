@@ -1,6 +1,6 @@
 # Mean-field replicator with demographic noise
 
-This Workflow 0.14.2 project selects `mean_field_replicator_demographic`. It
+This Workflow 0.15.0 project selects `mean_field_replicator_demographic`. It
 consumes the same checked-in `EcologicalInputs` fixture as the deterministic and
 spatial examples, then requests one member-scoped runtime seed named `noise`.
 Workflow records the actual derived seed with the member output.
@@ -15,7 +15,7 @@ equilibrium evidence is intentionally unavailable under active noise.
 python3.14 -m venv .venv
 source .venv/bin/activate
 python -m pip install \
-  "scientific-workflow[npy] @ git+https://github.com/dingyisun0101/Scientific-Workflow.git@v0.14.2#subdirectory=python"
+  "scientific-workflow[npy]==0.5.0"
 cargo run --manifest-path examples/mean_field_replicator_demographic/Cargo.toml
 ```
 
@@ -25,3 +25,7 @@ C-contiguous arrays.
 Linux and Python 3.14+ are required. Activate `.venv` before every launch,
 including in each new shell; Cargo does not install or activate Python. Keep
 `wf_configs/study.json` and `wf_configs/parameters.json` in their standard locations.
+
+Launch inside `screen` or `tmux`; Workflow requires its dashboard. Type `resume`
+after freeing disk space when the guard pauses a run. NPY defaults to gradual
+auto admission; leave its limit unset unless reserving resources for other work.
