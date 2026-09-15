@@ -1,6 +1,6 @@
 # Spatial replicator
 
-This Workflow 0.15.0 project converts the canonical Ecological State Toolkit categorical lattice
+This Workflow 0.15.4 project converts the canonical Ecological State Toolkit categorical lattice
 to a species-last one-hot frequency field. Lattice shape, boundary, spacing,
 species count, and initial realization all come from `EcologicalInputs`; GLV
 configuration adds only growth, diffusion, cutoff, and time step.

@@ -272,9 +272,9 @@ dependencies = [
 
 [[package]]
 name = "ecological-state-toolkit"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfd5e84afe1184a0b305ebbecc05f1f50cef465063283b425f39ade3faf9ea07"
+checksum = "ea7248c8de5767e3439f6c82d133f1594c5d273f298b3edb7a77d5e61ef4ae3a"
 dependencies = [
  "nalgebra",
  "physics_in_parallel",
@@ -336,9 +336,9 @@ dependencies = [
 
 [[package]]
 name = "general-lotka-volterra-rs"
-version = "0.19.0"
+version = "0.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c93cb1c73059b23db1b591437e2a480e753df0493526c32c35235296fda8820"
+checksum = "fe7b14207d27d1639a7d09f8fc61f77a15a86805da8659e6d377885a9073f5ff"
 dependencies = [
  "ecological-state-toolkit",
  "physics_in_parallel",
@@ -863,9 +863,9 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "physics_in_parallel"
-version = "4.1.0-alpha"
+version = "4.1.1-alpha"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "07b4beb8e943e5777bb0bd4a31f0108fa667e602b59576dd02ca57ecdfc9f41b"
+checksum = "21fbdcf3ad56cb50cef6429ff966c795aa2ca88b3259e4743f99f9bbdf6a9284"
 dependencies = [
  "ahash",
  "erased-serde",
@@ -1123,9 +1123,9 @@ dependencies = [
 
 [[package]]
 name = "scientific-workflow"
-version = "0.15.0"
+version = "0.15.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4839b902fcd78e10576adb618ca7a6367cfaf9212eed7301a9effb675de350ba"
+checksum = "c0656a464b59ffa99d0d8a63aef56bd859c60929676ce13a4c01ceccfd070164"
 dependencies = [
  "crossterm",
  "erased-serde",
