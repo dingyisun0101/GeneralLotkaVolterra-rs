@@ -1,13 +1,16 @@
 # General Lotka–Volterra for Rust
 
-> **Breaking 0.19.0 dependency update:** GLV uses Eco Core 0.14.0, Workflow 0.15.0,
-> and PiP 4.1.0-alpha. Consumers exchanging PiP types with GLV must also use
-> `physics_in_parallel = "=4.1.0-alpha"`. The Python reader now requires Linux,
-> Python 3.14+, and the `scientific-workflow` 0.5.0 companion; see
-> [Python installation](python/README.md). PiP's schema-v2 tensor format and
-> GLV's periodic sampling are retained.
+> **Dependency patch 0.19.1:** consumes published PiP 4.1.1-alpha and Workflow
+> 0.15.4. Numerical algorithms and scientific behavior are unchanged. Projects
+> exchanging PiP values must use `physics_in_parallel = "=4.1.1-alpha"`.
 
-Workflow types exchanged with GLV must come from Workflow 0.15.0. Scientific
+
+> **0.19 generation:** uses Eco Core 0.14, Workflow 0.15, and PiP 4.1 alpha.
+> Use the current PiP pin above. The Python reader requires Linux, Python 3.14,
+> and the Workflow 0.5 companion; see [Python installation](python/README.md).
+> PiP schema-v2 and GLV periodic sampling are retained.
+
+Workflow types exchanged with GLV must come from the Workflow 0.15 generation. Scientific
 models, schemas, and recording formats are unchanged. Run studies inside
 `screen` or `tmux`: the dashboard is required, and disk pauses require freeing
 space then typing `resume`. NPY uses gradual automatic worker admission by
@@ -230,8 +233,8 @@ Use the coordinated crates.io releases for application development:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = "0.19.0"
-scientific-workflow = "0.15.0"
+general-lotka-volterra-rs = "0.19.1"
+scientific-workflow = "0.15.4"
 ```
 
 A local clone remains appropriate when changing numerical methods, invariants,
