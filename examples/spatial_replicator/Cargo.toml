@@ -7,6 +7,6 @@ publish = false
 
 [dependencies]
 general-lotka-volterra-rs = "0.19.1"
-scientific-workflow = "0.15.4"
+scientific-workflow = "0.15.5"
 
 [workspace]

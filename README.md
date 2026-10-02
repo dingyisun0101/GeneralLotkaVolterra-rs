@@ -1,7 +1,7 @@
 # General Lotka–Volterra for Rust
 
-> **Dependency patch 0.19.1:** consumes published PiP 4.1.1-alpha and Workflow
-> 0.15.4. Numerical algorithms and scientific behavior are unchanged. Projects
+> **Dependency patch 0.19.2:** consumes published PiP 4.1.1-alpha and Workflow
+> 0.15.5. Numerical algorithms and scientific behavior are unchanged. Projects
 > exchanging PiP values must use `physics_in_parallel = "=4.1.1-alpha"`.
 
 
@@ -233,8 +233,8 @@ Use the coordinated crates.io releases for application development:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = "0.19.1"
-scientific-workflow = "0.15.4"
+general-lotka-volterra-rs = "0.19.2"
+scientific-workflow = "0.15.5"
 ```
 
 A local clone remains appropriate when changing numerical methods, invariants,
