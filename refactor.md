@@ -35,10 +35,26 @@ Validation for this pass:
   their configuration test is explicitly ignored in the ordinary package suite
   and invoked separately in source qualification.
 
-The release package is verified before the default-branch push and annotated
-`v0.20.0` tag push. Publication follows those pushes; private Python/example
-packages remain unpublished. Example validation is recorded after their registry
-refresh.
+Release commit `09f9227` was merged into default branch `sw-version` and pushed.
+The annotated `v0.20.0` tag was pushed before `cargo publish --locked` successfully
+published Rust GLV 0.20.0; a registry download independently confirmed availability.
+Private Python 0.5.2 wheel/sdist artifacts built successfully and remain unpublished.
+The packaged crate passed all 41 scientific/PTY tests with the one explicitly
+source-only private-example configuration check ignored; that check passed
+separately in the source checkout.
+
+All four private example manifests/lockfiles now consume registry GLV 0.20.0,
+Eco Core 0.15.0, Workflow 0.16.0, and exactly PiP 4.1.1-alpha. Complete pipelines
+ran in temporary copies with their authored science unchanged and restored the
+terminal exactly. Deterministic mean field reached iteration 300 with 301 signal
+records; demographic mean field and both spatial examples reached iteration 100
+with 101 signal records each. Their verified NPY v3 `total` series are rank one
+and match the verified raw values/iteration coordinates exactly. Every raw stream
+also reconstructed through the private GLV reader.
+Evidence: `/tmp/glv-020-examples-qualification.log`,
+`/tmp/glv-020-examples-ga_fbuy4/qualification.json`, and
+`/tmp/glv-020-packaged-tests.log`. Temporary paths are local validation artifacts,
+not production-scale convergence claims.
 
 ## Historical release and migration evidence
 
