@@ -1,7 +1,8 @@
 # GLV execution-unit design
 
-Current coordinated generation: GLV 0.20.0, Ecological State Toolkit 0.15.0,
-Workflow 0.16.0, and exactly PiP 4.1.1-alpha.
+Current coordinated patch: GLV 0.20.1, Ecological State Toolkit 0.15.1,
+Workflow 0.16.1, and exactly PiP 4.1.1-alpha. Scientific behavior and raw
+recording formats are unchanged from GLV 0.20.0.
 
 ## Decision
 

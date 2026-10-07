@@ -41,7 +41,7 @@ also install the conversion extra:
 ```sh
 source .venv/bin/activate
 python -m pip install \
-  'scientific-workflow[npy]==0.6.0'
+  'scientific-workflow[npy]==0.6.1'
 ```
 
 The Workflow companion is installed from its published PyPI release. Its former `scientific_workflow_reader` import has been removed.

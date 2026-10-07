@@ -6,8 +6,13 @@
 > types must upgrade the coordinated dependencies together; no compatibility
 > alias restores the previous dependency generation. Numerical algorithms,
 > ecological artifact/schema meanings, and raw recording formats 7/8 are retained.
-> The private Python reader is 0.5.2 and uses published Workflow companion 0.6.0.
+> The private Python reader is 0.5.2 and accepts the stable Workflow 0.6 line.
 > See [Python installation](python/README.md) and [migration notes](refactor.md).
+
+The 0.20.1 dependency patch consumes published Workflow 0.16.1 and Ecological
+State Toolkit 0.15.1. Workflow accepts stable Python companions `>=0.6,<0.7`
+for conversion and reuse; install the current documentation patch 0.6.1.
+GLV's scientific algorithms, APIs, and raw recording formats remain unchanged.
 
 Run studies inside `screen` or `tmux`: the dashboard is required, and disk pauses
 require freeing space then typing `resume`. NPY uses gradual automatic worker
@@ -238,8 +243,8 @@ Use the coordinated crates.io releases for application development:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = "0.20.0"
-scientific-workflow = "0.16.0"
+general-lotka-volterra-rs = "0.20.1"
+scientific-workflow = "0.16.1"
 ```
 
 A local clone remains appropriate when changing numerical methods, invariants,

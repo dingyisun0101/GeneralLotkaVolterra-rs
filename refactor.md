@@ -1,6 +1,31 @@
 # GLV coordinated release and migration notes
 
-## Current dependency generation: 0.20.0
+## Current dependency patch: 0.20.1
+
+This patch consumes registry Workflow 0.16.1 and Ecological State Toolkit 0.15.1,
+retaining the exact PiP 4.1.1-alpha pin. Workflow accepts stable Python
+companions `>=0.6,<0.7` during conversion and reuse. The private Python reader
+remains 0.5.2; its installation guide selects the published companion 0.6.1.
+Numerical algorithms, scientific APIs, schemas, and raw recordings remain
+unchanged from 0.20.0. There are no code fingerprints or source overrides.
+
+Upstream dependency minimums and lockfiles are updated only after both patches
+are available online. GLV's default branch and release tag must be pushed before
+Cargo publication. Private examples adopt the new registry patches only after
+GLV itself is online; the private Python reader is never published.
+
+Patch qualification against the online dependencies passed all 41 scientific
+Rust/PTY tests, the source-only example configuration check, and one doctest.
+Formatting, Clippy and rustdoc with warnings denied passed. Cargo packaged and
+verified 58 files; that extracted crate independently passed the same 41 tests,
+with the source-only example check explicitly ignored. Dependency-tree checks
+found one registry Workflow 0.16.1 and one registry Ecological State Toolkit
+0.15.1, with PiP unchanged. The private reader's four raw-v7/v8 tests passed
+against public Python companion 0.6.1; its 0.5.2 wheel/sdist built locally and
+remain unpublished. Evidence is in `/tmp/glv-0201-*.log`; these bounded/local
+checks do not establish full-scale convergence or resource requirements.
+
+## Initial generation and qualification: 0.20.0
 
 GLV 0.20.0 consumes published Workflow 0.16.0, Ecological State Toolkit 0.15.0,
 and exactly PiP 4.1.1-alpha. GLV numerical compositions, canonical ecological
