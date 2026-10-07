@@ -1,6 +1,6 @@
 [package]
 name = "general-lotka-volterra-rs"
-version = "0.19.2"
+version = "0.20.0"
 edition = "2024"
 rust-version = "1.97"
 autoexamples = false
@@ -18,7 +18,12 @@ include = [
     "!src/target/**",
     "tests/**/*.rs",
     "tests/**/*.py",
+    "tests/fixtures/*.json",
+    "python/tests/fixtures/*.json",
     "README.md",
+    "python/README.md",
+    "design.md",
+    "refactor.md",
     "tools/*.py",
 ]
 
@@ -26,9 +31,9 @@ include = [
 resolver = "3"
 
 [dependencies]
-ecological-state-toolkit = "0.14.2"
+ecological-state-toolkit = "0.15.0"
 physics_in_parallel = "=4.1.1-alpha"
-scientific-workflow = "0.15.5"
+scientific-workflow = "0.16.0"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"

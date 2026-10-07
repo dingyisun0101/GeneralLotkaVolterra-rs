@@ -1,6 +1,53 @@
-# GLV migration to Workflow 0.13.5 and PiP 4.1.0-alpha
+# GLV coordinated release and migration notes
 
-## Current dependency update: 0.19.0
+## Current dependency generation: 0.20.0
+
+GLV 0.20.0 consumes published Workflow 0.16.0, Ecological State Toolkit 0.15.0,
+and exactly PiP 4.1.1-alpha. GLV numerical compositions, canonical ecological
+schema meaning, and periodic raw recording formats are unchanged. This is a
+breaking dependency generation: exchange Workflow/Eco-owned Rust types only
+within the coordinated versions; no old-generation compatibility aliases are
+provided.
+
+The private Python reader remains private at 0.5.2 and consumes published
+Workflow companion >=0.6,<0.7. Current NPY output is v3; Workflow-controlled reuse
+requires current v2 receipts with durable captured-input checksum evidence.
+Historical result interpretation is downstream-owned.
+
+The four independent example crates stay private at 0.1.0. Their dependency
+refresh follows GLV publication so they consume the online 0.20.0 release,
+never a local source override or unpublished upstream change.
+
+Validation for this pass:
+
+- All 41 packaged Rust unit/integration tests and the separately invoked
+  source-only private-example configuration test passed with published dependencies,
+  including independent ground truth, stepwise naive solvers, seeded noise,
+  failure-before-mutation, schema/provider checks, and a real-terminal Workflow run.
+- One Rust doctest passed; formatting, Clippy with warnings denied, and rustdoc
+  with warnings denied passed.
+- All four private Python reader tests passed against installed published
+  Workflow 0.6.0, including completed raw v7/v8 records; `pip check` passed.
+- Dependency-tree inspection confirms one Workflow 0.16.0, one Ecological State
+  Toolkit 0.15.0, and exactly PiP 4.1.1-alpha, with no source overrides.
+- The Cargo package includes the JSON fixtures and release documentation needed
+  by its shipped tests. Cargo excludes the independent private example workspaces;
+  their configuration test is explicitly ignored in the ordinary package suite
+  and invoked separately in source qualification.
+
+The release package is verified before the default-branch push and annotated
+`v0.20.0` tag push. Publication follows those pushes; private Python/example
+packages remain unpublished. Example validation is recorded after their registry
+refresh.
+
+## Historical release and migration evidence
+
+The following sections describe earlier generations, including their package
+versions, installation methods, and validation environments. Current contracts
+above supersede their old NPY/reuse/dependency guidance.
+
+
+## Historical dependency update: 0.19.0
 
 Version 0.19.0 consumes published Workflow 0.15.0 and Eco Core 0.14.0. Public
 Workflow types require coordinated downstream migration; PiP remains

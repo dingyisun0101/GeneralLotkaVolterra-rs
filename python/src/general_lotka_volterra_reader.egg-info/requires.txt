@@ -1,2 +1,2 @@
 numpy<3,>=2
-scientific-workflow<0.6,>=0.5
+scientific-workflow<0.7,>=0.6

@@ -1,28 +1,23 @@
 # General Lotka–Volterra for Rust
 
-> **Dependency patch 0.19.2:** consumes published PiP 4.1.1-alpha and Workflow
-> 0.15.5. Numerical algorithms and scientific behavior are unchanged. Projects
-> exchanging PiP values must use `physics_in_parallel = "=4.1.1-alpha"`.
+> **Breaking generation 0.20.0:** consumes published Ecological State Toolkit
+> 0.15.0, Workflow 0.16.0, and exactly PiP 4.1.1-alpha. This supersedes GLV
+> 0.19.x with Eco Core 0.14 / Workflow 0.15. Applications exchanging their Rust
+> types must upgrade the coordinated dependencies together; no compatibility
+> alias restores the previous dependency generation. Numerical algorithms,
+> ecological artifact/schema meanings, and raw recording formats 7/8 are retained.
+> The private Python reader is 0.5.2 and uses published Workflow companion 0.6.0.
+> See [Python installation](python/README.md) and [migration notes](refactor.md).
 
+Run studies inside `screen` or `tmux`: the dashboard is required, and disk pauses
+require freeing space then typing `resume`. NPY uses gradual automatic worker
+admission by default and writes current v3 conversions. The dashboard title is
+centered `SCIENTIFIC WORKFLOW`, with a two-second CPU average and one-second
+normal resource refresh. Workflow initializes its dashboard before destructive
+`--clean` cleanup.
 
-> **0.19 generation:** uses Eco Core 0.14, Workflow 0.15, and PiP 4.1 alpha.
-> Use the current PiP pin above. The Python reader requires Linux, Python 3.14,
-> and the Workflow 0.5 companion; see [Python installation](python/README.md).
-> PiP schema-v2 and GLV periodic sampling are retained.
-
-Workflow types exchanged with GLV must come from the Workflow 0.15 generation. Scientific
-models, schemas, and recording formats are unchanged. Run studies inside
-`screen` or `tmux`: the dashboard is required, and disk pauses require freeing
-space then typing `resume`. NPY uses gradual automatic worker admission by
-default; lower its limit only when reserving resources for other work.
-
-Every Workflow study must explicitly list its zero-based dependency-order
-`active_phases`. The included single-phase examples select `[0]`.
-
-> **Breaking 0.17 update:** GLV now uses `ecological-state-toolkit` 0.12.1 and
-> its renamed Rust import. There is no compatibility dependency on
-> `ecological-model-core`; consumers that exchange toolkit-owned types must use
-> the new crate.
+`active_phases` is optional: omit it to run the complete phase graph. The four
+included simulation-to-conversion examples explicitly select `[0, 1]`.
 
 `general-lotka-volterra-rs` provides allocation-conscious GLV and replicator
 dynamics as a Scientific Workflow `ExecutionUnit`. Workflow registers the unit
@@ -113,6 +108,9 @@ The minimal `study.json` boundary is:
 
 ```json
 {
+  "workflow_schema": 1,
+  "threads": 4,
+  "compute": {"mode": "auto"},
   "seed": 2001,
   "phases": {
     "simulate": {
@@ -227,19 +225,27 @@ Every successful completion includes Ecological State Toolkit's common `terminal
 Workflow's completion metadata. Its classification distinguishes an accepted
 equilibrium or periodic orbit from a trailing terminal estimate.
 
+Workflow saves each executed task's captured configuration and dependencies in
+its output with durable SHA-256 references. Supported snapshot accessors and
+current v2 receipts verify those copies before reads/reuse; authored source JSON
+may change for later runs. GLV continues to expose one stable scientific member
+and its observation plan. Workflow owns input-snapshot persistence, reuse, and
+NPY v3 conversion; historical result interpretation belongs to downstream analysis.
+
 ## Installation
 
 Use the coordinated crates.io releases for application development:
 
 ```toml
 [dependencies]
-general-lotka-volterra-rs = "0.19.2"
-scientific-workflow = "0.15.5"
+general-lotka-volterra-rs = "0.20.0"
+scientific-workflow = "0.16.0"
 ```
 
 A local clone remains appropriate when changing numerical methods, invariants,
-payloads, or sibling crates together. The minimum toolchain is Rust 1.97,
-edition 2024.
+or payloads. Keep public upstream dependencies on published registry releases;
+release an upstream change before updating its downstream consumers. The minimum
+toolchain is Rust 1.97, edition 2024.
 
 ## Public API
 
@@ -281,3 +287,14 @@ Licensed under either MIT or Apache-2.0, at your option.
 Workflow integration tests use a real PTY and retain their recording/schema
 assertions. Run `cargo test --all-targets --locked` with Python 3.14 available;
 the test driver types exit after the dashboard records completion.
+
+From a source checkout, also run the private-example configuration check:
+
+```sh
+cargo test --locked --test workflow \
+  checked_in_examples_use_the_standard_provider_without_state_files -- --ignored
+```
+
+Cargo excludes those independent private workspaces from the public package.
+The check is explicitly source-only; packaged scientific and PTY tests retain
+their required JSON fixtures and run normally.

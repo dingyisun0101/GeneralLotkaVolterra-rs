@@ -6,12 +6,12 @@ This is the current GLV configuration boundary in one runnable project:
 python3.14 -m venv .venv
 source .venv/bin/activate
 python -m pip install \
-  "scientific-workflow[npy]==0.5.0"
+  "scientific-workflow[npy]==0.6.0"
 cargo run --manifest-path /path/to/glv/examples/mean_field_replicator/Cargo.toml
 ```
 
 The final reserved `$npy` phase converts the completed member recording into
-C-contiguous arrays.
+current v3 manifests and C-contiguous arrays.
 
 The application prepares a model-ready interaction matrix and one canonical
 categorical initial state through Ecological State Toolkit. Both references are grouped as
@@ -72,3 +72,8 @@ including in each new shell; Cargo does not install or activate Python. Keep
 Launch inside `screen` or `tmux`; Workflow requires its dashboard. Type `resume`
 after freeing disk space when the guard pauses a run. NPY defaults to gradual
 auto admission; leave its limit unset unless reserving resources for other work.
+
+Workflow stores captured task inputs with durable checksum references and
+requires current v2 receipts for phase reuse. Original configuration files may
+change for later runs; saved task snapshots remain verified inputs. The private
+example consumes published GLV 0.20.0 / Workflow 0.16.0; it is not published.

@@ -1,5 +1,8 @@
 # GLV execution-unit design
 
+Current coordinated generation: GLV 0.20.0, Ecological State Toolkit 0.15.0,
+Workflow 0.16.0, and exactly PiP 4.1.1-alpha.
+
 ## Decision
 
 GLV implements the universal Workflow `ExecutionUnit` directly. One `GlvUnit`
@@ -62,3 +65,15 @@ Numerical scratch is allocated at construction and reused. Trajectory
 observation retains bounded windows, and disabled terminal production is not an
 option at this boundary because ecological executions must expose a common
 terminal product.
+
+## Captured inputs and output compatibility
+
+Workflow owns output-owned configuration/dependency snapshots, their durable
+SHA-256 references, current v2 task receipts/program metadata, and NPY v3
+conversion. GLV does not reread authored configuration, allocate task output,
+or add a second compatibility or storage layer. Runtime compatibility compares
+verified scientific inputs separately from allowed operational changes.
+The ecological schema provider and GLV periodic raw recordings retain their
+existing meanings and formats; the private Python adapter reads raw v7/v8 using
+the coordinated published companion. Historical result interpretation remains
+a downstream analysis responsibility.

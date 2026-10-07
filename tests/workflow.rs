@@ -183,6 +183,7 @@ fn workflow_uses_prepared_inputs_and_records_requested_noise_seed() {
 }
 
 #[test]
+#[ignore = "requires the private example workspaces from a source checkout"]
 fn checked_in_examples_use_the_standard_provider_without_state_files() {
     let repository = Path::new(env!("CARGO_MANIFEST_DIR"));
     for name in [
