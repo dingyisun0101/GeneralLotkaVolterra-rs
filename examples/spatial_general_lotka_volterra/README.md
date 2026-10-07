@@ -1,6 +1,6 @@
 # Spatial General Lotka–Volterra populations
 
-This Workflow 0.16.0 project converts the canonical Ecological State Toolkit categorical lattice
+This Workflow 0.16.1 project converts the canonical Ecological State Toolkit categorical lattice
 to a species-last population field. `initial_population_per_site` is the sole
 GLV-specific scale applied during conversion. The source realization and
 interaction artifact are shared with the other examples.
@@ -12,7 +12,7 @@ ecological schema through Workflow's standard provider API.
 python3.14 -m venv .venv
 source .venv/bin/activate
 python -m pip install \
-  "scientific-workflow[npy]==0.6.0"
+  "scientific-workflow[npy]==0.6.1"
 cargo run --manifest-path examples/spatial_general_lotka_volterra/Cargo.toml
 ```
 
@@ -30,4 +30,4 @@ auto admission; leave its limit unset unless reserving resources for other work.
 Workflow stores captured task inputs with durable checksum references and
 requires current v2 receipts for phase reuse. Original configuration files may
 change for later runs; saved task snapshots remain verified inputs. The private
-example consumes published GLV 0.20.0 / Workflow 0.16.0; it is not published.
+example consumes published GLV 0.20.1 / Workflow 0.16.1; it is not published.

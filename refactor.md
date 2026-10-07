@@ -25,6 +25,22 @@ against public Python companion 0.6.1; its 0.5.2 wheel/sdist built locally and
 remain unpublished. Evidence is in `/tmp/glv-0201-*.log`; these bounded/local
 checks do not establish full-scale convergence or resource requirements.
 
+Release commit `e5e8a6b` was merged into `sw-version` and pushed with annotated
+tag `v0.20.1` before Cargo publication. Cargo upload and the crates.io
+availability wait both succeeded. Only afterward were the four private example
+manifests and lockfiles refreshed to registry GLV 0.20.1, Workflow 0.16.1,
+Ecological State Toolkit 0.15.1, and unchanged PiP 4.1.1-alpha.
+
+All four example pipelines then completed through real dashboards in temporary
+copies with authored science unchanged and exact terminal restoration. Mean
+field reached iteration 300 with 301 signal records; demographic mean field and
+both spatial examples reached iteration 100 with 101 records. Their NPY v3
+scalar-total arrays match verified raw values and coordinates, and every stream
+reads through the private domain adapter. Evidence:
+`/tmp/glv-0201-examples-qualification.log` and
+`/tmp/glv-0201-examples-enk5x2ae/qualification.json`. Production outputs and
+authored parameters were not modified.
+
 ## Initial generation and qualification: 0.20.0
 
 GLV 0.20.0 consumes published Workflow 0.16.0, Ecological State Toolkit 0.15.0,
